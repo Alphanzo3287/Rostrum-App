@@ -1,5 +1,5 @@
 // =====================================================================
-// The Rostrum · src/screens/ChamberScreen.tsx
+// The Rostrum Â· src/screens/ChamberScreen.tsx
 // The live room, fully wired:
 //   cameras  -> useRoom + VideoTile
 //   deck     -> SlideStage (synced)
@@ -54,14 +54,14 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
     <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', background:C.base }}>
       {/* ---- tally bar ---- */}
       <div style={{ display:'flex', alignItems:'center', gap:14, padding:'11px 18px', borderBottom:`1px solid ${C.hair}` }}>
-        <button onClick={onLeave} style={iconBtn}>‹</button>
+        <button onClick={onLeave} style={iconBtn}>â€¹</button>
         <span style={{ padding:'4px 11px', borderRadius:3, fontFamily:ui, fontWeight:700, fontSize:11, letterSpacing:1.5,
           color: dz.phase==='assembly' ? C.base : onAir ? '#1a0a06' : '#000',
           background: dz.phase==='assembly' ? C.gold : onAir ? C.ember : C.faint }}>
           {dz.phase==='assembly' ? 'ASSEMBLING' : onAir ? 'ON AIR' : 'OFF AIR'}
         </span>
         <div style={{ fontFamily:display, fontSize:18, color:C.ink, fontWeight:600, overflow:'hidden',
-          whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{dz.debate?.motion ?? '…'}</div>
+          whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{dz.debate?.motion ?? 'â€¦'}</div>
         <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:16, fontFamily:mono, fontSize:12, color:C.dim }}>
           <span>{(dz.debate?.viewer_count ?? room.members.length).toLocaleString()} watching</span>
           <span style={{ padding:'4px 10px', borderRadius:4, border:`1px solid ${low ? C.ember : C.hair}`,
@@ -143,35 +143,137 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   );
 }
 
-/* assembly = who's in the room before the gavel */
-function Assembly({ members }: { members: { identity: string; name: string; role: string; side: string | null }[] }) {
-  const group = (r: string) => members.filter(m => m.role === r);
-  const Row = ({ title, list, color }: { title: string; list: typeof members; color: string }) => (
-    <div style={{ marginBottom:18 }}>
-      <div style={{ fontFamily:ui, fontSize:10.5, fontWeight:700, letterSpacing:1.5, textTransform:'uppercase', color, marginBottom:10 }}>{title}</div>
-      <div style={{ display:'flex', flexWrap:'wrap', gap:10 }}>
-        {list.length ? list.map(m => (
-          <div key={m.identity} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 11px',
-            borderRadius:999, background:C.panel, border:`1px solid ${C.hair}` }}>
-            <span style={{ width:8, height:8, borderRadius:'50%', background:C.jadeHi }} />
-            <span style={{ fontFamily:ui, fontSize:13, color:C.ink }}>{m.name}</span>
-          </div>
-        )) : <span style={{ fontFamily:ui, fontSize:12, color:C.faint }}>—</span>}
+/* ---- assembly: the seated chamber before the gavel (real members) ---- */
+type M = { identity: string; name: string; role: string; side: string | null };
+
+function hueOf(s: string) { let h = 0; for (let i = 0; i < s.length; i++) h = s.charCodeAt(i) + ((h << 5) - h); return Math.abs(h) % 360; }
+
+function SeatAvatar({ name, size = 54, ring }: { name: string; size?: number; ring?: string }) {
+  const h = hueOf(name || '?');
+  const init = (name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  return (
+    <div style={{ width:size, height:size, borderRadius:'50%', flexShrink:0, display:'grid', placeItems:'center',
+      fontFamily:ui, fontWeight:700, fontSize:size*0.36, color:'#0C0B0D',
+      background:`linear-gradient(145deg, hsl(${h} 42% 60%), hsl(${(h+38)%360} 38% 40%))`,
+      boxShadow: ring ? `0 0 0 2px ${C.base}, 0 0 0 3.5px ${ring}` : 'inset 0 -2px 6px rgba(0,0,0,.4)' }}>{init}</div>
+  );
+}
+
+function Seat({ p, accent, label, small }: { p: M; accent: string; label: string; small?: boolean }) {
+  return (
+    <div style={{ textAlign:'center', width: small ? 58 : 76 }}>
+      <div style={{ position:'relative', display:'inline-block' }}>
+        <SeatAvatar name={p.name} size={small ? 42 : 54} ring={accent} />
+        <span style={{ position:'absolute', bottom:-1, right:-1, width:15, height:15, borderRadius:'50%',
+          background:C.base2, border:`2px solid ${C.base}`, display:'grid', placeItems:'center' }}>
+          <span style={{ width:6, height:6, borderRadius:'50%', background:C.jadeHi }} /></span>
+      </div>
+      <div style={{ fontFamily:ui, fontSize:12, color:C.ink, marginTop:7, fontWeight:600,
+        whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{(p.name || 'Guest').split(' ')[0]}</div>
+      <div style={{ marginTop:2, fontFamily:ui, fontSize:9, letterSpacing:'.6px', textTransform:'uppercase', color:accent }}>{label}</div>
+    </div>
+  );
+}
+
+function OpenSeat({ accent, label, small }: { accent: string; label: string; small?: boolean }) {
+  const size = small ? 42 : 54;
+  return (
+    <div style={{ textAlign:'center', width: small ? 58 : 76, opacity:.5 }}>
+      <div style={{ width:size, height:size, margin:'0 auto', borderRadius:'50%', border:`1.5px dashed ${C.hairHi}`,
+        display:'grid', placeItems:'center', color:C.faint, fontSize:size*0.4, fontWeight:300, lineHeight:1 }}>+</div>
+      <div style={{ fontFamily:ui, fontSize:11, color:C.faint, marginTop:7 }}>Open</div>
+      <div style={{ marginTop:2, fontFamily:ui, fontSize:9, letterSpacing:'.6px', textTransform:'uppercase', color:accent }}>{label}</div>
+    </div>
+  );
+}
+
+function Bench({ title, people, side, accent, tint }: {
+  title: string; people: M[]; side: 'left' | 'right'; accent: string; tint: string;
+}) {
+  const opens = Math.max(0, 1 - people.length);
+  return (
+    <div style={{ flex:1, maxWidth:280, padding:'16px 18px', borderRadius:10,
+      background:`linear-gradient(${side==='left'?'110deg':'250deg'}, ${tint}22, rgba(20,18,22,0.55) 80%)`,
+      border:`1px solid ${tint}55` }}>
+      <div style={{ fontFamily:ui, fontSize:10.5, fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase',
+        color:accent, marginBottom:14, textAlign: side==='left'?'left':'right' }}>{title}</div>
+      <div style={{ display:'flex', gap:16, flexWrap:'wrap', justifyContent: side==='left'?'flex-start':'flex-end' }}>
+        {people.map(p => <Seat key={p.identity} p={p} accent={accent} label={side==='left'?'Proposition':'Opposition'} />)}
+        {Array.from({ length: opens }).map((_, i) => <OpenSeat key={'o'+i} accent={accent} label={side==='left'?'Proposition':'Opposition'} />)}
       </div>
     </div>
   );
+}
+
+function Assembly({ members }: { members: M[] }) {
+  const g = (r: string) => members.filter(m => m.role === r);
+  const host = g('host'), mod = g('moderator'), judges = g('judge');
+  const prop = members.filter(m => m.role === 'debater' && m.side === 'prop');
+  const opp  = members.filter(m => m.role === 'debater' && m.side === 'opp');
+  const audience = g('audience');
+  const GAL = 30;
+
   return (
-    <div style={{ flex:1, overflowY:'auto', paddingTop:8 }}>
-      <div style={{ fontFamily:ui, fontSize:11, fontWeight:700, letterSpacing:2.5, textTransform:'uppercase', color:C.gold, marginBottom:18 }}>
-        The hall is filling — debate begins shortly</div>
-      <Row title="Moderator" list={group('moderator')} color={C.goldHi} />
-      <Row title="Proposition" list={members.filter(m => m.role==='debater' && m.side==='prop')} color={C.jadeHi} />
-      <Row title="Opposition" list={members.filter(m => m.role==='debater' && m.side==='opp')} color={C.garnetHi} />
-      <Row title="Judges" list={group('judge')} color={C.dim} />
-      <Row title={`Gallery · ${group('audience').length} seated`} list={group('audience').slice(0, 24)} color={C.faint} />
+    <div style={{ flex:1, minHeight:0, overflowY:'auto', display:'flex', flexDirection:'column', paddingBottom:14 }}>
+      {/* eyebrow + counts */}
+      <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
+        <span style={{ width:8, height:8, borderRadius:'50%', background:C.gold, boxShadow:`0 0 10px ${C.gold}` }} />
+        <span style={{ fontFamily:ui, fontSize:10.5, fontWeight:700, letterSpacing:'2.5px', textTransform:'uppercase', color:C.gold }}>
+          The hall is filling â€” debate begins shortly</span>
+        <span style={{ marginLeft:'auto', fontFamily:mono, fontSize:12, color:C.dim }}>
+          {prop.length + opp.length} debaters Â· {judges.length} judges Â· {members.length} in the hall</span>
+      </div>
+
+      {/* host / moderator + judges */}
+      <div style={{ display:'flex', justifyContent:'center', gap:30, marginBottom:22, flexWrap:'wrap' }}>
+        <div style={{ display:'flex', gap:22 }}>
+          {host.map(p => <Seat key={p.identity} p={p} accent={C.gold} label="Host" />)}
+          {mod.length
+            ? mod.map(p => <Seat key={p.identity} p={p} accent={C.goldHi} label="Moderator" />)
+            : <OpenSeat accent={C.goldHi} label="Moderator" />}
+        </div>
+        <div style={{ display:'flex', gap:18, paddingLeft:22, borderLeft:`1px solid ${C.hair}` }}>
+          {judges.length
+            ? judges.map(j => <Seat key={j.identity} p={j} accent={C.dim} label="Judge" small />)
+            : <OpenSeat accent={C.dim} label="Judge" small />}
+        </div>
+      </div>
+
+      {/* benches around the floor */}
+      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:18, marginBottom:18 }}>
+        <Bench title="Proposition" people={prop} side="left" accent={C.jadeHi} tint={C.jade} />
+        <div style={{ textAlign:'center', flexShrink:0, paddingTop:10 }}>
+          <div style={{ width:82, height:56, margin:'0 auto', borderRadius:'8px 8px 4px 4px',
+            background:`linear-gradient(180deg, ${C.panel2}, ${C.base})`, border:`1px solid ${C.hairHi}`,
+            boxShadow:'0 0 26px rgba(217,180,92,0.18)', position:'relative' }}>
+            <span style={{ position:'absolute', top:-9, left:'50%', transform:'translateX(-50%)', width:30, height:9,
+              background:C.gold, borderRadius:3, opacity:.85 }} /></div>
+          <div style={{ fontFamily:ui, fontSize:10, color:C.faint, marginTop:9, letterSpacing:'1.5px', textTransform:'uppercase' }}>The floor</div>
+        </div>
+        <Bench title="Opposition" people={opp} side="right" accent={C.garnetHi} tint={C.garnet} />
+      </div>
+
+      {/* gallery */}
+      <div style={{ marginTop:'auto', paddingTop:16, borderTop:`1px solid ${C.hair}` }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+          <span style={{ fontFamily:ui, fontSize:10.5, fontWeight:700, letterSpacing:'2.5px', textTransform:'uppercase', color:C.faint }}>
+            Gallery Â· {audience.length} seated</span>
+          <span style={{ marginLeft:'auto', fontFamily:ui, fontSize:11.5, color:C.faint }}>Muted â€” questions only</span>
+        </div>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:7 }}>
+          {audience.length === 0
+            ? <span style={{ fontFamily:ui, fontSize:12, color:C.faint }}>No one in the gallery yet.</span>
+            : audience.slice(0, GAL).map(a => <SeatAvatar key={a.identity} name={a.name} size={28} />)}
+          {audience.length > GAL && (
+            <div style={{ width:28, height:28, borderRadius:'50%', display:'grid', placeItems:'center',
+              background:C.panel, color:C.dim, fontFamily:mono, fontSize:10.5 }}>+{audience.length - GAL}</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
 
 const iconBtn: React.CSSProperties = { width:32, height:32, borderRadius:5, border:`1px solid ${C.hair}`,
   background:'rgba(0,0,0,0.25)', color:C.dim, cursor:'pointer', fontSize:16, lineHeight:1 };
+
