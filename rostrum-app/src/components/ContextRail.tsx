@@ -12,6 +12,7 @@ import {
 import type { Side, Question, Segment } from '../lib/types';
 import { C, ui, display, mono, solidGold, field } from '../lib/theme';
 import { supabase } from '../lib/supabaseClient';
+import { ShareButton } from './ShareSheet';
 
 type Role = 'host' | 'moderator' | 'debater' | 'judge' | 'audience';
 
@@ -153,6 +154,16 @@ function InvitePanel({ debateId }: { debateId: string }) {
       <h3 style={{ fontFamily:display, fontSize:21, color:C.ink, margin:'0 0 6px' }}>Invite to the floor</h3>
       <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint, margin:'0 0 16px', lineHeight:1.45 }}>
         Copy a seat's link and send it however you like. When they open it, they can accept to join on stage in that role.</p>
+
+      <div style={{ border:`1px solid ${C.hairHi}`, borderRadius:9, padding:'12px 13px', background:C.panel2,
+        marginBottom:16, display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}>
+        <div style={{ minWidth:0 }}>
+          <div style={{ fontFamily:ui, fontSize:12.5, fontWeight:700, color:C.ink }}>Public watch link</div>
+          <div style={{ fontFamily:ui, fontSize:11.5, color:C.faint, marginTop:2 }}>Anyone can watch — share it anywhere.</div>
+        </div>
+        <ShareButton url={`${origin}/debate/${debateId}`} title="A debate on The Rostrum"
+          text="Watch this debate live on The Rostrum" />
+      </div>
       <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
         {seats.map(s => (
           <div key={s.q} style={{ border:`1px solid ${C.hair}`, borderRadius:8, padding:'11px 12px', background:C.panel }}>

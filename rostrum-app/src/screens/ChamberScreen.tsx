@@ -17,6 +17,7 @@ import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
 import { ContextRail } from '../components/ContextRail';
 import { RoleDock } from '../components/RoleDock';
+import { ShareButton } from '../components/ShareSheet';
 import { C, ui, display, mono } from '../lib/theme';
 
 type Layout = 'slides' | 'spotlight' | 'grid';
@@ -66,6 +67,9 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         <div style={{ fontFamily:display, fontSize:18, color:C.ink, fontWeight:600, overflow:'hidden',
           whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{dz.debate?.motion ?? '…'}</div>
         <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:16, fontFamily:mono, fontSize:12, color:C.dim }}>
+          <ShareButton compact url={typeof window!=='undefined' ? `${window.location.origin}/debate/${debateId}` : ''}
+            title={dz.debate?.motion ?? 'A debate on The Rostrum'}
+            text={dz.debate?.motion ? `Watch: ${dz.debate.motion}` : 'Watch this debate on The Rostrum'} />
           <span>{Math.max(dz.debate?.viewer_count ?? 0, room.members.length).toLocaleString()} watching</span>
           <button onClick={() => role==='host' && setTab('ros')}
             title={role==='host' ? 'Edit time in Run of show' : undefined}
