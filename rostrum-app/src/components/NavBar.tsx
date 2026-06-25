@@ -9,6 +9,7 @@ import { useAuth } from '../lib/auth';
 import { unreadTotal, subscribeInbox } from '../screens/MessagesScreen';
 import { C, ui, display, solidGold } from '../lib/theme';
 import { Avatar } from './ui';
+import { NotificationsBell } from './NotificationsBell';
 
 const LINKS: [string, string][] = [
   ['/', 'Lobby'], ['/leaderboard', 'Leaderboard'], ['/teams', 'Teams'], ['/store', 'Store'],
@@ -52,6 +53,7 @@ export function NavBar() {
         </Link>
       </nav>
       <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:14 }}>
+        <NotificationsBell />
         <button onClick={() => window.dispatchEvent(new Event('rostrum:tour'))} title="Take the tour"
           style={{ width:30, height:30, borderRadius:'50%', border:`1px solid ${C.hair}`, background:'transparent',
             color:C.dim, cursor:'pointer', fontFamily:ui, fontWeight:700, fontSize:14 }}>?</button>

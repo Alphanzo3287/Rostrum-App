@@ -454,3 +454,28 @@ export function subscribeChat(debateId: string, onInsert: (m: ChatMsg) => void) 
     .subscribe();
   return () => { supabase.removeChannel(ch); };
 }
+
+/* --------------------------- NOTIFICATIONS --------------------------- */
+export interface AppNotification {
+  id: string; user_id: string; type: string; title: string;
+  body: string | null; link: string | null; read: boolean; created_at: string;
+}
+export async function listNotifications(): Promise<AppNotification[]> {
+  const { data } = await supabase.from('notifications').select('*')
+    .order('created_at', { ascending: false }).limit(50);
+  return (data ?? []) as AppNotification[];
+}
+export async function markNotificationsRead(ids?: string[]) {
+  let q = supabase.from('notifications').update({ read: true }).eq('read', false);
+  if (ids && ids.length) q = q.in('id', ids);
+  const { error } = await q;
+  if (error) throw error;
+}
+export function subscribeNotifications(userId: string, onInsert: (n: AppNotification) => void) {
+  const ch = supabase.channel(`notifs:${userId}`)
+    .on('postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
+      (p: any) => onInsert(p.new as AppNotification))
+    .subscribe();
+  return () => { supabase.removeChannel(ch); };
+}
