@@ -2,11 +2,10 @@
 // The Rostrum · src/screens/CreateDebateScreen.tsx
 // The Host wizard, wired. On finish it calls createDebate() (which uploads
 // the thumbnail + provisions the LiveKit room), optionally stores the
-// YouTube key and uploads a deck, then opens the room in Assembly.
+// YouTube key, then opens the room in Assembly. Debaters bring their own decks.
 // =====================================================================
 import { useState } from 'react';
-import { createDebate, setBroadcastKey, uploadDeck } from '../lib/api';
-import { rasterizeToImages } from '../lib/deck';
+import { createDebate, setBroadcastKey } from '../lib/api';
 import type { DebateFormat, Side, Visibility } from '../lib/types';
 import { C, ui, display, mono, solidGold, field } from '../lib/theme';
 
@@ -55,7 +54,6 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
   const [gifts, setGifts] = useState(true);
   const [recording, setRecording] = useState(true);
   const [youtubeKey, setYoutubeKey] = useState('');
-  const [deck, setDeck] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -75,7 +73,6 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
         thumbnailFile: thumb,
       });
       if (youtubeKey.trim()) await setBroadcastKey(debate.id, youtubeKey.trim());
-      if (deck.length) await uploadDeck(debate.id, await rasterizeToImages(deck));
       onCreated(debate.id);
     } catch (e: any) {
       setErr(e?.message ?? 'Could not create the debate'); setBusy(false);
@@ -145,9 +142,12 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
                     style={{ width:54, fontFamily:ui, fontSize:10, fontWeight:700, color: sideColor(s.side),
                       background:'none', border:`1px solid ${C.hair}`, borderRadius:4, padding:'6px 0', cursor:'pointer' }}>
                     {sideLabel(s.side)}</button>
-                  <input type="number" value={s.min} min={1} max={60}
-                    onChange={e => setSegs(x => x.map((y, j) => j === i ? { ...y, min: +e.target.value } : y))}
-                    style={{ ...field, width:54, padding:'8px', fontFamily:mono, textAlign:'center' }} />
+                  <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                    <input type="number" value={s.min} min={1} max={60}
+                      onChange={e => setSegs(x => x.map((y, j) => j === i ? { ...y, min: +e.target.value } : y))}
+                      style={{ ...field, width:50, padding:'8px', fontFamily:mono, textAlign:'center' }} />
+                    <span style={{ fontFamily:ui, fontSize:11, color:C.faint }}>min</span>
+                  </div>
                   <button onClick={() => setSegs(x => x.filter((_, j) => j !== i))} style={{ ...iconBtn, color:C.garnetHi }}>×</button>
                 </div>
               ))}
@@ -182,12 +182,9 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
                 Stored privately — only used server-side when you go live.</p>
             </div>
 
-            <div style={{ marginTop:18 }}>
-              <Label>Slides <span style={{ color:C.faint, fontWeight:400 }}>(optional — PDF or images)</span></Label>
-              <input type="file" accept="application/pdf,image/*" multiple style={{ marginTop:8, color:C.dim, fontFamily:ui, fontSize:12 }}
-                onChange={e => setDeck(Array.from(e.target.files ?? []))} />
-              {deck.length > 0 && <span style={{ fontFamily:ui, fontSize:12, color:C.jadeHi, marginLeft:8 }}>{deck.length} file(s)</span>}
-            </div>
+            <p style={{ fontFamily:ui, fontSize:11.5, color:C.faint, marginTop:18, lineHeight:1.5 }}>
+              Slides are uploaded by the debaters themselves — each side shares its own deck from the floor
+              once they’ve taken their seat.</p>
           </>}
         </div>
 

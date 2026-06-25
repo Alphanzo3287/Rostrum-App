@@ -8,6 +8,7 @@
 //   controls -> RoleDock (host go-live, segment mic-gating, end)
 // =====================================================================
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { useRoom } from '../lib/useRoom';
 import { useDebate } from '../lib/useDebate';
@@ -26,6 +27,8 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   const { user } = useAuth();
   const room = useRoom(debateId);
   const dz = useDebate(debateId);
+  const nav = useNavigate();
+  const openProfile = (handle?: string | null) => { if (handle) nav(`/u/${handle}`); };
   const [layout, setLayout] = useState<Layout>('slides');
   const [tab, setTab] = useState('vote');
 
@@ -75,7 +78,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
       <div style={{ flex:1, display:'grid', gridTemplateColumns:'1fr 322px', minHeight:0 }}>
         <div style={{ display:'flex', flexDirection:'column', minWidth:0, padding:'14px 16px 0' }}>
           {dz.phase === 'assembly'
-            ? <Assembly members={room.members} />
+            ? <Assembly members={room.members} onProfile={openProfile} />
             : <>
                 {/* segment + layout switch */}
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
@@ -98,7 +101,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
                         {room.members.map(m => <VideoTile key={m.identity} member={m} active={m.identity===speaker?.identity} />)}
                       </div>
                     : <>
-                        <SlideStage debateId={debateId} canPresent={room.canPublish} dim={layout==='spotlight'} />
+                        <SlideStage debateId={debateId} canPresent={room.canPublish && role !== 'host'} dim={layout==='spotlight'} />
                         {speaker && (
                           <div style={{ position:'absolute', right:'3%', bottom:'7%', width: layout==='spotlight' ? '46%' : '31%', aspectRatio:'4 / 3' }}>
                             <VideoTile member={speaker} active size={layout==='spotlight' ? 'stage' : 'tile'} />
@@ -144,7 +147,9 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
 }
 
 /* ---- assembly: the seated chamber before the gavel (real members) ---- */
-type M = { identity: string; name: string; role: string; side: string | null };
+type M = { identity: string; name: string; handle?: string | null; role: string; side: string | null };
+
+const seatHoverCSS = `.rseat{transition:transform .12s ease, filter .12s ease} .rseat:hover{transform:translateY(-2px);filter:brightness(1.12)}`;
 
 function hueOf(s: string) { let h = 0; for (let i = 0; i < s.length; i++) h = s.charCodeAt(i) + ((h << 5) - h); return Math.abs(h) % 360; }
 
@@ -159,9 +164,13 @@ function SeatAvatar({ name, size = 54, ring }: { name: string; size?: number; ri
   );
 }
 
-function Seat({ p, accent, label, small }: { p: M; accent: string; label: string; small?: boolean }) {
+function Seat({ p, accent, label, small, onProfile }: { p: M; accent: string; label: string; small?: boolean; onProfile?: (h?: string | null) => void }) {
+  const clickable = !!(onProfile && p.handle);
   return (
-    <div style={{ textAlign:'center', width: small ? 58 : 76 }}>
+    <div className={clickable ? 'rseat' : undefined}
+      onClick={clickable ? () => onProfile!(p.handle) : undefined}
+      title={clickable ? `View ${p.name}'s profile` : undefined}
+      style={{ textAlign:'center', width: small ? 58 : 76, cursor: clickable ? 'pointer' : 'default' }}>
       <div style={{ position:'relative', display:'inline-block' }}>
         <SeatAvatar name={p.name} size={small ? 42 : 54} ring={accent} />
         <span style={{ position:'absolute', bottom:-1, right:-1, width:15, height:15, borderRadius:'50%',
@@ -187,8 +196,8 @@ function OpenSeat({ accent, label, small }: { accent: string; label: string; sma
   );
 }
 
-function Bench({ title, people, side, accent, tint }: {
-  title: string; people: M[]; side: 'left' | 'right'; accent: string; tint: string;
+function Bench({ title, people, side, accent, tint, onProfile }: {
+  title: string; people: M[]; side: 'left' | 'right'; accent: string; tint: string; onProfile?: (h?: string | null) => void;
 }) {
   const opens = Math.max(0, 1 - people.length);
   return (
@@ -198,14 +207,14 @@ function Bench({ title, people, side, accent, tint }: {
       <div style={{ fontFamily:ui, fontSize:10.5, fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase',
         color:accent, marginBottom:14, textAlign: side==='left'?'left':'right' }}>{title}</div>
       <div style={{ display:'flex', gap:16, flexWrap:'wrap', justifyContent: side==='left'?'flex-start':'flex-end' }}>
-        {people.map(p => <Seat key={p.identity} p={p} accent={accent} label={side==='left'?'Proposition':'Opposition'} />)}
+        {people.map(p => <Seat key={p.identity} p={p} accent={accent} label={side==='left'?'Proposition':'Opposition'} onProfile={onProfile} />)}
         {Array.from({ length: opens }).map((_, i) => <OpenSeat key={'o'+i} accent={accent} label={side==='left'?'Proposition':'Opposition'} />)}
       </div>
     </div>
   );
 }
 
-function Assembly({ members }: { members: M[] }) {
+function Assembly({ members, onProfile }: { members: M[]; onProfile?: (h?: string | null) => void }) {
   const g = (r: string) => members.filter(m => m.role === r);
   const host = g('host'), mod = g('moderator'), judges = g('judge');
   const prop = members.filter(m => m.role === 'debater' && m.side === 'prop');
@@ -215,6 +224,7 @@ function Assembly({ members }: { members: M[] }) {
 
   return (
     <div style={{ flex:1, minHeight:0, overflowY:'auto', display:'flex', flexDirection:'column', paddingBottom:14 }}>
+      <style>{seatHoverCSS}</style>
       {/* eyebrow + counts */}
       <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
         <span style={{ width:8, height:8, borderRadius:'50%', background:C.gold, boxShadow:`0 0 10px ${C.gold}` }} />
@@ -227,21 +237,21 @@ function Assembly({ members }: { members: M[] }) {
       {/* host / moderator + judges */}
       <div style={{ display:'flex', justifyContent:'center', gap:30, marginBottom:22, flexWrap:'wrap' }}>
         <div style={{ display:'flex', gap:22 }}>
-          {host.map(p => <Seat key={p.identity} p={p} accent={C.gold} label="Host" />)}
+          {host.map(p => <Seat key={p.identity} p={p} accent={C.gold} label="Host" onProfile={onProfile} />)}
           {mod.length
-            ? mod.map(p => <Seat key={p.identity} p={p} accent={C.goldHi} label="Moderator" />)
+            ? mod.map(p => <Seat key={p.identity} p={p} accent={C.goldHi} label="Moderator" onProfile={onProfile} />)
             : <OpenSeat accent={C.goldHi} label="Moderator" />}
         </div>
         <div style={{ display:'flex', gap:18, paddingLeft:22, borderLeft:`1px solid ${C.hair}` }}>
           {judges.length
-            ? judges.map(j => <Seat key={j.identity} p={j} accent={C.dim} label="Judge" small />)
+            ? judges.map(j => <Seat key={j.identity} p={j} accent={C.dim} label="Judge" small onProfile={onProfile} />)
             : <OpenSeat accent={C.dim} label="Judge" small />}
         </div>
       </div>
 
       {/* benches around the floor */}
       <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:18, marginBottom:18 }}>
-        <Bench title="Proposition" people={prop} side="left" accent={C.jadeHi} tint={C.jade} />
+        <Bench title="Proposition" people={prop} side="left" accent={C.jadeHi} tint={C.jade} onProfile={onProfile} />
         <div style={{ textAlign:'center', flexShrink:0, paddingTop:10 }}>
           <div style={{ width:82, height:56, margin:'0 auto', borderRadius:'8px 8px 4px 4px',
             background:`linear-gradient(180deg, ${C.panel2}, ${C.base})`, border:`1px solid ${C.hairHi}`,
@@ -250,7 +260,7 @@ function Assembly({ members }: { members: M[] }) {
               background:C.gold, borderRadius:3, opacity:.85 }} /></div>
           <div style={{ fontFamily:ui, fontSize:10, color:C.faint, marginTop:9, letterSpacing:'1.5px', textTransform:'uppercase' }}>The floor</div>
         </div>
-        <Bench title="Opposition" people={opp} side="right" accent={C.garnetHi} tint={C.garnet} />
+        <Bench title="Opposition" people={opp} side="right" accent={C.garnetHi} tint={C.garnet} onProfile={onProfile} />
       </div>
 
       {/* gallery */}
@@ -263,7 +273,17 @@ function Assembly({ members }: { members: M[] }) {
         <div style={{ display:'flex', flexWrap:'wrap', gap:7 }}>
           {audience.length === 0
             ? <span style={{ fontFamily:ui, fontSize:12, color:C.faint }}>No one in the gallery yet.</span>
-            : audience.slice(0, GAL).map(a => <SeatAvatar key={a.identity} name={a.name} size={28} />)}
+            : audience.slice(0, GAL).map(a => {
+                const clickable = !!(onProfile && a.handle);
+                return (
+                  <div key={a.identity} className={clickable ? 'rseat' : undefined}
+                    onClick={clickable ? () => onProfile!(a.handle) : undefined}
+                    title={clickable ? `View ${a.name}'s profile` : a.name}
+                    style={{ cursor: clickable ? 'pointer' : 'default' }}>
+                    <SeatAvatar name={a.name} size={28} />
+                  </div>
+                );
+              })}
           {audience.length > GAL && (
             <div style={{ width:28, height:28, borderRadius:'50%', display:'grid', placeItems:'center',
               background:C.panel, color:C.dim, fontFamily:mono, fontSize:10.5 }}>+{audience.length - GAL}</div>

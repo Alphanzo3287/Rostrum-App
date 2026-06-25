@@ -13,6 +13,7 @@ import { getRoomToken } from './livekit';
 export interface RoomMember {
   identity: string;
   name: string;
+  handle: string | null;
   role: string;            // host | moderator | debater | judge | audience
   side: 'prop' | 'opp' | null;
   avatar: string | null;
@@ -56,6 +57,7 @@ export function useRoom(debateId: string | null): UseRoom {
       return {
         identity: p.identity,
         name: p.name || 'Guest',
+        handle: md.handle ?? null,
         role: md.role ?? 'audience',
         side: md.side ?? null,
         avatar: md.avatar ?? null,
@@ -79,7 +81,9 @@ export function useRoom(debateId: string | null): UseRoom {
       if (cancelled) return;
       setCanPublish(cp);
 
-      room = new Room({ adaptiveStream: true, dynacast: true });
+      // dynacast pauses a track when it has no subscribers — which kills the
+      // camera when you're testing alone. Keep tracks publishing.
+      room = new Room({ adaptiveStream: true, dynacast: false });
       roomRef.current = room;
 
       const resync = () => room && sync(room);

@@ -10,6 +10,7 @@ import {
 } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
 import { NavBar } from './components/NavBar';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthScreen } from './screens/AuthScreen';
 import { OnboardScreen } from './screens/OnboardScreen';
 import { LobbyScreen } from './screens/LobbyScreen';
@@ -74,7 +75,7 @@ function Shell() {
     <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column' }}>
       <NavBar />
       <div style={{ flex:1, position:'relative', minHeight:0 }}>
-        <Outlet />
+        <ErrorBoundary><Outlet /></ErrorBoundary>
       </div>
     </div>
   );

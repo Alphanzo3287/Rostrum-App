@@ -59,7 +59,8 @@ export function subscribeMessages(cid: string, onInsert: (m: DMessage) => void) 
   return () => { supabase.removeChannel(ch); };
 }
 export function subscribeInbox(onChange: () => void) {
-  const ch = supabase.channel('inbox')
+  // Unique channel name — NavBar and the inbox both subscribe; a shared name collides.
+  const ch = supabase.channel(`inbox:${Math.random().toString(36).slice(2)}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => onChange())
     .subscribe();
   return () => { supabase.removeChannel(ch); };
