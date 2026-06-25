@@ -1,5 +1,5 @@
 // =====================================================================
-// The Rostrum · src/App.tsx
+// The Rostrum Â· src/App.tsx
 // Auth gate + React Router. Browse routes share the NavBar shell; the
 // chamber, create flow, and results are full-bleed. Every screen gets the
 // navigation callbacks it was built to accept.
@@ -17,6 +17,7 @@ import { CreateDebateScreen } from './screens/CreateDebateScreen';
 import { ChamberScreen } from './screens/ChamberScreen';
 import { ResultsScreen } from './screens/ResultsScreen';
 import { InviteScreen } from './screens/InviteScreen';
+import { InboxScreen, ThreadScreen } from './screens/MessagesScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { LeaderboardScreen } from './screens/LeaderboardScreen';
 import { TeamsScreen } from './screens/TeamsScreen';
@@ -34,7 +35,7 @@ export default function App() {
   );
 }
 
-/* Decide auth → onboarding → app, then hand off to the router. */
+/* Decide auth â†’ onboarding â†’ app, then hand off to the router. */
 function Gate() {
   const { session, profile, loading } = useAuth();
   const [justSignedUp, setJustSignedUp] = useState(false);
@@ -55,6 +56,8 @@ function Gate() {
         <Route path="store" element={<StoreRoute />} />
         <Route path="me" element={<ProfileRoute />} />
         <Route path="u/:handle" element={<ProfileRoute />} />
+        <Route path="messages" element={<InboxRoute />} />
+        <Route path="messages/:handle" element={<ThreadRoute />} />
       </Route>
       {/* full-bleed routes */}
       <Route path="host" element={<CreateRoute />} />
@@ -97,7 +100,19 @@ function StoreRoute() {
 function ProfileRoute() {
   const { handle } = useParams();
   const nav = useNavigate();
-  return <ProfileScreen handle={handle} onBack={() => nav(-1)} onOpenStore={() => nav('/store')} />;
+  return <ProfileScreen handle={handle} onBack={() => nav(-1)} onOpenStore={() => nav('/store')}
+    onMessage={h => nav(`/messages/${h}`)} />;
+}
+function InboxRoute() {
+  const nav = useNavigate();
+  return <InboxScreen onOpen={h => nav(`/messages/${h}`)} onBack={() => nav(-1)} />;
+}
+function ThreadRoute() {
+  const { handle } = useParams();
+  const nav = useNavigate();
+  if (!handle) return <Navigate to="/messages" replace />;
+  return <ThreadScreen handle={handle} onBack={() => nav('/messages')}
+    onOpenProfile={h => nav(`/u/${h}`)} onOpenInvite={p => nav(p)} />;
 }
 function CreateRoute() {
   const nav = useNavigate();
@@ -131,7 +146,8 @@ function Splash() {
   return (
     <div style={{ position:'absolute', inset:0, display:'grid', placeItems:'center',
       background:C.base, color:C.dim, fontFamily:ui, fontSize:14 }}>
-      Loading the chamber…
+      Loading the chamberâ€¦
     </div>
   );
 }
+
