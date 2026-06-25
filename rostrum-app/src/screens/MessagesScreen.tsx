@@ -45,7 +45,10 @@ export async function sendMessage(cid: string, body: string): Promise<void> {
   const { error } = await supabase.from('messages').insert({ conversation_id: cid, sender_id: user.id, body: text });
   if (error) throw error;
 }
-export async function markRead(cid: string): Promise<void> { await supabase.rpc('mark_read', { p_convo: cid }); }
+export async function markRead(cid: string): Promise<void> {
+  await supabase.rpc('mark_read', { p_convo: cid });
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('rostrum:unread'));
+}
 export async function unreadTotal(): Promise<number> {
   const { data } = await supabase.rpc('unread_total');
   return (data as number) ?? 0;

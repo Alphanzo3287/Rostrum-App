@@ -106,7 +106,7 @@ function ProfileRoute() {
 }
 function InboxRoute() {
   const nav = useNavigate();
-  return <InboxScreen onOpen={h => nav(`/messages/${h}`)} onBack={() => nav(-1)} />;
+  return <InboxScreen onOpen={h => nav(`/messages/${h}`)} onBack={() => nav('/')} />;
 }
 function ThreadRoute() {
   const { handle } = useParams();

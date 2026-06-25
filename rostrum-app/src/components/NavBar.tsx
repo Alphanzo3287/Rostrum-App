@@ -25,8 +25,9 @@ export function NavBar() {
     let on = true;
     const load = () => unreadTotal().then(n => { if (on) setUnread(n); }).catch(() => {});
     load();
-    const off = subscribeInbox(load);
-    return () => { on = false; off(); };
+    const off = subscribeInbox(load);                 // new message arrives → re-count
+    window.addEventListener('rostrum:unread', load);   // a thread was read → re-count
+    return () => { on = false; off(); window.removeEventListener('rostrum:unread', load); };
   }, []);
 
   return (
