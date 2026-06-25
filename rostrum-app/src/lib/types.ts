@@ -5,8 +5,8 @@
 // =====================================================================
 
 export type DebateFormat = 'oxford' | 'cross_exam' | 'lincoln_douglas' | 'town_hall' | 'freestyle';
-export type DebateStatus = 'draft' | 'assembly' | 'live' | 'ended' | 'cancelled';
-export type Visibility   = 'public' | 'unlisted';
+export type DebateStatus = 'draft' | 'scheduled' | 'assembly' | 'live' | 'ended' | 'cancelled';
+export type Visibility   = 'public' | 'unlisted' | 'private';
 export type DebateRole   = 'host' | 'moderator' | 'debater' | 'judge' | 'audience';
 export type Side         = 'prop' | 'opp';
 export type TeamRole     = 'owner' | 'admin' | 'member';
@@ -51,6 +51,7 @@ export interface Debate {
   is_paid: boolean;
   price_cents: number;
   viewer_count: number;
+  scheduled_at: string | null;
   started_at: string | null;
   ended_at: string | null;
   recording_url: string | null;

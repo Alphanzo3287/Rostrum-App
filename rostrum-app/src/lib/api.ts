@@ -17,7 +17,19 @@ export async function listLiveDebates(): Promise<Debate[]> {
     .from('debates')
     .select('*, host:profiles!debates_host_id_fkey(display_name,handle,avatar_url)')
     .in('status', ['assembly', 'live'])
+    .eq('visibility', 'public')
     .order('viewer_count', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as Debate[];
+}
+
+export async function listUpcomingDebates(): Promise<Debate[]> {
+  const { data, error } = await supabase
+    .from('debates')
+    .select('*, host:profiles!debates_host_id_fkey(display_name,handle,avatar_url)')
+    .eq('status', 'scheduled')
+    .eq('visibility', 'public')
+    .order('scheduled_at', { ascending: true });
   if (error) throw error;
   return (data ?? []) as Debate[];
 }
@@ -45,6 +57,7 @@ export interface CreateDebateInput {
   giftsEnabled: boolean;
   recordingEnabled: boolean;
   votersEnabled: boolean;
+  scheduledAt?: string | null;
   segments: { label: string; side: Side | null; durationSecs: number }[];
   thumbnailFile?: File | null;
 }
@@ -65,7 +78,8 @@ export async function createDebate(input: CreateDebateInput): Promise<Debate> {
     gifts_enabled: input.giftsEnabled,
     recording_enabled: input.recordingEnabled,
     voters_enabled: input.votersEnabled,
-    status: 'assembly',
+    scheduled_at: input.scheduledAt ?? null,
+    status: input.scheduledAt ? 'scheduled' : 'assembly',
   }).select().single();
   if (error) throw error;
   const d = debate as Debate;
@@ -103,6 +117,32 @@ export async function setDebateStatus(id: string, status: 'assembly' | 'live' | 
   if (status === 'live') patch.started_at = new Date().toISOString();
   const { error } = await supabase.from('debates').update(patch).eq('id', id);
   if (error) throw error;
+}
+
+// Host opens the doors on a scheduled debate (scheduled → assembly).
+export async function startDebate(id: string) {
+  const { error } = await supabase.rpc('start_debate', { p_debate: id });
+  if (error) throw error;
+}
+
+/* ------------------------------- RSVP ---------------------------- */
+export interface RsvpInfo { going: number; interested: number; mine: 'going' | 'interested' | null; }
+export async function getRsvp(debateId: string): Promise<RsvpInfo> {
+  const { data } = await supabase.rpc('get_rsvp', { p_debate: debateId });
+  const row = (Array.isArray(data) ? data[0] : data) as any;
+  return { going: row?.going ?? 0, interested: row?.interested ?? 0, mine: row?.mine ?? null };
+}
+export async function setRsvp(debateId: string, status: 'going' | 'interested') {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('not authenticated');
+  const { error } = await supabase.from('debate_rsvps')
+    .upsert({ debate_id: debateId, user_id: user.id, status }, { onConflict: 'debate_id,user_id' });
+  if (error) throw error;
+}
+export async function clearRsvp(debateId: string) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  await supabase.from('debate_rsvps').delete().eq('debate_id', debateId).eq('user_id', user.id);
 }
 
 // Host stores the YouTube stream key (host-only table; read server-side at go-live).

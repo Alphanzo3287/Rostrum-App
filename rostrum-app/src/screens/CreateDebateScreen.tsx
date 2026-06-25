@@ -45,6 +45,8 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
   const [motion, setMotion] = useState('This House would abolish the electoral college');
   const [format, setFormat] = useState<DebateFormat>('oxford');
   const [vis, setVis] = useState<Visibility>('public');
+  const [when, setWhen] = useState<'now' | 'later'>('now');
+  const [whenAt, setWhenAt] = useState('');
   const [thumb, setThumb] = useState<File | null>(null);
   const [thumbPrev, setThumbPrev] = useState<string | null>(null);
   const [voters, setVoters] = useState(true);
@@ -63,12 +65,17 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
   const sideLabel = (s: Side | null) => (s === 'prop' ? 'PROP' : s === 'opp' ? 'OPP' : 'BOTH');
 
   async function create() {
-    setErr(null); setBusy(true);
+    setErr(null);
+    const scheduledAt = when === 'later' ? (whenAt ? new Date(whenAt).toISOString() : null) : null;
+    if (when === 'later' && !scheduledAt) { setErr('Pick a date and time for the scheduled debate.'); return; }
+    if (scheduledAt && new Date(scheduledAt).getTime() < Date.now()) { setErr('Scheduled time must be in the future.'); return; }
+    setBusy(true);
     try {
       const debate = await createDebate({
         motion, format, visibility: vis,
         isPaid: paid, priceCents: paid ? Math.round(price * 100) : 0,
         giftsEnabled: gifts, recordingEnabled: recording, votersEnabled: voters,
+        scheduledAt,
         segments: segs.map(s => ({ label: s.label, side: s.side, durationSecs: s.min * 60 })),
         thumbnailFile: thumb,
       });
@@ -113,10 +120,23 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
               ))}
             </div>
             <Label>Visibility</Label>
-            <div style={{ display:'flex', gap:8, marginTop:8, marginBottom:22 }}>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:8, marginBottom:22 }}>
               <Chip on={vis === 'public'} onClick={() => setVis('public')}>Public</Chip>
               <Chip on={vis === 'unlisted'} onClick={() => setVis('unlisted')}>Unlisted · link only</Chip>
+              <Chip on={vis === 'private'} onClick={() => setVis('private')}>Private · invite only</Chip>
             </div>
+
+            <Label>When</Label>
+            <div style={{ display:'flex', gap:8, marginTop:8 }}>
+              <Chip on={when === 'now'} onClick={() => setWhen('now')}>Go live now</Chip>
+              <Chip on={when === 'later'} onClick={() => setWhen('later')}>Schedule for later</Chip>
+            </div>
+            {when === 'later' && (
+              <input type="datetime-local" value={whenAt} onChange={e => setWhenAt(e.target.value)}
+                min={new Date(Date.now() + 5 * 60000).toISOString().slice(0, 16)}
+                style={{ ...field, marginTop:10, colorScheme:'dark', maxWidth:320 }} />
+            )}
+            <div style={{ height:22 }} />
             <Label>Cover thumbnail</Label>
             <label style={{ display:'block', marginTop:9, cursor:'pointer' }}>
               <input type="file" accept="image/*" style={{ display:'none' }}
@@ -200,7 +220,8 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
           {step < 3
             ? <button onClick={() => setStep(s => s + 1)} style={solidGold}>Continue</button>
             : <button onClick={create} disabled={busy} style={{ ...solidGold, opacity: busy ? 0.6 : 1 }}>
-                {busy ? 'Opening the hall…' : 'Create & open the hall'}</button>}
+                {busy ? (when==='later' ? 'Scheduling…' : 'Opening the hall…')
+                      : (when==='later' ? 'Schedule debate' : 'Create & open the hall')}</button>}
         </div>
       </div>
     </div>

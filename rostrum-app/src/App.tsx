@@ -4,7 +4,7 @@
 // chamber, create flow, and results are full-bleed. Every screen gets the
 // navigation callbacks it was built to accept.
 // =====================================================================
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   BrowserRouter, Routes, Route, Outlet, Navigate, useNavigate, useParams, useSearchParams,
 } from 'react-router-dom';
@@ -17,6 +17,7 @@ import { OnboardScreen } from './screens/OnboardScreen';
 import { LobbyScreen } from './screens/LobbyScreen';
 import { CreateDebateScreen } from './screens/CreateDebateScreen';
 import { ChamberScreen } from './screens/ChamberScreen';
+import { ScheduledScreen } from './screens/ScheduledScreen';
 import { ResultsScreen } from './screens/ResultsScreen';
 import { InviteScreen } from './screens/InviteScreen';
 import { InboxScreen, ThreadScreen } from './screens/MessagesScreen';
@@ -24,6 +25,7 @@ import { ProfileScreen } from './screens/ProfileScreen';
 import { LeaderboardScreen } from './screens/LeaderboardScreen';
 import { TeamsScreen } from './screens/TeamsScreen';
 import { StoreScreen } from './screens/StoreScreen';
+import { getDebate } from './lib/api';
 import type { DebateRole, Side } from './lib/types';
 import { C, ui } from './lib/theme';
 
@@ -124,7 +126,20 @@ function CreateRoute() {
 function ChamberRoute() {
   const { id } = useParams();
   const nav = useNavigate();
+  const [phase, setPhase] = useState<'loading' | 'scheduled' | 'open'>('loading');
+  useEffect(() => {
+    if (!id) return;
+    let on = true;
+    getDebate(id)
+      .then(({ debate }) => { if (on) setPhase(debate.status === 'scheduled' ? 'scheduled' : 'open'); })
+      .catch(() => { if (on) setPhase('open'); });   // let the chamber surface any real error
+  }, [id]);
   if (!id) return <Navigate to="/" replace />;
+  if (phase === 'loading')
+    return <div style={{ position:'absolute', inset:0, display:'grid', placeItems:'center', background:C.base,
+      fontFamily:ui, color:C.faint }}>Loading…</div>;
+  if (phase === 'scheduled')
+    return <ScheduledScreen debateId={id} onBack={() => nav('/')} onStarted={() => setPhase('open')} />;
   return <ChamberScreen debateId={id} onLeave={() => nav('/')}
     onEnded={() => nav(`/debate/${id}/results`, { replace: true })} />;
 }
