@@ -43,7 +43,8 @@ export function StoreScreen({ onBack }: { onBack?: () => void }) {
            return (
              <div key={p.id} style={{ display:'flex', flexDirection:'column', padding:'18px 18px', borderRadius:12,
                border:`1px solid ${have ? C.jade + '66' : C.hair}`, background:C.panel }}>
-               <div style={{ fontSize:30 }}>{p.icon}</div>
+               <div style={{ fontFamily:ui, fontSize:11, fontWeight:700, letterSpacing:'1.2px',
+                 textTransform:'uppercase', color:C.gold }}>{p.icon}</div>
                <div style={{ fontFamily:display, fontSize:19, fontWeight:600, color:C.ink, marginTop:10 }}>{p.name}</div>
                {p.description && <div style={{ fontFamily:ui, fontSize:12.5, color:C.faint, marginTop:5, lineHeight:1.45, flex:1 }}>{p.description}</div>}
                <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:16 }}>

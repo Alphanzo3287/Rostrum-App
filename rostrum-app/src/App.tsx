@@ -1,5 +1,5 @@
 // =====================================================================
-// The Rostrum Â· src/App.tsx
+// The Rostrum · src/App.tsx
 // Auth gate + React Router. Browse routes share the NavBar shell; the
 // chamber, create flow, and results are full-bleed. Every screen gets the
 // navigation callbacks it was built to accept.
@@ -35,7 +35,7 @@ export default function App() {
   );
 }
 
-/* Decide auth â†’ onboarding â†’ app, then hand off to the router. */
+/* Decide auth → onboarding → app, then hand off to the router. */
 function Gate() {
   const { session, profile, loading } = useAuth();
   const [justSignedUp, setJustSignedUp] = useState(false);
@@ -146,8 +146,7 @@ function Splash() {
   return (
     <div style={{ position:'absolute', inset:0, display:'grid', placeItems:'center',
       background:C.base, color:C.dim, fontFamily:ui, fontSize:14 }}>
-      Loading the chamberâ€¦
+      Loading the chamber…
     </div>
   );
 }
-

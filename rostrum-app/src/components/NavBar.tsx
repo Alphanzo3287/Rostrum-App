@@ -1,5 +1,5 @@
 // =====================================================================
-// The Rostrum Â· src/components/NavBar.tsx
+// The Rostrum · src/components/NavBar.tsx
 // Persistent top nav for the non-immersive routes. The chamber renders
 // without it (full-bleed broadcast).
 // =====================================================================
@@ -51,7 +51,7 @@ export function NavBar() {
         </Link>
       </nav>
       <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:14 }}>
-        <button onClick={() => nav('/host')} style={{ ...solidGold, padding:'9px 15px', fontSize:13 }}>ï¼‹ Host</button>
+        <button onClick={() => nav('/host')} style={{ ...solidGold, padding:'9px 15px', fontSize:13 }}>＋ Host</button>
         <button onClick={() => nav('/me')} title="Your profile"
           style={{ background:'none', border:'none', cursor:'pointer', padding:0, borderRadius:'50%',
             outline: pathname === '/me' ? `2px solid ${C.gold}` : 'none' }}>
@@ -64,4 +64,3 @@ export function NavBar() {
     </header>
   );
 }
-

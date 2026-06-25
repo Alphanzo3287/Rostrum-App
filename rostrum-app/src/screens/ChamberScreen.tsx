@@ -1,5 +1,5 @@
 // =====================================================================
-// The Rostrum Â· src/screens/ChamberScreen.tsx
+// The Rostrum · src/screens/ChamberScreen.tsx
 // The live room, fully wired:
 //   cameras  -> useRoom + VideoTile
 //   deck     -> SlideStage (synced)
@@ -54,16 +54,16 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
     <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', background:C.base }}>
       {/* ---- tally bar ---- */}
       <div style={{ display:'flex', alignItems:'center', gap:14, padding:'11px 18px', borderBottom:`1px solid ${C.hair}` }}>
-        <button onClick={onLeave} style={iconBtn}>â€¹</button>
+        <button onClick={onLeave} style={iconBtn}>‹</button>
         <span style={{ padding:'4px 11px', borderRadius:3, fontFamily:ui, fontWeight:700, fontSize:11, letterSpacing:1.5,
           color: dz.phase==='assembly' ? C.base : onAir ? '#1a0a06' : '#000',
           background: dz.phase==='assembly' ? C.gold : onAir ? C.ember : C.faint }}>
           {dz.phase==='assembly' ? 'ASSEMBLING' : onAir ? 'ON AIR' : 'OFF AIR'}
         </span>
         <div style={{ fontFamily:display, fontSize:18, color:C.ink, fontWeight:600, overflow:'hidden',
-          whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{dz.debate?.motion ?? 'â€¦'}</div>
+          whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{dz.debate?.motion ?? '…'}</div>
         <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:16, fontFamily:mono, fontSize:12, color:C.dim }}>
-          <span>{(dz.debate?.viewer_count ?? room.members.length).toLocaleString()} watching</span>
+          <span>{Math.max(dz.debate?.viewer_count ?? 0, room.members.length).toLocaleString()} watching</span>
           <span style={{ padding:'4px 10px', borderRadius:4, border:`1px solid ${low ? C.ember : C.hair}`,
             color: low ? C.ember : C.ink, fontWeight:700, fontSize:15 }}>
             {dz.phase==='assembly' ? 'Doors open' : `${mm}:${ss}`}
@@ -219,9 +219,9 @@ function Assembly({ members }: { members: M[] }) {
       <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
         <span style={{ width:8, height:8, borderRadius:'50%', background:C.gold, boxShadow:`0 0 10px ${C.gold}` }} />
         <span style={{ fontFamily:ui, fontSize:10.5, fontWeight:700, letterSpacing:'2.5px', textTransform:'uppercase', color:C.gold }}>
-          The hall is filling â€” debate begins shortly</span>
+          The hall is filling — debate begins shortly</span>
         <span style={{ marginLeft:'auto', fontFamily:mono, fontSize:12, color:C.dim }}>
-          {prop.length + opp.length} debaters Â· {judges.length} judges Â· {members.length} in the hall</span>
+          {prop.length + opp.length} debaters · {judges.length} judges · {members.length} in the hall</span>
       </div>
 
       {/* host / moderator + judges */}
@@ -257,8 +257,8 @@ function Assembly({ members }: { members: M[] }) {
       <div style={{ marginTop:'auto', paddingTop:16, borderTop:`1px solid ${C.hair}` }}>
         <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
           <span style={{ fontFamily:ui, fontSize:10.5, fontWeight:700, letterSpacing:'2.5px', textTransform:'uppercase', color:C.faint }}>
-            Gallery Â· {audience.length} seated</span>
-          <span style={{ marginLeft:'auto', fontFamily:ui, fontSize:11.5, color:C.faint }}>Muted â€” questions only</span>
+            Gallery · {audience.length} seated</span>
+          <span style={{ marginLeft:'auto', fontFamily:ui, fontSize:11.5, color:C.faint }}>Muted — questions only</span>
         </div>
         <div style={{ display:'flex', flexWrap:'wrap', gap:7 }}>
           {audience.length === 0
@@ -276,4 +276,3 @@ function Assembly({ members }: { members: M[] }) {
 
 const iconBtn: React.CSSProperties = { width:32, height:32, borderRadius:5, border:`1px solid ${C.hair}`,
   background:'rgba(0,0,0,0.25)', color:C.dim, cursor:'pointer', fontSize:16, lineHeight:1 };
-

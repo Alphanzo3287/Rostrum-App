@@ -1,5 +1,5 @@
 // =====================================================================
-// The Rostrum Â· src/screens/MessagesScreen.tsx
+// The Rostrum · src/screens/MessagesScreen.tsx
 // Direct messages: a 1:1 inbox and a live conversation thread. Data access
 // lives here too (kept in one file to keep deploys small). A debate invite
 // link pasted into a message renders as a tappable "Join on stage" card.
@@ -94,7 +94,7 @@ export function InboxScreen({ onOpen, onBack }: { onOpen: (handle: string) => vo
 
   return (
     <Scroll title="Messages" onBack={onBack} maxWidth={620}>
-      {rows === null ? <Empty>Loadingâ€¦</Empty>
+      {rows === null ? <Empty>Loading…</Empty>
         : rows.length === 0
           ? <Empty>No conversations yet. Open someone's profile and tap <b>Message</b> to start one.</Empty>
           : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -179,7 +179,7 @@ export function ThreadScreen({ handle, onBack, onOpenProfile, onOpenInvite }: {
     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: C.base }}>
       {/* header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: `1px solid ${C.hair}` }}>
-        <button onClick={onBack} style={iconBtn}>â€¹</button>
+        <button onClick={onBack} style={iconBtn}>‹</button>
         {other && (
           <button onClick={() => onOpenProfile(other.handle)}
             style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
@@ -196,7 +196,7 @@ export function ThreadScreen({ handle, onBack, onOpenProfile, onOpenInvite }: {
       <div style={{ flex: 1, overflowY: 'auto', padding: '18px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {msgs.length === 0 && !err && (
           <div style={{ margin: 'auto', fontFamily: ui, fontSize: 13, color: C.faint, textAlign: 'center', maxWidth: 320, lineHeight: 1.5 }}>
-            This is the start of your conversation{other ? ` with ${other.display_name}` : ''}. Say hello â€” or drop a debate invite link.</div>
+            This is the start of your conversation{other ? ` with ${other.display_name}` : ''}. Say hello — or drop a debate invite link.</div>
         )}
         {msgs.map(m => <Bubble key={m.id} m={m} mine={m.sender_id === me} onOpenInvite={onOpenInvite} />)}
         <div ref={endRef} />
@@ -206,7 +206,7 @@ export function ThreadScreen({ handle, onBack, onOpenProfile, onOpenInvite }: {
 
       {/* composer */}
       <div style={{ display: 'flex', gap: 10, padding: '12px 16px', borderTop: `1px solid ${C.hair}` }}>
-        <textarea value={text} onChange={e => setText(e.target.value)} rows={1} placeholder="Write a messageâ€¦"
+        <textarea value={text} onChange={e => setText(e.target.value)} rows={1} placeholder="Write a message…"
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
           style={{ ...field, flex: 1, resize: 'none', maxHeight: 120, fontFamily: ui }} />
         <button onClick={send} disabled={!text.trim()} style={{ ...solidGold, opacity: text.trim() ? 1 : 0.5 }}>Send</button>
@@ -233,10 +233,10 @@ function Bubble({ m, mine, onOpenInvite }: { m: DMessage; mine: boolean; onOpenI
           <button onClick={() => onOpenInvite(invite!.path)} style={{ marginTop: textOnly ? 9 : 0, display: 'flex', alignItems: 'center',
             gap: 9, width: '100%', textAlign: 'left', cursor: 'pointer', borderRadius: 9, padding: '10px 12px',
             border: `1px solid ${C.gold}`, background: 'rgba(217,180,92,0.08)' }}>
-            <span style={{ fontSize: 16 }}>ðŸŽ™ï¸</span>
+            <span style={{ fontSize: 16 }}>🎙️</span>
             <span style={{ display: 'flex', flexDirection: 'column' }}>
               <span style={{ fontFamily: ui, fontSize: 13, fontWeight: 700, color: C.goldHi }}>Debate invite</span>
-              <span style={{ fontFamily: ui, fontSize: 11.5, color: C.dim }}>Join on stage as {roleLabel(invite.role, invite.side)} â†’</span>
+              <span style={{ fontFamily: ui, fontSize: 11.5, color: C.dim }}>Join on stage as {roleLabel(invite.role, invite.side)} →</span>
             </span>
           </button>
         )}
@@ -245,4 +245,3 @@ function Bubble({ m, mine, onOpenInvite }: { m: DMessage; mine: boolean; onOpenI
     </div>
   );
 }
-

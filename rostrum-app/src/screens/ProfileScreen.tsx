@@ -1,5 +1,5 @@
 // =====================================================================
-// The Rostrum Â· src/screens/ProfileScreen.tsx
+// The Rostrum · src/screens/ProfileScreen.tsx
 // Your profile by default (from useAuth), or someone else's by handle.
 // Record + points + followers, achievements, wallet (self), follow (others).
 // =====================================================================
@@ -31,7 +31,7 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
     if (!isSelf) amFollowing(profile.id).then(setFollowing);
   }, [profile, isSelf]);
 
-  if (!profile) return <Center>Loading profileâ€¦</Center>;
+  if (!profile) return <Center>Loading profile…</Center>;
 
   async function toggleFollow() {
     if (!profile) return;
@@ -75,7 +75,7 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
               <button onClick={() => onMessage(profile.handle)} style={solidGold}>Message</button>
             )}
             <button onClick={toggleFollow} disabled={busy} style={following ? ghostBtn : ghostBtn}>
-              {following ? 'Following âœ“' : 'Follow'}
+              {following ? 'Following ✓' : 'Follow'}
             </button>
           </div>
         )}
@@ -98,16 +98,16 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
           borderRadius:10, border:`1px solid ${C.hair}`, background:C.panel }}>
           <div style={{ flex:1 }}>
             <div style={{ fontFamily:ui, fontSize:11, letterSpacing:'.6px', textTransform:'uppercase', color:C.faint }}>Wallet</div>
-            <div style={{ fontFamily:mono, fontSize:26, fontWeight:700, color:C.gold }}>â—ˆ {profile.virtual_cash.toLocaleString()}</div>
+            <div style={{ fontFamily:mono, fontSize:26, fontWeight:700, color:C.gold }}>◈ {profile.virtual_cash.toLocaleString()}</div>
           </div>
           {onOpenStore && <button onClick={onOpenStore} style={ghostBtn}>Visit the store</button>}
         </div>
       )}
 
       {/* achievements */}
-      <Section title={`Achievements Â· ${achievements.length}`}>
+      <Section title={`Achievements · ${achievements.length}`}>
         {achievements.length === 0
-          ? <Empty>No badges yet â€” win debates and climb the ranks.</Empty>
+          ? <Empty>No badges yet — win debates and climb the ranks.</Empty>
           : <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:12 }}>
               {achievements.map(a => (
                 <div key={a.id} style={{ padding:16, borderRadius:10, border:`1px solid ${C.hair}`, background:C.panel }}>
@@ -121,4 +121,3 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
     </Scroll>
   );
 }
-
