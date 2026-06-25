@@ -391,3 +391,26 @@ export function subscribeQuestions(debateId: string, onChange: () => void) {
     .subscribe();
   return () => { supabase.removeChannel(ch); };
 }
+
+/* ------------------------------- LIVE CHAT ----------------------------- */
+export interface ChatMsg {
+  id: string; debate_id: string; sender_id: string;
+  sender_name: string; sender_avatar: string | null; body: string; created_at: string;
+}
+export async function getChat(debateId: string): Promise<ChatMsg[]> {
+  const { data } = await supabase.from('chat_messages').select('*')
+    .eq('debate_id', debateId).order('created_at', { ascending: true }).limit(300);
+  return (data ?? []) as ChatMsg[];
+}
+export async function sendChat(debateId: string, body: string) {
+  const { error } = await supabase.rpc('send_chat', { p_debate: debateId, p_body: body });
+  if (error) throw error;
+}
+export function subscribeChat(debateId: string, onInsert: (m: ChatMsg) => void) {
+  const ch = supabase.channel(`chat:${debateId}`)
+    .on('postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `debate_id=eq.${debateId}` },
+      (p: any) => onInsert(p.new as ChatMsg))
+    .subscribe();
+  return () => { supabase.removeChannel(ch); };
+}

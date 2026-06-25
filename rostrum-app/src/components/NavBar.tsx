@@ -52,6 +52,9 @@ export function NavBar() {
         </Link>
       </nav>
       <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:14 }}>
+        <button onClick={() => window.dispatchEvent(new Event('rostrum:tour'))} title="Take the tour"
+          style={{ width:30, height:30, borderRadius:'50%', border:`1px solid ${C.hair}`, background:'transparent',
+            color:C.dim, cursor:'pointer', fontFamily:ui, fontWeight:700, fontSize:14 }}>?</button>
         <button onClick={() => nav('/host')} style={{ ...solidGold, padding:'9px 15px', fontSize:13 }}>＋ Host</button>
         <button onClick={() => nav('/me')} title="Your profile"
           style={{ background:'none', border:'none', cursor:'pointer', padding:0, borderRadius:'50%',

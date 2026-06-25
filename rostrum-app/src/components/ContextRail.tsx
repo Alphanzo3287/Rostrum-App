@@ -3,15 +3,17 @@
 // The side panel, wired. Vote → castVote/subscribeTally, Q&A →
 // askQuestion/subscribeQuestions/setQuestionStatus, Score → submitBallot.
 // =====================================================================
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   castVote, getTally, subscribeTally,
   askQuestion, setQuestionStatus, subscribeQuestions,
-  submitBallot,
+  submitBallot, getChat, sendChat, subscribeChat, type ChatMsg,
 } from '../lib/api';
 import type { Side, Question, Segment } from '../lib/types';
 import { C, ui, display, mono, solidGold, field } from '../lib/theme';
 import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../lib/auth';
+import { Avatar } from './ui';
 import { ShareButton } from './ShareSheet';
 
 type Role = 'host' | 'moderator' | 'debater' | 'judge' | 'audience';
@@ -25,21 +27,22 @@ export type RosData = {
 export function ContextRail({ debateId, role, tab, setTab, ros }: {
   debateId: string; role: Role; tab: string; setTab: (t: string) => void; ros?: RosData;
 }) {
-  const tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['qa','Q&A'],['poll','Poll']]
-            : role === 'judge'  ? [['score','Score'],['qa','Q&A'],['poll','Poll']]
-            :                     [['vote','Vote'],['qa','Ask'],['poll','Poll']];
+  const tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll']]
+            : role === 'judge'  ? [['score','Score'],['chat','Chat'],['qa','Q&A'],['poll','Poll']]
+            :                     [['vote','Vote'],['chat','Chat'],['qa','Ask'],['poll','Poll']];
   return (
     <aside style={{ borderLeft:`1px solid ${C.hair}`, background:'rgba(20,18,22,0.92)', display:'flex', flexDirection:'column', minHeight:0 }}>
-      <div style={{ display:'flex', padding:8, gap:6, borderBottom:`1px solid ${C.hair}` }}>
+      <div style={{ display:'flex', padding:8, gap:5, borderBottom:`1px solid ${C.hair}` }}>
         {tabs.map(([k,l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ flex:1, padding:'8px 0', borderRadius:4, border:'none',
-            cursor:'pointer', fontFamily:ui, fontSize:11.5, fontWeight:600,
+            cursor:'pointer', fontFamily:ui, fontSize:11, fontWeight:600,
             color: tab===k ? C.base : C.dim, background: tab===k ? C.gold : 'transparent' }}>{l}</button>
         ))}
       </div>
-      <div style={{ flex:1, overflowY:'auto', padding:16 }}>
+      <div style={{ flex:1, overflowY:'auto', padding:16, display:'flex', flexDirection:'column', minHeight:0 }}>
         {tab==='invite' && <InvitePanel debateId={debateId} />}
         {tab==='ros' && (ros ? <RosPanel ros={ros} /> : <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>Run of show is unavailable.</p>)}
+        {tab==='chat' && <ChatPanel debateId={debateId} />}
         {(tab==='vote'||tab==='poll') && <PollPanel debateId={debateId} canVote={role==='audience'} />}
         {tab==='qa' && <QAPanel debateId={debateId} canModerate={role==='host'||role==='moderator'} />}
         {tab==='score' && <ScorePanel debateId={debateId} />}
@@ -133,6 +136,60 @@ const miniBtn: React.CSSProperties = { fontFamily:ui, fontSize:11, fontWeight:70
   background:C.base, border:`1px solid ${C.hair}`, borderRadius:5, padding:'5px 9px', cursor:'pointer' };
 const ghostRail: React.CSSProperties = { fontFamily:ui, fontSize:12.5, fontWeight:700, color:C.ink,
   background:'transparent', border:`1px solid ${C.hairHi}`, borderRadius:6, padding:'10px 0', cursor:'pointer' };
+
+/* ----- live chat (everyone) ----- */
+function chatClock(iso: string) { return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
+function ChatPanel({ debateId }: { debateId: string }) {
+  const { user } = useAuth();
+  const me = user?.id;
+  const [msgs, setMsgs] = useState<ChatMsg[]>([]);
+  const [text, setText] = useState('');
+  const endRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let on = true;
+    getChat(debateId).then(m => { if (on) setMsgs(m); }).catch(() => {});
+    const off = subscribeChat(debateId, (m) => setMsgs(prev => prev.some(x => x.id === m.id) ? prev : [...prev, m]));
+    return () => { on = false; off(); };
+  }, [debateId]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs.length]);
+
+  async function send() {
+    const body = text.trim();
+    if (!body) return;
+    setText('');
+    try { await sendChat(debateId, body); } catch { setText(body); }
+  }
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0 }}>
+      <h3 style={{ fontFamily:display, fontSize:21, color:C.ink, margin:'0 0 12px' }}>Live chat</h3>
+      <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:11, marginBottom:12 }}>
+        {msgs.length === 0
+          ? <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>No messages yet — say something to the room.</p>
+          : msgs.map(m => (
+            <div key={m.id} style={{ display:'flex', gap:9, alignItems:'flex-start' }}>
+              <Avatar url={m.sender_avatar} name={m.sender_name} size={28} />
+              <div style={{ minWidth:0 }}>
+                <div style={{ display:'flex', alignItems:'baseline', gap:7 }}>
+                  <span style={{ fontFamily:ui, fontSize:12.5, fontWeight:700, color: m.sender_id===me ? C.goldHi : C.ink }}>
+                    {m.sender_name}{m.sender_id===me ? ' · you' : ''}</span>
+                  <span style={{ fontFamily:mono, fontSize:9.5, color:C.faint }}>{chatClock(m.created_at)}</span>
+                </div>
+                <div style={{ fontFamily:ui, fontSize:13.5, color:C.dim, lineHeight:1.4, wordBreak:'break-word' }}>{m.body}</div>
+              </div>
+            </div>
+          ))}
+        <div ref={endRef} />
+      </div>
+      <div style={{ display:'flex', gap:7 }}>
+        <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key==='Enter') send(); }}
+          placeholder="Message the room…" maxLength={500} style={{ ...field, fontSize:13 }} />
+        <button onClick={send} disabled={!text.trim()} style={{ ...solidGold, padding:'0 13px', opacity: text.trim() ? 1 : 0.5 }}>Send</button>
+      </div>
+    </div>
+  );
+}
 
 /* ----- invite (host) ----- */
 function InvitePanel({ debateId }: { debateId: string }) {

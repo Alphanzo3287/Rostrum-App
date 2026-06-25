@@ -11,6 +11,7 @@ import {
 import { AuthProvider, useAuth } from './lib/auth';
 import { NavBar } from './components/NavBar';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { WelcomeTour } from './components/WelcomeTour';
 import { AuthScreen } from './screens/AuthScreen';
 import { OnboardScreen } from './screens/OnboardScreen';
 import { LobbyScreen } from './screens/LobbyScreen';
@@ -77,6 +78,7 @@ function Shell() {
       <div style={{ flex:1, position:'relative', minHeight:0 }}>
         <ErrorBoundary><Outlet /></ErrorBoundary>
       </div>
+      <WelcomeTour />
     </div>
   );
 }
