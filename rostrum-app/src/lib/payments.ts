@@ -99,3 +99,16 @@ export async function getCreatorAccount(): Promise<CreatorAccount> {
 
 export const startPayoutOnboarding = () => authedPost<{ url: string }>('stripe-connect-onboard');
 export const refreshPayoutStatus = () => authedPost<CreatorAccount>('stripe-account-status');
+
+/* ---- Level / XP / progress ---- */
+export interface Progress {
+  xp: number; level: number; next_level_xp: number;
+  qualifying_debates: number; verified_speaking_seconds: number;
+  cashout_unlocked: boolean;
+}
+export async function getMyProgress(): Promise<Progress> {
+  const { data, error } = await supabase.rpc('get_my_progress');
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ?? { xp: 0, level: 1, next_level_xp: 300, qualifying_debates: 0, verified_speaking_seconds: 0, cashout_unlocked: false };
+}
