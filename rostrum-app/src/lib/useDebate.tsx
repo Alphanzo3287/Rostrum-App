@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   getDebate, setDebateStatus, setSegment, pauseTimer, resumeTimer,
-  finalizeDebate, subscribeDebate, setRemaining as apiSetRemaining,
+  finalizeDebate, cancelDebate, subscribeDebate, setRemaining as apiSetRemaining,
 } from './api';
 import { startRecording, startYouTube, stopEgress, applySegmentMics } from './livekit';
 import type { Debate, Segment, Side } from './types';
@@ -93,6 +93,10 @@ export function useDebate(debateId: string) {
     await finalizeDebate(debateId);
   }, [debateId]);
 
+  const cancelEvent = useCallback(async () => {
+    await cancelDebate(debateId);
+  }, [debateId]);
+
   return { debate, segments, seg, segIdx, remaining, running, phase, isHost,
-           goLive, nextSegment, toggleTimer, endDebate, goToSegment, setClock };
+           goLive, nextSegment, toggleTimer, endDebate, cancelEvent, goToSegment, setClock };
 }

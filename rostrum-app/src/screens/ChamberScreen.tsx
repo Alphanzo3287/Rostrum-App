@@ -160,6 +160,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         onNextSegment={() => dz.nextSegment(room.members)}
         onToggleTimer={dz.toggleTimer}
         onEnd={dz.endDebate}
+        onCancel={async () => { await dz.cancelEvent(); onLeave(); }}
         setTab={setTab}
         onLeave={onLeave}
       />

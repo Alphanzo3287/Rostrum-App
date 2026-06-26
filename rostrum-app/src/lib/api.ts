@@ -124,6 +124,10 @@ export async function startDebate(id: string) {
   const { error } = await supabase.rpc('start_debate', { p_debate: id });
   if (error) throw error;
 }
+export async function cancelDebate(id: string) {
+  const { error } = await supabase.rpc('cancel_debate', { p_debate: id });
+  if (error) throw error;
+}
 
 /* ------------------------------- RSVP ---------------------------- */
 export interface RsvpInfo { going: number; interested: number; mine: 'going' | 'interested' | null; }

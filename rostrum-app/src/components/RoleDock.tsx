@@ -27,6 +27,7 @@ interface Props {
   onNextSegment: () => void;
   onToggleTimer: () => void;
   onEnd: () => void;
+  onCancel: () => void;
   setTab: (t: string) => void;
   onLeave: () => void;
 }
@@ -36,9 +37,17 @@ export function RoleDock(p: Props) {
   if (p.phase === 'assembly') {
     return (
       <Dock>
-        {p.role === 'host'
-          ? <Btn primary label="Begin debate · go live" onClick={p.onGoLive} />
-          : <Note>Waiting for the host to begin — the hall is filling.</Note>}
+        {p.role === 'host' ? (
+          <>
+            <Btn primary label="Begin debate · go live" onClick={p.onGoLive} />
+            <Sep />
+            <Btn danger label="Cancel event" onClick={() => {
+              if (window.confirm('Cancel this event? This cannot be undone.')) p.onCancel();
+            }} />
+          </>
+        ) : (
+          <Note>Waiting for the host to begin — the hall is filling.</Note>
+        )}
       </Dock>
     );
   }

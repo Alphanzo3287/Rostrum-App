@@ -3,9 +3,9 @@
 // Batch 8: immersive full-screen debate viewer.
 // Optimized for watching — no nav, no dock clutter, focus on content.
 // Layouts: spotlight (featured speaker), slides (content-first), grid.
-// YouTube embed available if the host has simulcasted.
+// Back button always clickable regardless of chrome hide state.
 // =====================================================================
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { useRoom } from '../lib/useRoom';
@@ -26,19 +26,18 @@ export function WatchScreen({ debateId, onLeave }: { debateId: string; onLeave: 
   const [layout, setLayout]   = useState<Layout>('spotlight');
   const [uiVis, setUiVis]     = useState(true);
   const [debate, setDebate]   = useState<Debate | null>(null);
-  const [hideTimer, setHideTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { joinDebate(debateId).catch(() => {}); }, [debateId]);
-  useEffect(() => { getDebate(debateId).then(setDebate).catch(() => {}); }, [debateId]);
+  useEffect(() => { getDebate(debateId).then(d => setDebate(d.debate)).catch(() => {}); }, [debateId]);
   useEffect(() => { if (dz.phase === 'ended') nav(`/results/${debateId}`); }, [dz.phase, debateId, nav]);
 
-  // Auto-hide UI chrome after 4s of no mouse movement
+  // Auto-hide decorative chrome (NOT the back button) after 4s idle
   const showUI = useCallback(() => {
     setUiVis(true);
-    if (hideTimer) clearTimeout(hideTimer);
-    const t = setTimeout(() => setUiVis(false), 4000);
-    setHideTimer(t);
-  }, [hideTimer]);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setUiVis(false), 4000);
+  }, []);
 
   useEffect(() => {
     window.addEventListener('mousemove', showUI);
@@ -47,17 +46,16 @@ export function WatchScreen({ debateId, onLeave }: { debateId: string; onLeave: 
     return () => {
       window.removeEventListener('mousemove', showUI);
       window.removeEventListener('touchstart', showUI);
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showUI]);
 
-  const me = room.members.find(m => m.isLocal);
   const speakerSide = dz.seg?.side ?? null;
   const speaker = room.members.find(m => m.isSpeaking)
     ?? room.members.find(m => m.role === 'debater' && m.side === speakerSide)
     ?? room.members.find(m => m.role === 'host');
 
   const debaters = room.members.filter(m => m.role === 'debater');
-  const others   = room.members.filter(m => m.role !== 'debater' && !m.isLocal);
 
   const mm = String(Math.floor(dz.remaining / 60)).padStart(2, '0');
   const ss = String(dz.remaining % 60).padStart(2, '0');
@@ -65,20 +63,27 @@ export function WatchScreen({ debateId, onLeave }: { debateId: string; onLeave: 
   const onAir = dz.phase === 'live';
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'#0a0909', display:'flex', flexDirection:'column',
-      cursor: uiVis ? 'default' : 'none' }}>
+    <div style={{ position:'fixed', inset:0, background:'#0a0909', display:'flex', flexDirection:'column' }}
+      onMouseMove={showUI} onTouchStart={showUI}>
 
-      {/* ── Top chrome (fades on idle) ── */}
+      {/* ── Back button — ALWAYS visible and clickable ── */}
+      <button onClick={onLeave}
+        style={{ position:'absolute', top:14, left:16, zIndex:50,
+          background:'rgba(0,0,0,0.55)', border:`1px solid ${C.hair}`, color:C.ink,
+          cursor:'pointer', fontFamily:ui, fontSize:18, lineHeight:1,
+          padding:'7px 13px', borderRadius:6, backdropFilter:'blur(4px)' }}>
+        ‹ Exit
+      </button>
+
+      {/* ── Top chrome (fades on idle, but back button above is unaffected) ── */}
       <div style={{ position:'absolute', top:0, left:0, right:0, zIndex:20,
         background:'linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, transparent 100%)',
-        padding:'16px 20px', display:'flex', alignItems:'center', gap:14,
+        padding:'16px 20px 16px 90px', display:'flex', alignItems:'center', gap:14,
         opacity: uiVis ? 1 : 0, transition:'opacity 0.4s', pointerEvents: uiVis ? 'auto' : 'none' }}>
-        <button onClick={onLeave} style={{ background:'none', border:'none', color:C.dim, cursor:'pointer',
-          fontFamily:ui, fontSize:22, lineHeight:1, padding:0 }}>‹</button>
         <div style={{ flex:1 }}>
           {debate?.motion && (
             <div style={{ fontFamily:display, fontSize:15, fontWeight:600, color:C.ink,
-              whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:600 }}>
+              whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:500 }}>
               {debate.motion}
             </div>
           )}
@@ -111,7 +116,8 @@ export function WatchScreen({ debateId, onLeave }: { debateId: string; onLeave: 
         <div style={{ display:'flex', gap:4 }}>
           {(['spotlight','slides','grid'] as Layout[]).map(l => (
             <button key={l} onClick={() => setLayout(l)} style={{
-              padding:'5px 10px', borderRadius:4, border:'none', cursor:'pointer', fontFamily:ui, fontSize:10.5, fontWeight:600,
+              padding:'5px 10px', borderRadius:4, border:'none', cursor:'pointer',
+              fontFamily:ui, fontSize:10.5, fontWeight:600,
               background: layout===l ? C.gold : 'rgba(255,255,255,0.08)',
               color: layout===l ? C.base : C.dim }}>
               {l === 'spotlight' ? '◉' : l === 'slides' ? '▤' : '⊞'}
@@ -128,7 +134,6 @@ export function WatchScreen({ debateId, onLeave }: { debateId: string; onLeave: 
       {/* ── Main stage ── */}
       <div style={{ flex:1, display:'flex', overflow:'hidden', position:'relative' }}>
 
-        {/* Slides layout: deck fills 70%, speaker strip on right */}
         {layout === 'slides' && (
           <>
             <div style={{ flex:'0 0 70%', display:'flex', alignItems:'center', justifyContent:'center',
@@ -145,7 +150,6 @@ export function WatchScreen({ debateId, onLeave }: { debateId: string; onLeave: 
           </>
         )}
 
-        {/* Spotlight: featured speaker large, others strip at bottom */}
         {layout === 'spotlight' && (
           <div style={{ flex:1, display:'flex', flexDirection:'column' }}>
             <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center',
@@ -154,7 +158,6 @@ export function WatchScreen({ debateId, onLeave }: { debateId: string; onLeave: 
                 ? <VideoTile member={speaker} active style={{ width:'100%', height:'100%', objectFit:'cover' }} />
                 : <SlideStage debateId={debateId} />}
             </div>
-            {/* Secondary speakers strip */}
             {room.members.filter(m => m.identity !== speaker?.identity).length > 0 && (
               <div style={{ display:'flex', gap:6, padding:'8px 10px',
                 background:'rgba(0,0,0,0.5)', overflowX:'auto' }}>
@@ -168,7 +171,6 @@ export function WatchScreen({ debateId, onLeave }: { debateId: string; onLeave: 
           </div>
         )}
 
-        {/* Grid: equal tiles */}
         {layout === 'grid' && (
           <div style={{ flex:1, display:'grid', gap:6, padding:8,
             gridTemplateColumns: `repeat(${Math.min(room.members.length, 3)}, 1fr)`,
@@ -180,7 +182,7 @@ export function WatchScreen({ debateId, onLeave }: { debateId: string; onLeave: 
         )}
       </div>
 
-      {/* ── Bottom chrome (sides badge) ── */}
+      {/* ── Bottom: side pills — fades on idle ── */}
       <div style={{ position:'absolute', bottom:0, left:0, right:0, zIndex:20,
         background:'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%)',
         padding:'14px 20px', display:'flex', gap:14, alignItems:'flex-end',
@@ -193,18 +195,12 @@ export function WatchScreen({ debateId, onLeave }: { debateId: string; onLeave: 
           <SidePill side="opp" label="Opposition"
             names={debaters.filter(m => m.side==='opp').map(m => m.name)} />
         )}
-        <div style={{ marginLeft:'auto', pointerEvents:'auto' }}>
-          <button onClick={onLeave} style={{ background:'rgba(255,255,255,0.08)', border:'none', cursor:'pointer',
-            color:C.dim, fontFamily:ui, fontSize:12, padding:'7px 14px', borderRadius:6 }}>
-            Leave
-          </button>
-        </div>
       </div>
 
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; }
-          50%  { opacity: 0.3; }
+          50% { opacity: 0.3; }
         }
       `}</style>
     </div>
