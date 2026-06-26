@@ -26,10 +26,14 @@ export const handler: Handler = async (event) => {
     let accountId = existing?.stripe_account_id as string | undefined;
 
     if (!accountId) {
+      // Both card_payments + transfers are required together for Express accounts.
       const account = await stripe.accounts.create({
         type: 'express',
         email: user.email ?? undefined,
-        capabilities: { transfers: { requested: true } },  // destination charges → payouts
+        capabilities: {
+          card_payments: { requested: true },
+          transfers:     { requested: true },
+        },
         metadata: { user_id: user.id },
       });
       accountId = account.id;
@@ -43,13 +47,16 @@ export const handler: Handler = async (event) => {
     const link = await stripe.accountLinks.create({
       account: accountId,
       refresh_url: `${SITE}/earnings?onboarding=refresh`,
-      return_url: `${SITE}/earnings?onboarding=done`,
+      return_url:  `${SITE}/earnings?onboarding=done`,
       type: 'account_onboarding',
     });
 
     return json(200, { url: link.url });
   } catch (err: any) {
-    return json(500, { error: err?.message ?? 'stripe onboarding failed' });
+    // Surface the real Stripe error message so it shows in the UI.
+    const msg = err?.raw?.message ?? err?.message ?? 'stripe onboarding failed';
+    console.error('stripe-connect-onboard error:', msg, err?.raw ?? err);
+    return json(500, { error: msg });
   }
 };
 
