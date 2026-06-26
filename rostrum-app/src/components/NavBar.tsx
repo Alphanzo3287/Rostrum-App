@@ -12,7 +12,7 @@ import { Avatar } from './ui';
 import { NotificationsBell } from './NotificationsBell';
 
 const LINKS: [string, string][] = [
-  ['/', 'Lobby'], ['/leaderboard', 'Leaderboard'], ['/teams', 'Teams'], ['/store', 'Store'],
+  ['/', 'Lobby'], ['/leaderboard', 'Leaderboard'], ['/teams', 'Teams'], ['/store', 'Store'], ['/earnings', 'Earnings'],
 ];
 
 export function NavBar() {
