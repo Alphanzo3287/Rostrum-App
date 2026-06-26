@@ -26,6 +26,7 @@ import { LeaderboardScreen } from './screens/LeaderboardScreen';
 import { TeamsScreen } from './screens/TeamsScreen';
 import { StoreScreen } from './screens/StoreScreen';
 import { EarningsScreen } from './screens/EarningsScreen';
+import { WatchScreen } from './screens/WatchScreen';
 import { getDebate } from './lib/api';
 import type { DebateRole, Side } from './lib/types';
 import { C, ui } from './lib/theme';
@@ -68,6 +69,7 @@ function Gate() {
       {/* full-bleed routes */}
       <Route path="host" element={<CreateRoute />} />
       <Route path="debate/:id/join" element={<InviteRoute />} />
+      <Route path="debate/:id/watch" element={<WatchRoute />} />
       <Route path="debate/:id" element={<ChamberRoute />} />
       <Route path="debate/:id/results" element={<ResultsRoute />} />
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -148,6 +150,12 @@ function ChamberRoute() {
     return <ScheduledScreen debateId={id} onBack={() => nav('/')} onStarted={() => setPhase('open')} />;
   return <ChamberScreen debateId={id} onLeave={() => nav('/')}
     onEnded={() => nav(`/debate/${id}/results`, { replace: true })} />;
+}
+function WatchRoute() {
+  const { id } = useParams();
+  const nav = useNavigate();
+  if (!id) return <Navigate to="/" replace />;
+  return <WatchScreen debateId={id} onLeave={() => nav('/')} />;
 }
 function InviteRoute() {
   const { id } = useParams();

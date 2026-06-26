@@ -3,11 +3,12 @@
 // The bottom control dock, wired. Controls differ by role; the host's
 // buttons call the real room actions, the debater's mic respects the
 // server-granted permission, and "Share slides" uploads the deck.
+// Batch 8: host now has YouTube stream start/stop controls.
 // =====================================================================
 import { useRef, useState } from 'react';
 import { uploadDeck } from '../lib/api';
 import { rasterizeToImages } from '../lib/deck';
-import { muteAudience } from '../lib/livekit';
+import { muteAudience, startYouTube, stopEgress } from '../lib/livekit';
 import { C, ui } from '../lib/theme';
 
 type Role = 'host' | 'moderator' | 'debater' | 'judge' | 'audience';
@@ -54,6 +55,8 @@ export function RoleDock(p: Props) {
         <Btn label="Next segment" onClick={p.onNextSegment} />
         <Btn label="Mute all" onClick={() => muteAudience(p.debateId)} />
         <Sep />
+        <StreamBtn debateId={p.debateId} />
+        <Sep />
         <Btn danger label="End event" onClick={p.onEnd} />
       </Dock>
     );
@@ -94,10 +97,43 @@ export function RoleDock(p: Props) {
       <Btn disabled label="Mic off" />
       <Btn label="Vote" accent={C.gold} onClick={() => p.setTab('vote')} />
       <Btn label="Ask" onClick={() => p.setTab('qa')} />
+      <Btn label="Gift" accent={C.gold} onClick={() => p.setTab('gift')} />
       <Sep />
       <Note>Audience is muted by house rule — questions go to the host during Q&A.</Note>
       <button onClick={p.onLeave} style={{ ...btnBase, marginLeft:'auto', color:C.garnetHi }}>Leave</button>
     </Dock>
+  );
+}
+
+/* ---- YouTube stream start/stop ---- */
+function StreamBtn({ debateId }: { debateId: string }) {
+  const [egressId, setEgressId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const streaming = !!egressId;
+
+  async function toggle() {
+    setBusy(true);
+    try {
+      if (!streaming) {
+        const res = await startYouTube(debateId);
+        if (res.egressId) setEgressId(res.egressId);
+      } else {
+        await stopEgress(debateId, egressId!);
+        setEgressId(null);
+      }
+    } catch (e: any) {
+      alert(e?.message ?? 'Stream action failed');
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <Btn
+      label={busy ? '…' : streaming ? '⏹ Stop stream' : '▶ YouTube'}
+      accent={C.garnet}
+      active={streaming}
+      onClick={toggle}
+      disabled={busy}
+    />
   );
 }
 
@@ -109,7 +145,6 @@ function ShareSlides({ debateId, disabled }: { debateId: string; disabled: boole
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
     setBusy(true);
-    // PDFs are rasterized to images in the browser before upload.
     try { await uploadDeck(debateId, await rasterizeToImages(files)); }
     catch (err: any) { alert(err?.message ?? 'Upload failed'); }
     finally { setBusy(false); }

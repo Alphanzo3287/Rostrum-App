@@ -71,6 +71,12 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
             title={dz.debate?.motion ?? 'A debate on The Rostrum'}
             text={dz.debate?.motion ? `Watch: ${dz.debate.motion}` : 'Watch this debate on The Rostrum'} />
           <span>{Math.max(dz.debate?.viewer_count ?? 0, room.members.length).toLocaleString()} watching</span>
+          <button onClick={() => nav(`/debate/${debateId}/watch`)} title="Immersive view"
+            style={{ padding:'4px 10px', borderRadius:4, border:`1px solid ${C.hair}`,
+              color:C.dim, fontSize:12, fontFamily:ui, fontWeight:600,
+              background:'transparent', cursor:'pointer' }}>
+            ⛶ Immersive
+          </button>
           <button onClick={() => role==='host' && setTab('ros')}
             title={role==='host' ? 'Edit time in Run of show' : undefined}
             style={{ padding:'4px 10px', borderRadius:4, border:`1px solid ${low ? C.ember : C.hair}`,
