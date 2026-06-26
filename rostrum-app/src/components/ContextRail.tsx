@@ -15,6 +15,7 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/auth';
 import { Avatar } from './ui';
 import { ShareButton } from './ShareSheet';
+import { getMyWallet, getGiftTiers, getDebateParticipants, sendGift, type Wallet, type GiftTier, type DebateParticipant } from '../lib/payments';
 
 type Role = 'host' | 'moderator' | 'debater' | 'judge' | 'audience';
 
@@ -27,9 +28,9 @@ export type RosData = {
 export function ContextRail({ debateId, role, tab, setTab, ros }: {
   debateId: string; role: Role; tab: string; setTab: (t: string) => void; ros?: RosData;
 }) {
-  const tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll']]
-            : role === 'judge'  ? [['score','Score'],['chat','Chat'],['qa','Q&A'],['poll','Poll']]
-            :                     [['vote','Vote'],['chat','Chat'],['qa','Ask'],['poll','Poll']];
+  const tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['gift','Gift']]
+            : role === 'judge'  ? [['score','Score'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['gift','Gift']]
+            :                     [['vote','Vote'],['chat','Chat'],['qa','Ask'],['poll','Poll'],['gift','Gift']];
   return (
     <aside style={{ borderLeft:`1px solid ${C.hair}`, background:'rgba(20,18,22,0.92)', display:'flex', flexDirection:'column', minHeight:0 }}>
       <div style={{ display:'flex', padding:8, gap:5, borderBottom:`1px solid ${C.hair}` }}>
@@ -46,6 +47,7 @@ export function ContextRail({ debateId, role, tab, setTab, ros }: {
         {(tab==='vote'||tab==='poll') && <PollPanel debateId={debateId} canVote={role==='audience'} />}
         {tab==='qa' && <QAPanel debateId={debateId} canModerate={role==='host'||role==='moderator'} />}
         {tab==='score' && <ScorePanel debateId={debateId} />}
+        {tab==='gift' && <GiftPanel debateId={debateId} />}
       </div>
     </aside>
   );
@@ -382,6 +384,90 @@ function ScorePanel({ debateId }: { debateId: string }) {
         <span style={{ fontFamily:mono, color:C.garnetHi }}>Opp {tot('opp')}</span>
       </div>
       <button onClick={submit} style={{ ...solidGold, width:'100%' }}>{done ? 'Ballot submitted ✓' : 'Submit ballot'}</button>
+    </>
+  );
+}
+
+/* ---- Gift panel: tiered gifts, pick a recipient, send ---- */
+function GiftPanel({ debateId }: { debateId: string }) {
+  const { user } = useAuth();
+  const [wallet, setWallet]   = useState<Wallet | null>(null);
+  const [tiers, setTiers]     = useState<GiftTier[]>([]);
+  const [people, setPeople]   = useState<DebateParticipant[]>([]);
+  const [picked, setPicked]   = useState<string | null>(null);
+  const [busy, setBusy]       = useState(false);
+  const [sent, setSent]       = useState<string | null>(null);
+
+  useEffect(() => {
+    getMyWallet().then(setWallet);
+    getGiftTiers().then(setTiers);
+    getDebateParticipants(debateId).then(p => {
+      const others = p.filter(x => x.user_id !== user?.id);
+      setPeople(others);
+      if (others.length === 1) setPicked(others[0].user_id);
+    });
+  }, [debateId, user?.id]);
+
+  async function send(tier: GiftTier) {
+    if (!picked) return alert('Pick a recipient first');
+    setBusy(true); setSent(null);
+    try {
+      await sendGift(tier.id, picked, debateId);
+      setWallet(await getMyWallet());
+      const name = people.find(p => p.user_id === picked)?.display_name ?? 'them';
+      setSent(`${tier.icon} ${tier.name} sent to ${name}!`);
+    } catch (e: any) { alert(e?.message ?? 'Could not send gift'); }
+    finally { setBusy(false); }
+  }
+
+  const total = wallet?.total ?? 0;
+
+  return (
+    <>
+      <h3 style={{ fontFamily:display, fontSize:19, color:C.ink, margin:'0 0 6px' }}>Send a gift</h3>
+      <div style={{ fontFamily:mono, fontSize:13, color:C.gold, marginBottom:12 }}>
+        {total.toLocaleString()} D-Bucks
+      </div>
+
+      {/* Recipient picker */}
+      {people.length === 0
+        ? <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>No one else in the debate yet.</p>
+        : <div style={{ marginBottom:12 }}>
+            <div style={{ fontFamily:ui, fontSize:11, color:C.faint, textTransform:'uppercase', letterSpacing:'.4px', marginBottom:6 }}>To</div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+              {people.map(p => (
+                <button key={p.user_id} onClick={() => setPicked(p.user_id)}
+                  style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 10px', borderRadius:999,
+                    border: `1px solid ${picked === p.user_id ? C.gold : C.hair}`,
+                    background: picked === p.user_id ? C.gold + '18' : 'transparent',
+                    color: picked === p.user_id ? C.ink : C.dim,
+                    fontFamily:ui, fontSize:12, fontWeight:500, cursor:'pointer' }}>
+                  {p.avatar_url && <Avatar src={p.avatar_url} size={18} />}
+                  {p.display_name}
+                </button>
+              ))}
+            </div>
+          </div>
+      }
+
+      {/* Gift tiers */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+        {tiers.map(t => {
+          const canAfford = total >= t.price_dbucks;
+          return (
+            <button key={t.id} onClick={() => send(t)} disabled={busy || !canAfford || !picked}
+              style={{ padding:'10px 8px', borderRadius:10, border:`1px solid ${C.hair}`,
+                background: canAfford && picked ? C.panel : `${C.panel}88`,
+                cursor: canAfford && picked ? 'pointer' : 'default', textAlign:'center' }}>
+              <div style={{ fontSize:24 }}>{t.icon}</div>
+              <div style={{ fontFamily:ui, fontSize:11, fontWeight:600, color: canAfford ? C.ink : C.faint, marginTop:4 }}>{t.name}</div>
+              <div style={{ fontFamily:mono, fontSize:10, color: canAfford ? C.gold : C.faint, marginTop:2 }}>{t.price_dbucks.toLocaleString()}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      {sent && <div style={{ fontFamily:ui, fontSize:13, color:C.jadeHi, marginTop:10, textAlign:'center' }}>{sent}</div>}
     </>
   );
 }
