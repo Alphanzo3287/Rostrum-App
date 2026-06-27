@@ -10,7 +10,7 @@ import { supabaseAdmin, userFromToken } from '../../src/server/supabaseAdmin';
 
 const CLIENT_ID     = process.env.GOOGLE_CLIENT_ID!;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
-const SITE          = process.env.URL || 'https://the-rostrum-app.netlify.app';
+const SITE          = process.env.URL || 'https://rostrums.site';
 const REDIRECT_URI  = `${SITE}/.netlify/functions/youtube-auth`;
 const SCOPES        = [
   'https://www.googleapis.com/auth/youtube.force-ssl',

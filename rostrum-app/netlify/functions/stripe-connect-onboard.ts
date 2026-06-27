@@ -10,7 +10,7 @@ import Stripe from 'stripe';
 import { supabaseAdmin, userFromToken } from '../../src/server/supabaseAdmin';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-const SITE = process.env.URL || 'https://the-rostrum-app.netlify.app';
+const SITE = process.env.URL || 'https://rostrums.site';
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'method not allowed' });

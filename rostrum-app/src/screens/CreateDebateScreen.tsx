@@ -213,17 +213,23 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
               <div style={{ display:'flex', alignItems:'center', gap:14, padding:'15px 0', borderBottom:`1px solid ${C.hair}` }}>
                 <div style={{ flex:1 }}>
                   <div style={{ fontFamily:ui, fontSize:14, color:C.ink, fontWeight:600 }}>
-                    Stream to YouTube
+                    Stream to YouTube <span style={{ fontFamily:ui, fontSize:11, fontWeight:400, color:C.faint }}>(optional)</span>
                   </div>
                   <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginTop:2 }}>
                     {ytConn?.connected
                       ? `Connected as ${ytConn.channel_title ?? 'your channel'} — broadcast created automatically`
-                      : 'Connect your YouTube account in Settings to enable'}
+                      : 'Skip this or connect your YouTube account to stream automatically.'}
                   </div>
                 </div>
                 {ytConn?.connected
                   ? <Chip on={ytEnabled} onClick={() => setYtEnabled(e => !e)}>{ytEnabled ? 'On' : 'Off'}</Chip>
-                  : <span style={{ fontFamily:ui, fontSize:11, color:C.faint }}>Not connected</span>}
+                  : (
+                    <a href="/settings" style={{ fontFamily:ui, fontSize:11, fontWeight:600,
+                      color:C.gold, textDecoration:'none', whiteSpace:'nowrap',
+                      padding:'5px 10px', border:`1px solid ${C.gold}44`, borderRadius:6 }}>
+                      Connect account
+                    </a>
+                  )}
               </div>
               {ytEnabled && ytConn?.connected && (
                 <div style={{ paddingTop:14, display:'flex', flexDirection:'column', gap:10 }}>
