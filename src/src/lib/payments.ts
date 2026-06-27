@@ -18,14 +18,56 @@ async function authedPost<T = any>(fn: string, body: unknown = {}): Promise<T> {
   return res.json();
 }
 
+/* ---- Types ---- */
+export interface Wallet { promo: number; redeemable: number; total: number; }
 export interface Earnings { gross_cents: number; fee_cents: number; net_cents: number; currency: string; }
 export interface CreatorAccount {
   connected: boolean; charges_enabled: boolean; payouts_enabled: boolean; details_submitted: boolean;
 }
 export interface PlatformConfig { platform_fee_bps: number; currency: string; min_charge_cents: number; }
-export interface GiftTier { id: string; name: string; icon: string; amount_cents: number; sort: number; }
+export interface GiftTier { id: string; name: string; icon: string; amount_cents: number; price_dbucks: number; sort: number; }
 
-/** Caller's lifetime creator earnings, computed from the ledger server-side. */
+/* ---- D-Bucks wallet ---- */
+export async function getMyWallet(): Promise<Wallet> {
+  const { data, error } = await supabase.rpc('get_my_wallet');
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ?? { promo: 0, redeemable: 0, total: 0 };
+}
+
+/* ---- Gift tiers ---- */
+export async function getGiftTiers(): Promise<GiftTier[]> {
+  const { data } = await supabase
+    .from('gift_tiers').select('id,name,icon,amount_cents,price_dbucks,sort').eq('active', true).order('sort');
+  return (data ?? []) as GiftTier[];
+}
+
+/* ---- Send a gift ---- */
+export async function sendGift(tierId: string, toUserId: string, debateId?: string) {
+  const { error } = await supabase.rpc('send_gift', {
+    p_tier: tierId,
+    p_to: toUserId,
+    ...(debateId ? { p_debate: debateId } : {}),
+  });
+  if (error) throw error;
+}
+
+/* ---- Debate participants (for gift target picker) ---- */
+export interface DebateParticipant { user_id: string; display_name: string; avatar_url: string | null; role: string; }
+export async function getDebateParticipants(debateId: string): Promise<DebateParticipant[]> {
+  const { data } = await supabase
+    .from('debate_participants')
+    .select('user_id, role, profiles!inner(display_name, avatar_url)')
+    .eq('debate_id', debateId);
+  return (data ?? []).map((r: any) => ({
+    user_id: r.user_id,
+    display_name: r.profiles?.display_name ?? 'User',
+    avatar_url: r.profiles?.avatar_url ?? null,
+    role: r.role,
+  }));
+}
+
+/* ---- Stripe earnings / payout ---- */
 export async function getMyEarnings(): Promise<Earnings> {
   const { data, error } = await supabase.rpc('my_earnings');
   if (error) throw error;
@@ -33,14 +75,12 @@ export async function getMyEarnings(): Promise<Earnings> {
   return row ?? { gross_cents: 0, fee_cents: 0, net_cents: 0, currency: 'usd' };
 }
 
-/** Platform fee config (not secret — used to show "platform keeps X%"). */
 export async function getPlatformConfig(): Promise<PlatformConfig> {
   const { data } = await supabase
     .from('platform_config').select('platform_fee_bps,currency,min_charge_cents').limit(1).maybeSingle();
   return data ?? { platform_fee_bps: 1500, currency: 'usd', min_charge_cents: 100 };
 }
 
-/** Locally-stored payout-account flags (may lag Stripe; refresh syncs them). */
 export async function getCreatorAccount(): Promise<CreatorAccount> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { connected: false, charges_enabled: false, payouts_enabled: false, details_submitted: false };
@@ -57,15 +97,18 @@ export async function getCreatorAccount(): Promise<CreatorAccount> {
   };
 }
 
-/** Server-defined gift/tip catalog. */
-export async function getGiftTiers(): Promise<GiftTier[]> {
-  const { data } = await supabase
-    .from('gift_tiers').select('id,name,icon,amount_cents,sort').eq('active', true).order('sort');
-  return (data ?? []) as GiftTier[];
-}
-
-/** Begin / resume Stripe Connect onboarding → returns a hosted URL to redirect to. */
 export const startPayoutOnboarding = () => authedPost<{ url: string }>('stripe-connect-onboard');
-
-/** Pull live payout-account status from Stripe and sync it locally. */
 export const refreshPayoutStatus = () => authedPost<CreatorAccount>('stripe-account-status');
+
+/* ---- Level / XP / progress ---- */
+export interface Progress {
+  xp: number; level: number; next_level_xp: number;
+  qualifying_debates: number; verified_speaking_seconds: number;
+  cashout_unlocked: boolean;
+}
+export async function getMyProgress(): Promise<Progress> {
+  const { data, error } = await supabase.rpc('get_my_progress');
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ?? { xp: 0, level: 1, next_level_xp: 300, qualifying_debates: 0, verified_speaking_seconds: 0, cashout_unlocked: false };
+}

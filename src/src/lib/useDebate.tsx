@@ -7,9 +7,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   getDebate, setDebateStatus, setSegment, pauseTimer, resumeTimer,
-  finalizeDebate, subscribeDebate, setRemaining as apiSetRemaining,
+  finalizeDebate, cancelDebate, subscribeDebate, setRemaining as apiSetRemaining,
 } from './api';
-import { startRecording, startYouTube, stopEgress, applySegmentMics } from './livekit';
+import { startRecording, stopEgress, applySegmentMics } from './livekit';
+import { endYouTubeBroadcast } from './youtube';
 import type { Debate, Segment, Side } from './types';
 
 export type Phase = 'assembly' | 'live' | 'ended';
@@ -60,7 +61,8 @@ export function useDebate(debateId: string) {
     await setSegment(debateId, 0);
     await applySegmentMics(debateId, debaters(members), segments[0]?.side ?? null);
     try { egress.current.rec = (await startRecording(debateId)).egressId; } catch { /* recording optional */ }
-    try { const y = await startYouTube(debateId); if (y?.egressId) egress.current.yt = y.egressId; } catch { /* simulcast optional */ }
+    // YouTube streaming is controlled manually via the dock's stream button
+    // (so the host can start it during assembly, before the debate begins).
   }, [debateId, segments]);
 
   // host: advance the run of show + flip mics to the new speaking side
@@ -90,9 +92,14 @@ export function useDebate(debateId: string) {
   const endDebate = useCallback(async () => {
     if (egress.current.rec) { try { await stopEgress(debateId, egress.current.rec); } catch {} }
     if (egress.current.yt)  { try { await stopEgress(debateId, egress.current.yt); } catch {} }
+    try { await endYouTubeBroadcast(debateId); } catch { /* optional */ }
     await finalizeDebate(debateId);
   }, [debateId]);
 
+  const cancelEvent = useCallback(async () => {
+    await cancelDebate(debateId);
+  }, [debateId]);
+
   return { debate, segments, seg, segIdx, remaining, running, phase, isHost,
-           goLive, nextSegment, toggleTimer, endDebate, goToSegment, setClock };
+           goLive, nextSegment, toggleTimer, endDebate, cancelEvent, goToSegment, setClock };
 }

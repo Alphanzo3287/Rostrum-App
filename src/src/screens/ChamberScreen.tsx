@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { useRoom } from '../lib/useRoom';
 import { useDebate } from '../lib/useDebate';
+import { useYouTubeStream } from '../lib/useYouTubeStream';
 import { joinDebate } from '../lib/api';
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
@@ -32,6 +33,10 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   const openProfile = (handle?: string | null) => { if (handle) nav(`/u/${handle}`); };
   const [layout, setLayout] = useState<Layout>('slides');
   const [tab, setTab] = useState('vote');
+
+  // YouTube simulcast state, lifted here so it survives the dock remount
+  // when the debate moves from assembly → live.
+  const yt = useYouTubeStream(debateId, true);
 
   // make sure a participant row exists (token also upserts audience as a fallback)
   useEffect(() => { joinDebate(debateId).catch(() => {}); }, [debateId]);
@@ -71,6 +76,12 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
             title={dz.debate?.motion ?? 'A debate on The Rostrum'}
             text={dz.debate?.motion ? `Watch: ${dz.debate.motion}` : 'Watch this debate on The Rostrum'} />
           <span>{Math.max(dz.debate?.viewer_count ?? 0, room.members.length).toLocaleString()} watching</span>
+          <button onClick={() => nav(`/debate/${debateId}/watch`)} title="Immersive view"
+            style={{ padding:'4px 10px', borderRadius:4, border:`1px solid ${C.hair}`,
+              color:C.dim, fontSize:12, fontFamily:ui, fontWeight:600,
+              background:'transparent', cursor:'pointer' }}>
+            ⛶ Immersive
+          </button>
           <button onClick={() => role==='host' && setTab('ros')}
             title={role==='host' ? 'Edit time in Run of show' : undefined}
             style={{ padding:'4px 10px', borderRadius:4, border:`1px solid ${low ? C.ember : C.hair}`,
@@ -154,6 +165,11 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         onNextSegment={() => dz.nextSegment(room.members)}
         onToggleTimer={dz.toggleTimer}
         onEnd={dz.endDebate}
+        onCancel={async () => { await dz.cancelEvent(); onLeave(); }}
+        streamPhase={yt.phase}
+        streamError={yt.error}
+        onStreamStart={yt.start}
+        onStreamStop={yt.stop}
         setTab={setTab}
         onLeave={onLeave}
       />

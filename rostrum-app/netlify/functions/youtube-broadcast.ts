@@ -68,7 +68,7 @@ export const handler: Handler = async (event) => {
             scheduledStartTime,
           },
           status:         { privacyStatus, selfDeclaredMadeForKids: false },
-          contentDetails: { enableAutoStart: false, enableAutoStop: true, latencyPreference: 'low' },
+          contentDetails: { enableAutoStart: true, enableAutoStop: true, latencyPreference: 'low' },
         }),
       });
       if (!broadcast.id) return json(500, { error: broadcast.error?.message ?? 'broadcast create failed' });
@@ -127,10 +127,23 @@ export const handler: Handler = async (event) => {
       const { data: bc } = await supabaseAdmin
         .from('youtube_broadcasts').select('broadcast_id').eq('debate_id', debateId).maybeSingle();
       if (!bc) return json(404, { error: 'no broadcast for this debate' });
-      await yt(`/liveBroadcasts/transition?broadcastStatus=live&id=${bc.broadcast_id}&part=status`, { method: 'POST', body: '{}' });
+
+      const result = await yt(
+        `/liveBroadcasts/transition?broadcastStatus=live&id=${bc.broadcast_id}&part=status`,
+        { method: 'POST', body: '{}' }
+      );
+      // YouTube returns an error object if the stream isn't ready (no data
+      // arriving yet) or the broadcast is in the wrong state. Surface it so
+      // the client can retry rather than falsely showing "live".
+      if (result.error) {
+        const reason = result.error?.errors?.[0]?.reason ?? result.error?.message ?? 'transition_failed';
+        console.error('go_live transition rejected:', JSON.stringify(result.error));
+        return json(409, { error: `YouTube rejected go-live: ${reason}`, reason });
+      }
+      const lifeStatus = result.status?.lifeCycleStatus;
       await supabaseAdmin.from('youtube_broadcasts')
         .update({ status: 'live', updated_at: new Date().toISOString() }).eq('debate_id', debateId);
-      return json(200, { status: 'live' });
+      return json(200, { status: 'live', lifeCycleStatus: lifeStatus });
     }
 
     // ── end ──────────────────────────────────────────────────────────

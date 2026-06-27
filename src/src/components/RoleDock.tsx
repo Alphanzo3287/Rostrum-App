@@ -3,11 +3,13 @@
 // The bottom control dock, wired. Controls differ by role; the host's
 // buttons call the real room actions, the debater's mic respects the
 // server-granted permission, and "Share slides" uploads the deck.
+// Batch 8: host now has YouTube stream start/stop controls.
 // =====================================================================
 import { useRef, useState } from 'react';
 import { uploadDeck } from '../lib/api';
 import { rasterizeToImages } from '../lib/deck';
 import { muteAudience } from '../lib/livekit';
+import type { StreamPhase } from '../lib/useYouTubeStream';
 import { C, ui } from '../lib/theme';
 
 type Role = 'host' | 'moderator' | 'debater' | 'judge' | 'audience';
@@ -26,6 +28,11 @@ interface Props {
   onNextSegment: () => void;
   onToggleTimer: () => void;
   onEnd: () => void;
+  onCancel: () => void;
+  streamPhase: StreamPhase;
+  streamError: string | null;
+  onStreamStart: () => void;
+  onStreamStop: () => void;
   setTab: (t: string) => void;
   onLeave: () => void;
 }
@@ -35,9 +42,19 @@ export function RoleDock(p: Props) {
   if (p.phase === 'assembly') {
     return (
       <Dock>
-        {p.role === 'host'
-          ? <Btn primary label="Begin debate · go live" onClick={p.onGoLive} />
-          : <Note>Waiting for the host to begin — the hall is filling.</Note>}
+        {p.role === 'host' ? (
+          <>
+            <Btn primary label="Begin debate" onClick={p.onGoLive} />
+            <Sep />
+            <StreamBtn phase={p.streamPhase} error={p.streamError} onStart={p.onStreamStart} onStop={p.onStreamStop} />
+            <Sep />
+            <Btn danger label="Cancel event" onClick={() => {
+              if (window.confirm('Cancel this event? This cannot be undone.')) p.onCancel();
+            }} />
+          </>
+        ) : (
+          <Note>Waiting for the host to begin — the hall is filling.</Note>
+        )}
       </Dock>
     );
   }
@@ -53,6 +70,8 @@ export function RoleDock(p: Props) {
         <Btn label={p.running ? 'Pause clock' : 'Start clock'} onClick={p.onToggleTimer} />
         <Btn label="Next segment" onClick={p.onNextSegment} />
         <Btn label="Mute all" onClick={() => muteAudience(p.debateId)} />
+        <Sep />
+        <StreamBtn phase={p.streamPhase} error={p.streamError} onStart={p.onStreamStart} onStop={p.onStreamStop} />
         <Sep />
         <Btn danger label="End event" onClick={p.onEnd} />
       </Dock>
@@ -94,10 +113,42 @@ export function RoleDock(p: Props) {
       <Btn disabled label="Mic off" />
       <Btn label="Vote" accent={C.gold} onClick={() => p.setTab('vote')} />
       <Btn label="Ask" onClick={() => p.setTab('qa')} />
+      <Btn label="Gift" accent={C.gold} onClick={() => p.setTab('gift')} />
       <Sep />
       <Note>Audience is muted by house rule — questions go to the host during Q&A.</Note>
       <button onClick={p.onLeave} style={{ ...btnBase, marginLeft:'auto', color:C.garnetHi }}>Leave</button>
     </Dock>
+  );
+}
+
+/* ---- YouTube stream start/stop ----
+   Stateless: all state lives in useYouTubeStream (in ChamberScreen) so it
+   survives the assembly→live dock remount. This just renders + dispatches. */
+function StreamBtn({ phase, error, onStart, onStop }: {
+  phase: StreamPhase; error: string | null; onStart: () => void; onStop: () => void;
+}) {
+  const label =
+    phase === 'connecting' ? 'Connecting…' :
+    phase === 'live'       ? '⏹ Stop stream' :
+    phase === 'error'      ? '⚠ Retry stream' :
+    '▶ YouTube';
+
+  const onClick = () => {
+    if (phase === 'live') onStop();
+    else if (phase !== 'connecting') {
+      if (error) alert(error);   // show why the last attempt failed, then retry
+      onStart();
+    }
+  };
+
+  return (
+    <Btn
+      label={label}
+      accent={phase === 'error' ? C.ember : C.garnet}
+      active={phase === 'live'}
+      onClick={onClick}
+      disabled={phase === 'connecting'}
+    />
   );
 }
 
@@ -109,7 +160,6 @@ function ShareSlides({ debateId, disabled }: { debateId: string; disabled: boole
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
     setBusy(true);
-    // PDFs are rasterized to images in the browser before upload.
     try { await uploadDeck(debateId, await rasterizeToImages(files)); }
     catch (err: any) { alert(err?.message ?? 'Upload failed'); }
     finally { setBusy(false); }

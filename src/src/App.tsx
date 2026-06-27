@@ -26,6 +26,8 @@ import { LeaderboardScreen } from './screens/LeaderboardScreen';
 import { TeamsScreen } from './screens/TeamsScreen';
 import { StoreScreen } from './screens/StoreScreen';
 import { EarningsScreen } from './screens/EarningsScreen';
+import { SettingsScreen } from './screens/SettingsScreen';
+import { WatchScreen } from './screens/WatchScreen';
 import { getDebate } from './lib/api';
 import type { DebateRole, Side } from './lib/types';
 import { C, ui } from './lib/theme';
@@ -60,6 +62,7 @@ function Gate() {
         <Route path="teams" element={<TeamsRoute />} />
         <Route path="store" element={<StoreRoute />} />
         <Route path="earnings" element={<EarningsRoute />} />
+        <Route path="settings" element={<SettingsRoute />} />
         <Route path="me" element={<ProfileRoute />} />
         <Route path="u/:handle" element={<ProfileRoute />} />
         <Route path="messages" element={<InboxRoute />} />
@@ -68,6 +71,7 @@ function Gate() {
       {/* full-bleed routes */}
       <Route path="host" element={<CreateRoute />} />
       <Route path="debate/:id/join" element={<InviteRoute />} />
+      <Route path="debate/:id/watch" element={<WatchRoute />} />
       <Route path="debate/:id" element={<ChamberRoute />} />
       <Route path="debate/:id/results" element={<ResultsRoute />} />
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -107,6 +111,10 @@ function StoreRoute() {
 function EarningsRoute() {
   const nav = useNavigate();
   return <EarningsScreen onBack={() => nav('/')} />;
+}
+function SettingsRoute() {
+  const nav = useNavigate();
+  return <SettingsScreen onBack={() => nav('/')} />;
 }
 function ProfileRoute() {
   const { handle } = useParams();
@@ -148,6 +156,12 @@ function ChamberRoute() {
     return <ScheduledScreen debateId={id} onBack={() => nav('/')} onStarted={() => setPhase('open')} />;
   return <ChamberScreen debateId={id} onLeave={() => nav('/')}
     onEnded={() => nav(`/debate/${id}/results`, { replace: true })} />;
+}
+function WatchRoute() {
+  const { id } = useParams();
+  const nav = useNavigate();
+  if (!id) return <Navigate to="/" replace />;
+  return <WatchScreen debateId={id} onLeave={() => nav('/')} />;
 }
 function InviteRoute() {
   const { id } = useParams();

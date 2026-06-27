@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { useRoom } from '../lib/useRoom';
 import { useDebate } from '../lib/useDebate';
+import { useYouTubeStream } from '../lib/useYouTubeStream';
 import { joinDebate } from '../lib/api';
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
@@ -32,6 +33,10 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   const openProfile = (handle?: string | null) => { if (handle) nav(`/u/${handle}`); };
   const [layout, setLayout] = useState<Layout>('slides');
   const [tab, setTab] = useState('vote');
+
+  // YouTube simulcast state, lifted here so it survives the dock remount
+  // when the debate moves from assembly → live.
+  const yt = useYouTubeStream(debateId, true);
 
   // make sure a participant row exists (token also upserts audience as a fallback)
   useEffect(() => { joinDebate(debateId).catch(() => {}); }, [debateId]);
@@ -161,6 +166,10 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         onToggleTimer={dz.toggleTimer}
         onEnd={dz.endDebate}
         onCancel={async () => { await dz.cancelEvent(); onLeave(); }}
+        streamPhase={yt.phase}
+        streamError={yt.error}
+        onStreamStart={yt.start}
+        onStreamStop={yt.stop}
         setTab={setTab}
         onLeave={onLeave}
       />

@@ -7,12 +7,14 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { unreadTotal, subscribeInbox } from '../screens/MessagesScreen';
-import { C, ui, display, solidGold } from '../lib/theme';
+import { C, ui, display, mono, solidGold } from '../lib/theme';
 import { Avatar } from './ui';
 import { NotificationsBell } from './NotificationsBell';
+import { getMyWallet } from '../lib/payments';
 
 const LINKS: [string, string][] = [
-  ['/', 'Lobby'], ['/leaderboard', 'Leaderboard'], ['/teams', 'Teams'], ['/store', 'Store'], ['/earnings', 'Earnings'],
+  ['/', 'Lobby'], ['/leaderboard', 'Leaderboard'], ['/teams', 'Teams'],
+  ['/store', 'Store'], ['/earnings', 'Earnings'], ['/settings', 'Settings'],
 ];
 
 export function NavBar() {
@@ -30,6 +32,9 @@ export function NavBar() {
     window.addEventListener('rostrum:unread', load);   // a thread was read → re-count
     return () => { on = false; off(); window.removeEventListener('rostrum:unread', load); };
   }, []);
+
+  const [dbucks, setDbucks] = useState<number | null>(null);
+  useEffect(() => { getMyWallet().then(w => setDbucks(w.total)).catch(() => {}); }, []);
 
   return (
     <header style={{ position:'relative', zIndex:100, display:'flex', alignItems:'center', gap:22, padding:'12px 20px',
@@ -53,6 +58,14 @@ export function NavBar() {
         </Link>
       </nav>
       <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:14 }}>
+        {dbucks !== null && (
+          <button onClick={() => nav('/store')} title="Your D-Bucks" style={{ display:'flex', alignItems:'center',
+            gap:6, padding:'5px 11px', borderRadius:999, border:`1px solid ${C.gold}44`,
+            background:'rgba(217,180,92,0.08)', cursor:'pointer' }}>
+            <span style={{ fontFamily:ui, fontSize:10, color:C.faint, textTransform:'uppercase' }}>D-Bucks</span>
+            <span style={{ fontFamily:mono, fontSize:13, fontWeight:700, color:C.gold }}>{dbucks.toLocaleString()}</span>
+          </button>
+        )}
         <NotificationsBell />
         <button onClick={() => window.dispatchEvent(new Event('rostrum:tour'))} title="Take the tour"
           style={{ width:30, height:30, borderRadius:'50%', border:`1px solid ${C.hair}`, background:'transparent',
