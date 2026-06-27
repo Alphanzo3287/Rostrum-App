@@ -13,7 +13,8 @@ import { NotificationsBell } from './NotificationsBell';
 import { getMyWallet } from '../lib/payments';
 
 const LINKS: [string, string][] = [
-  ['/', 'Lobby'], ['/leaderboard', 'Leaderboard'], ['/teams', 'Teams'], ['/store', 'Store'], ['/earnings', 'Earnings'],
+  ['/', 'Lobby'], ['/leaderboard', 'Leaderboard'], ['/teams', 'Teams'],
+  ['/store', 'Store'], ['/earnings', 'Earnings'], ['/settings', 'Settings'],
 ];
 
 export function NavBar() {

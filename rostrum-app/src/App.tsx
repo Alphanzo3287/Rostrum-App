@@ -26,6 +26,7 @@ import { LeaderboardScreen } from './screens/LeaderboardScreen';
 import { TeamsScreen } from './screens/TeamsScreen';
 import { StoreScreen } from './screens/StoreScreen';
 import { EarningsScreen } from './screens/EarningsScreen';
+import { SettingsScreen } from './screens/SettingsScreen';
 import { WatchScreen } from './screens/WatchScreen';
 import { getDebate } from './lib/api';
 import type { DebateRole, Side } from './lib/types';
@@ -61,6 +62,7 @@ function Gate() {
         <Route path="teams" element={<TeamsRoute />} />
         <Route path="store" element={<StoreRoute />} />
         <Route path="earnings" element={<EarningsRoute />} />
+        <Route path="settings" element={<SettingsRoute />} />
         <Route path="me" element={<ProfileRoute />} />
         <Route path="u/:handle" element={<ProfileRoute />} />
         <Route path="messages" element={<InboxRoute />} />
@@ -109,6 +111,10 @@ function StoreRoute() {
 function EarningsRoute() {
   const nav = useNavigate();
   return <EarningsScreen onBack={() => nav('/')} />;
+}
+function SettingsRoute() {
+  const nav = useNavigate();
+  return <SettingsScreen onBack={() => nav('/')} />;
 }
 function ProfileRoute() {
   const { handle } = useParams();

@@ -4,8 +4,9 @@
 // the thumbnail + provisions the LiveKit room), optionally stores the
 // YouTube key, then opens the room in Assembly. Debaters bring their own decks.
 // =====================================================================
-import { useState } from 'react';
-import { createDebate, setBroadcastKey } from '../lib/api';
+import { useState, useEffect } from 'react';
+import { createDebate } from '../lib/api';
+import { createYouTubeBroadcast, getYouTubeConnection, type YouTubeConnection } from '../lib/youtube';
 import type { DebateFormat, Side, Visibility } from '../lib/types';
 import { C, ui, display, mono, solidGold, field } from '../lib/theme';
 
@@ -55,9 +56,14 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
   const [price, setPrice] = useState(5);
   const [gifts, setGifts] = useState(true);
   const [recording, setRecording] = useState(true);
-  const [youtubeKey, setYoutubeKey] = useState('');
+  const [ytEnabled, setYtEnabled] = useState(false);
+  const [ytTitle, setYtTitle] = useState('');
+  const [ytDesc, setYtDesc] = useState('');
+  const [ytConn, setYtConn] = useState<YouTubeConnection | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => { getYouTubeConnection().then(setYtConn).catch(() => {}); }, []);
 
   const pickFormat = (f: DebateFormat) => { setFormat(f); setSegs(FORMATS[f]); };
   const totalMin = segs.reduce((a, b) => a + b.min, 0);
@@ -79,7 +85,16 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
         segments: segs.map(s => ({ label: s.label, side: s.side, durationSecs: s.min * 60 })),
         thumbnailFile: thumb,
       });
-      if (youtubeKey.trim()) await setBroadcastKey(debate.id, youtubeKey.trim());
+      // If YouTube is connected and enabled, create the broadcast automatically.
+      if (ytEnabled && ytConn?.connected) {
+        await createYouTubeBroadcast({
+          debateId: debate.id,
+          title: ytTitle.trim() || motion,
+          description: ytDesc.trim() || undefined,
+          thumbnailUrl: thumbPrev ?? undefined,
+          scheduledAt: scheduledAt ?? undefined,
+        });
+      }
       onCreated(debate.id);
     } catch (e: any) {
       setErr(e?.message ?? 'Could not create the debate'); setBusy(false);
@@ -195,11 +210,41 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
             </div>
 
             <div style={{ marginTop:18 }}>
-              <Label>YouTube stream key <span style={{ color:C.faint, fontWeight:400 }}>(optional — simulcast)</span></Label>
-              <input value={youtubeKey} onChange={e => setYoutubeKey(e.target.value)} placeholder="xxxx-xxxx-xxxx-xxxx"
-                style={{ ...field, marginTop:8 }} />
-              <p style={{ fontFamily:ui, fontSize:11.5, color:C.faint, marginTop:6 }}>
-                Stored privately — only used server-side when you go live.</p>
+              <div style={{ display:'flex', alignItems:'center', gap:14, padding:'15px 0', borderBottom:`1px solid ${C.hair}` }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontFamily:ui, fontSize:14, color:C.ink, fontWeight:600 }}>
+                    Stream to YouTube
+                  </div>
+                  <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginTop:2 }}>
+                    {ytConn?.connected
+                      ? `Connected as ${ytConn.channel_title ?? 'your channel'} — broadcast created automatically`
+                      : 'Connect your YouTube account in Settings to enable'}
+                  </div>
+                </div>
+                {ytConn?.connected
+                  ? <Chip on={ytEnabled} onClick={() => setYtEnabled(e => !e)}>{ytEnabled ? 'On' : 'Off'}</Chip>
+                  : <span style={{ fontFamily:ui, fontSize:11, color:C.faint }}>Not connected</span>}
+              </div>
+              {ytEnabled && ytConn?.connected && (
+                <div style={{ paddingTop:14, display:'flex', flexDirection:'column', gap:10 }}>
+                  <div>
+                    <Label>YouTube title</Label>
+                    <input value={ytTitle} onChange={e => setYtTitle(e.target.value)}
+                      placeholder={motion || 'Debate title on YouTube'}
+                      style={{ ...field, marginTop:6 }} />
+                  </div>
+                  <div>
+                    <Label>Description <span style={{ color:C.faint, fontWeight:400 }}>(optional)</span></Label>
+                    <textarea value={ytDesc} onChange={e => setYtDesc(e.target.value)}
+                      placeholder="What this debate is about..."
+                      rows={3} style={{ ...field, marginTop:6, resize:'vertical' }} />
+                  </div>
+                  <p style={{ fontFamily:ui, fontSize:11.5, color:C.faint, margin:0 }}>
+                    The broadcast is created on your YouTube channel automatically when you create this debate.
+                    When you press go live in the studio, streaming starts instantly — no stream key needed.
+                  </p>
+                </div>
+              )}
             </div>
 
             <p style={{ fontFamily:ui, fontSize:11.5, color:C.faint, marginTop:18, lineHeight:1.5 }}>
