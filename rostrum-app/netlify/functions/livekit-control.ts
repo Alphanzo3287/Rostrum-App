@@ -87,9 +87,15 @@ export const handler: Handler = async (event) => {
           key = data?.youtube_stream_key ?? undefined;
         }
         if (!key) return json(200, { skipped: true });   // no simulcast configured
+        // `key` may be a full RTMP URL (rtmp://.../live2/xxxx) when the broadcast
+        // was created via the YouTube API, or a bare stream key when entered
+        // manually. Normalize to a full ingestion URL either way.
+        const rtmpUrl = /^rtmps?:\/\//i.test(key)
+          ? key
+          : `rtmp://a.rtmp.youtube.com/live2/${key}`;
         const stream = new StreamOutput({
           protocol: StreamProtocol.RTMP,
-          urls: [`rtmp://a.rtmp.youtube.com/live2/${key}`],
+          urls: [rtmpUrl],
         });
         const info = await egress.startRoomCompositeEgress(room, { stream }, { layout: 'grid' });
         return json(200, { egressId: info.egressId });

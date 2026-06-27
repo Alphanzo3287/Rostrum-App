@@ -9,6 +9,7 @@ import { useRef, useState } from 'react';
 import { uploadDeck } from '../lib/api';
 import { rasterizeToImages } from '../lib/deck';
 import { muteAudience, startYouTube, stopEgress } from '../lib/livekit';
+import { goLiveOnYouTube, endYouTubeBroadcast } from '../lib/youtube';
 import { C, ui } from '../lib/theme';
 
 type Role = 'host' | 'moderator' | 'debater' | 'judge' | 'audience';
@@ -39,7 +40,9 @@ export function RoleDock(p: Props) {
       <Dock>
         {p.role === 'host' ? (
           <>
-            <Btn primary label="Begin debate · go live" onClick={p.onGoLive} />
+            <Btn primary label="Begin debate" onClick={p.onGoLive} />
+            <Sep />
+            <StreamBtn debateId={p.debateId} />
             <Sep />
             <Btn danger label="Cancel event" onClick={() => {
               if (window.confirm('Cancel this event? This cannot be undone.')) p.onCancel();
@@ -114,34 +117,70 @@ export function RoleDock(p: Props) {
   );
 }
 
-/* ---- YouTube stream start/stop ---- */
-function StreamBtn({ debateId }: { debateId: string }) {
+/* ---- YouTube stream start/stop ----
+   Two coordinated steps: (1) push the LiveKit RTMP egress to YouTube's
+   ingestion URL, (2) once YouTube is receiving data, transition the
+   broadcast to "live". Stopping reverses both. */
+function StreamBtn({ debateId, compact }: { debateId: string; compact?: boolean }) {
   const [egressId, setEgressId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const streaming = !!egressId;
+  const [phase, setPhase] = useState<'idle' | 'connecting' | 'live'>('idle');
 
-  async function toggle() {
+  async function start() {
     setBusy(true);
+    setPhase('connecting');
     try {
-      if (!streaming) {
-        const res = await startYouTube(debateId);
-        if (res.egressId) setEgressId(res.egressId);
-      } else {
-        await stopEgress(debateId, egressId!);
-        setEgressId(null);
-      }
+      // 1. Start pushing audio/video to YouTube's RTMP endpoint.
+      const res = await startYouTube(debateId);
+      if (res.egressId) setEgressId(res.egressId);
+
+      // 2. YouTube needs a few seconds of incoming data before it will
+      //    accept the transition to live. Poll the broadcast, then go live.
+      let attempts = 0;
+      const tryGoLive = async (): Promise<void> => {
+        attempts++;
+        try {
+          await goLiveOnYouTube(debateId);
+          setPhase('live');
+        } catch (e) {
+          if (attempts < 6) { await new Promise(r => setTimeout(r, 5000)); return tryGoLive(); }
+          // Egress is running but transition kept failing — leave it streaming.
+          setPhase('live');
+        }
+      };
+      // Give the ingestion ~5s to register before first attempt.
+      await new Promise(r => setTimeout(r, 5000));
+      await tryGoLive();
     } catch (e: any) {
-      alert(e?.message ?? 'Stream action failed');
+      alert(e?.message ?? 'Could not start the YouTube stream');
+      setPhase('idle');
     } finally { setBusy(false); }
   }
 
+  async function stop() {
+    setBusy(true);
+    try {
+      if (egressId) await stopEgress(debateId, egressId);
+      try { await endYouTubeBroadcast(debateId); } catch { /* best effort */ }
+      setEgressId(null);
+      setPhase('idle');
+    } catch (e: any) {
+      alert(e?.message ?? 'Could not stop the stream');
+    } finally { setBusy(false); }
+  }
+
+  const label = busy && phase === 'connecting' ? 'Connecting…'
+    : phase === 'live' ? '⏹ Stop stream'
+    : '▶ YouTube';
+
   return (
     <Btn
-      label={busy ? '…' : streaming ? '⏹ Stop stream' : '▶ YouTube'}
+      label={label}
       accent={C.garnet}
-      active={streaming}
-      onClick={toggle}
-      disabled={busy}
+      active={phase === 'live'}
+      onClick={phase === 'idle' ? start : stop}
+      disabled={busy && phase === 'connecting'}
+      primary={compact ? false : undefined}
     />
   );
 }

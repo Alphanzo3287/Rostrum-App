@@ -9,8 +9,8 @@ import {
   getDebate, setDebateStatus, setSegment, pauseTimer, resumeTimer,
   finalizeDebate, cancelDebate, subscribeDebate, setRemaining as apiSetRemaining,
 } from './api';
-import { startRecording, startYouTube, stopEgress, applySegmentMics } from './livekit';
-import { goLiveOnYouTube, endYouTubeBroadcast } from './youtube';
+import { startRecording, stopEgress, applySegmentMics } from './livekit';
+import { endYouTubeBroadcast } from './youtube';
 import type { Debate, Segment, Side } from './types';
 
 export type Phase = 'assembly' | 'live' | 'ended';
@@ -61,9 +61,8 @@ export function useDebate(debateId: string) {
     await setSegment(debateId, 0);
     await applySegmentMics(debateId, debaters(members), segments[0]?.side ?? null);
     try { egress.current.rec = (await startRecording(debateId)).egressId; } catch { /* recording optional */ }
-    try { const y = await startYouTube(debateId); if (y?.egressId) egress.current.yt = y.egressId; } catch { /* simulcast optional */ }
-    // Transition YouTube broadcast to live (best-effort, no stream key needed)
-    try { await goLiveOnYouTube(debateId); } catch { /* optional */ }
+    // YouTube streaming is controlled manually via the dock's stream button
+    // (so the host can start it during assembly, before the debate begins).
   }, [debateId, segments]);
 
   // host: advance the run of show + flip mics to the new speaking side
