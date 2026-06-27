@@ -28,6 +28,7 @@ import { StoreScreen } from './screens/StoreScreen';
 import { EarningsScreen } from './screens/EarningsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { WatchScreen } from './screens/WatchScreen';
+import { BroadcastScreen } from './screens/BroadcastScreen';
 import { getDebate } from './lib/api';
 import type { DebateRole, Side } from './lib/types';
 import { C, ui } from './lib/theme';
@@ -46,6 +47,17 @@ export default function App() {
 function Gate() {
   const { session, profile, loading } = useAuth();
   const [justSignedUp, setJustSignedUp] = useState(false);
+
+  // The public broadcast view (rendered by LiveKit egress for YouTube) has no
+  // login — it authorizes via a signed token in the URL. Serve it before any
+  // auth/onboarding gate so the egress browser never hits the sign-in screen.
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/broadcast/')) {
+    return (
+      <Routes>
+        <Route path="broadcast/:id" element={<BroadcastScreen />} />
+      </Routes>
+    );
+  }
 
   if (loading) return <Splash />;
   if (!session) return <AuthScreen onSignedUp={() => setJustSignedUp(true)} />;

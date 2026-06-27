@@ -9,12 +9,20 @@
 //   remove          — eject a participant
 // =====================================================================
 import type { Handler } from '@netlify/functions';
+import { createHmac } from 'crypto';
 import {
   RoomServiceClient, EgressClient,
   EncodedFileOutput, EncodedFileType, S3Upload,
-  StreamOutput, StreamProtocol,
+  StreamOutput, StreamProtocol, AccessToken,
 } from 'livekit-server-sdk';
 import { supabaseAdmin, userFromToken } from '../../src/server/supabaseAdmin';
+
+const SITE = process.env.PUBLIC_SITE_URL || process.env.URL || 'https://rostrums.site';
+
+/** Same signature scheme as broadcast-token.ts so the page can self-authorize. */
+function broadcastSig(debateId: string): string {
+  return createHmac('sha256', process.env.LIVEKIT_API_SECRET!).update(`broadcast:${debateId}`).digest('hex').slice(0, 32);
+}
 
 const httpUrl = (process.env.LIVEKIT_URL || '')
   .replace('wss://', 'https://').replace('ws://', 'http://');
@@ -78,7 +86,11 @@ export const handler: Handler = async (event) => {
         return json(200, { egressId: info.egressId });
       }
 
-      // simulcast the room to YouTube Live via RTMP ingest
+      // simulcast the room to YouTube Live via RTMP ingest.
+      // Uses WEB egress pointed at our branded broadcast page, so YouTube
+      // viewers see the full show (slides, name plates, audience) — not a
+      // raw video grid. The page connects to the room with a hidden,
+      // subscribe-only token minted here.
       case 'youtube_start': {
         let key = payload.streamKey as string | undefined;
         if (!key) {
@@ -87,17 +99,32 @@ export const handler: Handler = async (event) => {
           key = data?.youtube_stream_key ?? undefined;
         }
         if (!key) return json(200, { skipped: true });   // no simulcast configured
-        // `key` may be a full RTMP URL (rtmp://.../live2/xxxx) when the broadcast
-        // was created via the YouTube API, or a bare stream key when entered
-        // manually. Normalize to a full ingestion URL either way.
         const rtmpUrl = /^rtmps?:\/\//i.test(key)
           ? key
           : `rtmp://a.rtmp.youtube.com/live2/${key}`;
+
+        // Mint a hidden, subscribe-only token for the egress browser.
+        const viewer = new AccessToken(KEY, SECRET, {
+          identity: `egress-${debateId.slice(0, 8)}`,
+          name: 'Broadcast',
+          ttl: '6h',
+        });
+        viewer.addGrant({
+          roomJoin: true, room,
+          canSubscribe: true, canPublish: false, canPublishData: false,
+          hidden: true,                  // don't appear in the participant list
+        });
+        const viewerToken = await viewer.toJwt();
+
+        const broadcastUrl =
+          `${SITE}/broadcast/${debateId}?t=${encodeURIComponent(viewerToken)}` +
+          `&u=${encodeURIComponent(process.env.LIVEKIT_URL || '')}`;
+
         const stream = new StreamOutput({
           protocol: StreamProtocol.RTMP,
           urls: [rtmpUrl],
         });
-        const info = await egress.startRoomCompositeEgress(room, { stream }, { layout: 'grid' });
+        const info = await egress.startWebEgress(broadcastUrl, { stream });
         return json(200, { egressId: info.egressId });
       }
 
