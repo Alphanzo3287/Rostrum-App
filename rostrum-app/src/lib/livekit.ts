@@ -19,6 +19,39 @@ async function authedPost<T = any>(fn: string, body: unknown): Promise<T> {
 
 export interface RoomToken { url: string; token: string; room: string; role: string; canPublish: boolean; }
 
+/* ----------------------- BROADCAST CONTROL CHANNEL -----------------------
+   Instant studio control: the host publishes layout/stage/slide changes over
+   the LiveKit data channel. The broadcast page (egress) receives them with no
+   DB-realtime dependency, so switching is immediate and reliable. The DB is
+   still updated separately for persistence (late joiners / page refresh). */
+export interface BcastControlMsg {
+  kind: 'bcast';
+  layout?: 'camera' | 'slides' | 'sidebyside' | 'pip';
+  stageId?: string | null;
+  slidesOn?: boolean;
+  deckChanged?: boolean;   // signal the broadcast page to refetch the deck
+}
+
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+
+/** Host: publish a control message to everyone in the room (incl. the egress). */
+export function publishBcastControl(room: any, msg: Omit<BcastControlMsg, 'kind'>) {
+  try {
+    const payload = enc.encode(JSON.stringify({ kind: 'bcast', ...msg }));
+    room?.localParticipant?.publishData(payload, { reliable: true });
+  } catch { /* non-fatal: DB realtime is the fallback */ }
+}
+
+/** Broadcast page: parse an incoming data payload into a control message. */
+export function parseBcastControl(payload: Uint8Array): BcastControlMsg | null {
+  try {
+    const obj = JSON.parse(dec.decode(payload));
+    return obj?.kind === 'bcast' ? obj as BcastControlMsg : null;
+  } catch { return null; }
+}
+
+
 /** Get a LiveKit token for this debate (grants derived from your seat). */
 export const getRoomToken = (debateId: string) =>
   authedPost<RoomToken>('livekit-token', { debateId });

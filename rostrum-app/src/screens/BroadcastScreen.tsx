@@ -51,11 +51,21 @@ function BroadcastInner() {
 
   const debateId = id ?? '';
   const dz   = useDebate(debateId);
-  const { members } = useBroadcastRoom(token, url);
-
   // Deck presence (for slide rendering) + host-controlled broadcast state.
   const [deckUrls, setDeckUrls] = useState<string[]>([]);
   const [bs, setBs] = useState<BroadcastState>({ layout: 'camera', stageId: null, slidesOn: false });
+
+  const refetchDeck = () => getDeck(debateId).then(({ urls }) => setDeckUrls(urls)).catch(() => {});
+
+  // Instant control over the LiveKit data channel (no DB-realtime lag).
+  const { members } = useBroadcastRoom(token, url, (m) => {
+    setBs(prev => ({
+      layout:   m.layout   ?? prev.layout,
+      stageId:  m.stageId  !== undefined ? m.stageId : prev.stageId,
+      slidesOn: m.slidesOn !== undefined ? m.slidesOn : prev.slidesOn,
+    }));
+    if (m.deckChanged) refetchDeck();
+  });
 
   useEffect(() => {
     if (!debateId) return;

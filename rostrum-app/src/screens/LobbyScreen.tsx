@@ -17,8 +17,17 @@ export function LobbyScreen({ onOpenDebate, onHost }: {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    listLiveDebates().then(setLive).catch(e => setErr(e?.message ?? 'Could not load debates'));
-    listUpcomingDebates().then(setSoon).catch(() => setSoon([]));
+    let alive = true;
+    const load = () => {
+      listLiveDebates().then(d => { if (alive) setLive(d); }).catch(e => { if (alive) setErr(e?.message ?? 'Could not load debates'); });
+      listUpcomingDebates().then(d => { if (alive) setSoon(d); }).catch(() => { if (alive) setSoon([]); });
+    };
+    load();
+    // Auto-refresh so newly-opened rooms appear without a manual reload.
+    const iv = setInterval(load, 15000);
+    const onFocus = () => load();
+    window.addEventListener('focus', onFocus);
+    return () => { alive = false; clearInterval(iv); window.removeEventListener('focus', onFocus); };
   }, []);
 
   const hasLive = !!live?.length;

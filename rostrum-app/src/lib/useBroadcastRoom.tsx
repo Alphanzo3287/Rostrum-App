@@ -8,19 +8,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Room, RoomEvent, Track, ConnectionState,
-  type RemoteTrack, type Participant, type TrackPublication,
+  type RemoteTrack, type Participant, type TrackPublication, type RemoteParticipant,
 } from 'livekit-client';
+import { parseBcastControl, type BcastControlMsg } from './livekit';
 import type { RoomMember } from './useRoom';
 
 function meta(p: Participant) {
   try { return JSON.parse(p.metadata || '{}'); } catch { return {}; }
 }
 
-/** token + livekitUrl both come from the egress-built URL query string. */
-export function useBroadcastRoom(token: string | null, livekitUrl?: string | null) {
+/** token + livekitUrl from the egress-built URL; onControl fires on host data msgs. */
+export function useBroadcastRoom(token: string | null, livekitUrl?: string | null,
+  onControl?: (m: BcastControlMsg) => void) {
   const roomRef = useRef<Room | null>(null);
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [state, setState] = useState<ConnectionState>(ConnectionState.Disconnected);
+  const ctrlRef = useRef(onControl);
+  ctrlRef.current = onControl;
 
   const url = livekitUrl || (import.meta.env.VITE_LIVEKIT_URL as string | undefined) || null;
 
@@ -66,7 +70,11 @@ export function useBroadcastRoom(token: string | null, livekitUrl?: string | nul
         .on(RoomEvent.TrackUnsubscribed, resync)
         .on(RoomEvent.TrackMuted, resync)
         .on(RoomEvent.TrackUnmuted, resync)
-        .on(RoomEvent.ActiveSpeakersChanged, resync);
+        .on(RoomEvent.ActiveSpeakersChanged, resync)
+        .on(RoomEvent.DataReceived, (payload: Uint8Array, _p?: RemoteParticipant) => {
+          const msg = parseBcastControl(payload);
+          if (msg) ctrlRef.current?.(msg);
+        });
 
       try {
         await room.connect(url, token);

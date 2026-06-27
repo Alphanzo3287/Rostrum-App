@@ -18,6 +18,7 @@ import { useAuth } from '../lib/auth';
 import { Avatar } from './ui';
 import { ShareButton } from './ShareSheet';
 import { getMyWallet, getGiftTiers, getDebateParticipants, sendGift, type Wallet, type GiftTier, type DebateParticipant } from '../lib/payments';
+import { publishBcastControl } from '../lib/livekit';
 
 type Role = 'host' | 'moderator' | 'debater' | 'judge' | 'audience';
 
@@ -27,9 +28,9 @@ export type RosData = {
   onJump: (i: number) => void; onToggle: () => void; onNext: () => void; onSetRemaining: (s: number) => void;
 };
 
-export function ContextRail({ debateId, role, tab, setTab, ros, members }: {
+export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom }: {
   debateId: string; role: Role; tab: string; setTab: (t: string) => void; ros?: RosData;
-  members?: any[];
+  members?: any[]; lkRoom?: any;
 }) {
   const tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['studio','Studio'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['gift','Gift']]
             : role === 'moderator' ? [['studio','Studio'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['gift','Gift']]
@@ -47,7 +48,7 @@ export function ContextRail({ debateId, role, tab, setTab, ros, members }: {
       <div style={{ flex:1, overflowY:'auto', padding:16, display:'flex', flexDirection:'column', minHeight:0 }}>
         {tab==='invite' && <InvitePanel debateId={debateId} />}
         {tab==='ros' && (ros ? <RosPanel ros={ros} /> : <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>Run of show is unavailable.</p>)}
-        {tab==='studio' && <StudioPanel debateId={debateId} members={members ?? []} canControl={role==='host'} role={role} />}
+        {tab==='studio' && <StudioPanel debateId={debateId} members={members ?? []} canControl={role==='host'} role={role} lkRoom={lkRoom} />}
         {tab==='chat' && <ChatPanel debateId={debateId} />}
         {(tab==='vote'||tab==='poll') && <PollPanel debateId={debateId} canVote={role==='audience'} />}
         {tab==='qa' && <QAPanel debateId={debateId} canModerate={role==='host'||role==='moderator'} />}
@@ -248,8 +249,8 @@ function InvitePanel({ debateId }: { debateId: string }) {
 }
 
 /* ----- studio: host broadcast control room ----- */
-function StudioPanel({ debateId, members, canControl, role }: {
-  debateId: string; members: any[]; canControl: boolean; role: Role;
+function StudioPanel({ debateId, members, canControl, role, lkRoom }: {
+  debateId: string; members: any[]; canControl: boolean; role: Role; lkRoom?: any;
 }) {
   const [bs, setBs] = useState<BroadcastState>({ layout: 'camera', stageId: null, slidesOn: false });
   const [busy, setBusy] = useState(false);
@@ -264,7 +265,14 @@ function StudioPanel({ debateId, members, canControl, role }: {
 
   async function patch(next: Partial<BroadcastState>) {
     if (!canControl) return;
-    setBs(b => ({ ...b, ...next }));            // optimistic
+    setBs(b => ({ ...b, ...next }));            // optimistic (host's own panel)
+    // Instant: push to the broadcast page over the LiveKit data channel.
+    publishBcastControl(lkRoom, {
+      layout: next.layout,
+      stageId: next.stageId,
+      slidesOn: next.slidesOn,
+    });
+    // Persist: so a refreshed/late-joining broadcast picks up current state.
     try { await setBroadcastState(debateId, next); } catch (e: any) { alert(e?.message ?? 'Could not update broadcast'); }
   }
 
@@ -332,6 +340,8 @@ function StudioPanel({ debateId, members, canControl, role }: {
                 const { uploadDeck } = await import('../lib/api');
                 const { rasterizeToImages } = await import('../lib/deck');
                 await uploadDeck(debateId, await rasterizeToImages(files));
+                setBs(b => ({ ...b, slidesOn: true, layout: 'sidebyside' }));
+                publishBcastControl(lkRoom, { slidesOn: true, layout: 'sidebyside', deckChanged: true });
                 await setBroadcastState(debateId, { slidesOn: true, layout: 'sidebyside' });
               } catch (err: any) { alert(err?.message ?? 'Upload failed'); }
               finally { setBusy(false); if (deckRef.current) deckRef.current.value=''; }
@@ -340,8 +350,12 @@ function StudioPanel({ debateId, members, canControl, role }: {
           <BtnSm onClick={() => patch({ slidesOn: !bs.slidesOn })}>{bs.slidesOn ? 'Hide slides' : 'Show slides'}</BtnSm>
           <BtnSm danger onClick={async () => {
             if (!window.confirm('Remove the current slide deck?')) return;
-            try { await clearDeck(debateId); await setBroadcastState(debateId, { slidesOn: false, layout: 'camera' }); }
-            catch (e: any) { alert(e?.message ?? 'Could not clear deck'); }
+            try {
+              await clearDeck(debateId);
+              setBs(b => ({ ...b, slidesOn: false, layout: 'camera' }));
+              publishBcastControl(lkRoom, { slidesOn: false, layout: 'camera', deckChanged: true });
+              await setBroadcastState(debateId, { slidesOn: false, layout: 'camera' });
+            } catch (e: any) { alert(e?.message ?? 'Could not clear deck'); }
           }}>Remove deck</BtnSm>
         </div>
       </div>
