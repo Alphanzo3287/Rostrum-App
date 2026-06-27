@@ -23,7 +23,7 @@ export const handler: Handler = async (event) => {
 
   let body: any = {};
   try { body = JSON.parse(event.body ?? '{}'); } catch {}
-  const { action, debateId, title, description, thumbnailUrl, scheduledAt } = body;
+  const { action, debateId, title, description, thumbnailUrl, scheduledAt, privacy } = body;
 
   try {
     // ── Token helpers ────────────────────────────────────────────────
@@ -51,6 +51,10 @@ export const handler: Handler = async (event) => {
     if (action === 'create') {
       if (!debateId || !title) return json(400, { error: 'debateId and title required' });
 
+      // Map to YouTube's exact privacy values; default to unlisted (safe).
+      const privacyStatus = ['public', 'unlisted', 'private'].includes(privacy)
+        ? privacy : 'unlisted';
+
       const scheduledStartTime = scheduledAt
         ? new Date(scheduledAt).toISOString()
         : new Date(Date.now() + 60_000).toISOString();  // 1 min from now if not scheduled
@@ -63,7 +67,7 @@ export const handler: Handler = async (event) => {
             title, description: description ?? '',
             scheduledStartTime,
           },
-          status:         { privacyStatus: 'public', selfDeclaredMadeForKids: false },
+          status:         { privacyStatus, selfDeclaredMadeForKids: false },
           contentDetails: { enableAutoStart: false, enableAutoStop: true, latencyPreference: 'low' },
         }),
       });
@@ -101,7 +105,7 @@ export const handler: Handler = async (event) => {
       // 5. Store in DB + write to debate_secrets for LiveKit egress
       await supabaseAdmin.from('youtube_broadcasts').upsert({
         debate_id: debateId, broadcast_id: broadcast.id, stream_id: stream.id,
-        rtmp_url: rtmpUrl, stream_key: streamKey, status: 'ready',
+        rtmp_url: rtmpUrl, stream_key: streamKey, status: 'ready', privacy: privacyStatus,
         yt_title: title, yt_description: description ?? '',
         scheduled_at: scheduledAt ?? null, updated_at: new Date().toISOString(),
       }, { onConflict: 'debate_id' });

@@ -59,6 +59,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
   const [ytEnabled, setYtEnabled] = useState(false);
   const [ytTitle, setYtTitle] = useState('');
   const [ytDesc, setYtDesc] = useState('');
+  const [ytPrivacy, setYtPrivacy] = useState<'public' | 'unlisted' | 'private'>('unlisted');
   const [ytConn, setYtConn] = useState<YouTubeConnection | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -91,6 +92,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
           debateId: debate.id,
           title: ytTitle.trim() || motion,
           description: ytDesc.trim() || undefined,
+          privacy: ytPrivacy,
           thumbnailUrl: thumbPrev ?? undefined,
           scheduledAt: scheduledAt ?? undefined,
         });
@@ -245,9 +247,30 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
                       placeholder="What this debate is about..."
                       rows={3} style={{ ...field, marginTop:6, resize:'vertical' }} />
                   </div>
+                  <div>
+                    <Label>YouTube privacy</Label>
+                    <div style={{ display:'flex', gap:8, marginTop:6 }}>
+                      {([
+                        ['public',   'Public',   'Anyone can find and watch'],
+                        ['unlisted', 'Unlisted', 'Only people with the link'],
+                        ['private',  'Private',  'Only you — best for testing'],
+                      ] as const).map(([val, label, hint]) => (
+                        <button key={val} type="button" onClick={() => setYtPrivacy(val)}
+                          style={{
+                            flex:1, padding:'10px 12px', borderRadius:8, cursor:'pointer', textAlign:'left',
+                            border:`1px solid ${ytPrivacy===val ? C.gold : C.hair}`,
+                            background: ytPrivacy===val ? `${C.gold}1a` : 'transparent' }}>
+                          <div style={{ fontFamily:ui, fontSize:13, fontWeight:600,
+                            color: ytPrivacy===val ? C.gold : C.ink }}>{label}</div>
+                          <div style={{ fontFamily:ui, fontSize:10.5, color:C.faint, marginTop:2, lineHeight:1.3 }}>{hint}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <p style={{ fontFamily:ui, fontSize:11.5, color:C.faint, margin:0 }}>
                     The broadcast is created on your YouTube channel automatically when you create this debate.
                     When you press go live in the studio, streaming starts instantly — no stream key needed.
+                    {ytPrivacy !== 'public' && ` Set to ${ytPrivacy} — ${ytPrivacy === 'private' ? 'only you can see it' : 'only people with the link can watch'}.`}
                   </p>
                 </div>
               )}

@@ -65,6 +65,7 @@ export const createYouTubeBroadcast = (opts: {
   description?: string;
   thumbnailUrl?: string;
   scheduledAt?: string;   // ISO string — for scheduled debates
+  privacy?: 'public' | 'unlisted' | 'private';
 }) => authedPost<YouTubeBroadcastInfo>('youtube-broadcast', { action: 'create', ...opts });
 
 /** Transition the broadcast to live (call when debate goes live). */
