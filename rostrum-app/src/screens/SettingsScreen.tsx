@@ -24,7 +24,17 @@ export function SettingsScreen({ onBack }: { onBack?: () => void }) {
       getYouTubeConnection().then(setYt).catch(() => {});
       params.delete('yt'); setParams(params, { replace: true });
     } else if (ytParam === 'error') {
-      setBanner({ msg: 'YouTube connection failed. Please try again.', ok: false });
+      const reason = params.get('reason');
+      const reasonText: Record<string, string> = {
+        auth: 'Your session could not be verified. Try logging out and back in, then reconnect.',
+        token: 'Google rejected the token exchange. The OAuth redirect URI may not match exactly.',
+        state_decode: 'The security token was corrupted in transit.',
+        db: 'Connected to Google, but saving the tokens failed.',
+        access_denied: 'You declined the YouTube permission, or you are not added as a Test user in Google Cloud.',
+        missing_credentials: 'The server is missing the Google client ID/secret. They need to be set in Netlify environment variables.',
+      };
+      const detail = reason ? (reasonText[reason] ?? `Reason: ${reason}`) : '';
+      setBanner({ msg: `YouTube connection failed. ${detail}`, ok: false });
       params.delete('yt'); setParams(params, { replace: true });
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

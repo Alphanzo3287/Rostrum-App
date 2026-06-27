@@ -8,7 +8,7 @@ import { supabaseAdmin, userFromToken } from '../../src/server/supabaseAdmin';
 
 const CLIENT_ID    = process.env.GOOGLE_CLIENT_ID!;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
-const SITE         = process.env.URL || 'https://rostrums.site';
+const SITE         = process.env.PUBLIC_SITE_URL || process.env.URL || 'https://rostrums.site';
 const REDIRECT_URI = `${SITE}/.netlify/functions/youtube-auth`;
 const SCOPES       = [
   'https://www.googleapis.com/auth/youtube.force-ssl',
@@ -26,6 +26,9 @@ export const handler: Handler = async (event) => {
 
   // ── Step 1: browser hits ?action=connect&token=<jwt> ─────────────────
   if (action === 'connect') {
+    if (!CLIENT_ID || !CLIENT_SECRET) {
+      return redirect(`${SITE}/settings?yt=error&reason=missing_credentials`);
+    }
     const user = await userFromToken(token ?? '');
     if (!user) return redirect(`${SITE}/settings?yt=error&reason=auth`);
 
