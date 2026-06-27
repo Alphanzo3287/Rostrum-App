@@ -29,7 +29,7 @@ export const handler: Handler = async (event) => {
     if (!CLIENT_ID || !CLIENT_SECRET) {
       return redirect(`${SITE}/settings?yt=error&reason=missing_credentials`);
     }
-    const user = await userFromToken(token ?? '');
+    const user = await userFromToken(`Bearer ${token ?? ''}`);
     if (!user) return redirect(`${SITE}/settings?yt=error&reason=auth`);
 
     // Base64-encode the JWT so it survives the OAuth round-trip cleanly.
@@ -56,7 +56,7 @@ export const handler: Handler = async (event) => {
       return redirect(`${SITE}/settings?yt=error&reason=state_decode`);
     }
 
-    const user = await userFromToken(rawToken);
+    const user = await userFromToken(`Bearer ${rawToken}`);
     if (!user) return redirect(`${SITE}/settings?yt=error&reason=auth`);
 
     // Exchange code for tokens
