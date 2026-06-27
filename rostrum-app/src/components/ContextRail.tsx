@@ -8,6 +8,8 @@ import {
   castVote, getTally, subscribeTally,
   askQuestion, setQuestionStatus, subscribeQuestions,
   submitBallot, getChat, sendChat, subscribeChat, type ChatMsg,
+  getBroadcastState, setBroadcastState, subscribeBroadcastState, clearDeck,
+  type BroadcastState, type BcastLayout,
 } from '../lib/api';
 import type { Side, Question, Segment } from '../lib/types';
 import { C, ui, display, mono, solidGold, field } from '../lib/theme';
@@ -25,10 +27,12 @@ export type RosData = {
   onJump: (i: number) => void; onToggle: () => void; onNext: () => void; onSetRemaining: (s: number) => void;
 };
 
-export function ContextRail({ debateId, role, tab, setTab, ros }: {
+export function ContextRail({ debateId, role, tab, setTab, ros, members }: {
   debateId: string; role: Role; tab: string; setTab: (t: string) => void; ros?: RosData;
+  members?: any[];
 }) {
-  const tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['gift','Gift']]
+  const tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['studio','Studio'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['gift','Gift']]
+            : role === 'moderator' ? [['studio','Studio'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['gift','Gift']]
             : role === 'judge'  ? [['score','Score'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['gift','Gift']]
             :                     [['vote','Vote'],['chat','Chat'],['qa','Ask'],['poll','Poll'],['gift','Gift']];
   return (
@@ -43,6 +47,7 @@ export function ContextRail({ debateId, role, tab, setTab, ros }: {
       <div style={{ flex:1, overflowY:'auto', padding:16, display:'flex', flexDirection:'column', minHeight:0 }}>
         {tab==='invite' && <InvitePanel debateId={debateId} />}
         {tab==='ros' && (ros ? <RosPanel ros={ros} /> : <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>Run of show is unavailable.</p>)}
+        {tab==='studio' && <StudioPanel debateId={debateId} members={members ?? []} canControl={role==='host'} role={role} />}
         {tab==='chat' && <ChatPanel debateId={debateId} />}
         {(tab==='vote'||tab==='poll') && <PollPanel debateId={debateId} canVote={role==='audience'} />}
         {tab==='qa' && <QAPanel debateId={debateId} canModerate={role==='host'||role==='moderator'} />}
@@ -240,6 +245,134 @@ function InvitePanel({ debateId }: { debateId: string }) {
       </div>
     </>
   );
+}
+
+/* ----- studio: host broadcast control room ----- */
+function StudioPanel({ debateId, members, canControl, role }: {
+  debateId: string; members: any[]; canControl: boolean; role: Role;
+}) {
+  const [bs, setBs] = useState<BroadcastState>({ layout: 'camera', stageId: null, slidesOn: false });
+  const [busy, setBusy] = useState(false);
+  const deckRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getBroadcastState(debateId).then(s => { if (alive) setBs(s); }).catch(() => {});
+    const off = subscribeBroadcastState(debateId, s => { if (alive) setBs(s); });
+    return () => { alive = false; off(); };
+  }, [debateId]);
+
+  async function patch(next: Partial<BroadcastState>) {
+    if (!canControl) return;
+    setBs(b => ({ ...b, ...next }));            // optimistic
+    try { await setBroadcastState(debateId, next); } catch (e: any) { alert(e?.message ?? 'Could not update broadcast'); }
+  }
+
+  const featurable = members.filter(m => ['host','debater','moderator'].includes(m.role));
+
+  const layouts: [BcastLayout, string, string][] = [
+    ['camera',     'Camera',        'Speaker fills the screen'],
+    ['slides',     'Slides',        'Slides only, no camera'],
+    ['sidebyside', 'Side by side',  'Slides + speaker, clean split'],
+    ['pip',        'Picture-in-pic','Slides large, speaker in corner'],
+  ];
+
+  if (!canControl && role === 'moderator') {
+    // Moderator: limited — can see state, can't change layout (assist only).
+    return (
+      <div style={{ fontFamily:ui, fontSize:12.5, color:C.dim, lineHeight:1.6 }}>
+        <P>The host controls the broadcast layout. As moderator you assist with chat, Q&amp;A, and the poll.</P>
+        <div style={{ marginTop:10, padding:'8px 10px', borderRadius:8, background:C.panel, border:`1px solid ${C.hair}` }}>
+          Current layout: <strong style={{ color:C.ink }}>{bs.layout}</strong>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:14, fontFamily:ui }}>
+      <div>
+        <Eyebrow>Layout</Eyebrow>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:7, marginTop:7 }}>
+          {layouts.map(([k, label, hint]) => (
+            <button key={k} onClick={() => patch({ layout: k })} style={{
+              textAlign:'left', padding:'9px 11px', borderRadius:8, cursor:'pointer',
+              border:`1px solid ${bs.layout===k ? C.gold : C.hair}`,
+              background: bs.layout===k ? `${C.gold}1a` : 'transparent' }}>
+              <div style={{ fontSize:12.5, fontWeight:700, color: bs.layout===k ? C.gold : C.ink }}>{label}</div>
+              <div style={{ fontSize:10, color:C.faint, marginTop:2, lineHeight:1.3 }}>{hint}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <Eyebrow>On stage</Eyebrow>
+        <div style={{ fontSize:11, color:C.faint, margin:'4px 0 7px' }}>
+          Who's featured. “Auto” follows the current segment’s speaker.
+        </div>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+          <Chip2 on={bs.stageId===null} onClick={() => patch({ stageId: null })}>Auto</Chip2>
+          {featurable.map(m => (
+            <Chip2 key={m.identity} on={bs.stageId===m.identity} onClick={() => patch({ stageId: m.identity })}>
+              {m.name}{m.side ? ` · ${m.side==='prop'?'P':'O'}` : ''}
+            </Chip2>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <Eyebrow>Slides</Eyebrow>
+        <div style={{ display:'flex', gap:7, marginTop:7, flexWrap:'wrap' }}>
+          <input ref={deckRef} type="file" accept="application/pdf,image/*" multiple style={{ display:'none' }}
+            onChange={async e => {
+              const files = Array.from(e.target.files ?? []); if (!files.length) return;
+              setBusy(true);
+              try {
+                const { uploadDeck } = await import('../lib/api');
+                const { rasterizeToImages } = await import('../lib/deck');
+                await uploadDeck(debateId, await rasterizeToImages(files));
+                await setBroadcastState(debateId, { slidesOn: true, layout: 'sidebyside' });
+              } catch (err: any) { alert(err?.message ?? 'Upload failed'); }
+              finally { setBusy(false); if (deckRef.current) deckRef.current.value=''; }
+            }} />
+          <BtnSm onClick={() => deckRef.current?.click()} disabled={busy}>{busy ? 'Uploading…' : 'Upload / replace deck'}</BtnSm>
+          <BtnSm onClick={() => patch({ slidesOn: !bs.slidesOn })}>{bs.slidesOn ? 'Hide slides' : 'Show slides'}</BtnSm>
+          <BtnSm danger onClick={async () => {
+            if (!window.confirm('Remove the current slide deck?')) return;
+            try { await clearDeck(debateId); await setBroadcastState(debateId, { slidesOn: false, layout: 'camera' }); }
+            catch (e: any) { alert(e?.message ?? 'Could not clear deck'); }
+          }}>Remove deck</BtnSm>
+        </div>
+      </div>
+
+      <div style={{ padding:'9px 11px', borderRadius:8, background:C.panel, border:`1px solid ${C.hair}`,
+        fontSize:11, color:C.faint, lineHeight:1.5 }}>
+        These controls change what the YouTube audience sees in real time. They never appear on the broadcast.
+      </div>
+    </div>
+  );
+}
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontSize:10, fontWeight:700, letterSpacing:'.12em', textTransform:'uppercase', color:C.faint }}>{children}</div>;
+}
+function Chip2({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} style={{ padding:'6px 11px', borderRadius:999, cursor:'pointer', fontSize:12, fontWeight:600,
+      border:`1px solid ${on ? C.gold : C.hair}`, background: on ? `${C.gold}1f` : 'transparent', color: on ? C.gold : C.dim }}>
+      {children}
+    </button>
+  );
+}
+function BtnSm({ children, onClick, disabled, danger }: { children: React.ReactNode; onClick: () => void; disabled?: boolean; danger?: boolean }) {
+  return (
+    <button onClick={onClick} disabled={disabled} style={{ padding:'8px 12px', borderRadius:7, cursor: disabled?'default':'pointer',
+      fontSize:12, fontWeight:600, border:`1px solid ${danger ? C.garnet : C.hair}`, background:'transparent',
+      color: danger ? C.garnetHi : C.dim, opacity: disabled?0.6:1 }}>{children}</button>
+  );
+}
+function P({ children }: { children: React.ReactNode }) {
+  return <p style={{ margin:'0 0 8px' }}>{children}</p>;
 }
 
 /* ----- poll ----- */

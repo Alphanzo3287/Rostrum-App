@@ -364,6 +364,56 @@ export async function setSlide(debateId: string, idx: number) {
   if (error) throw error;
 }
 
+// Remove the whole deck (host or presenter).
+export async function clearDeck(debateId: string) {
+  const { error } = await supabase.rpc('clear_deck', { p_debate: debateId });
+  if (error) throw error;
+}
+
+/* ----------------------- BROADCAST CONTROL ----------------------- */
+export type BcastLayout = 'camera' | 'slides' | 'sidebyside' | 'pip';
+export interface BroadcastState {
+  layout: BcastLayout;
+  stageId: string | null;
+  slidesOn: boolean;
+}
+export async function getBroadcastState(debateId: string): Promise<BroadcastState> {
+  const { data } = await supabase.from('debates')
+    .select('bcast_layout, bcast_stage_id, bcast_slides_on').eq('id', debateId).single();
+  return {
+    layout: ((data as any)?.bcast_layout ?? 'camera') as BcastLayout,
+    stageId: ((data as any)?.bcast_stage_id ?? null) as string | null,
+    slidesOn: !!(data as any)?.bcast_slides_on,
+  };
+}
+// Host-only. Pass only the fields you want to change.
+export async function setBroadcastState(debateId: string, s: Partial<{ layout: BcastLayout; stageId: string | null; slidesOn: boolean }>) {
+  const { error } = await supabase.rpc('set_broadcast_state', {
+    p_debate: debateId,
+    p_layout: s.layout ?? null,
+    p_stage_id: s.stageId === null ? '__clear__' : (s.stageId ?? null),
+    p_slides_on: s.slidesOn ?? null,
+  });
+  if (error) throw error;
+}
+// Broadcast page subscribes to the debate row for live layout changes.
+export function subscribeBroadcastState(debateId: string, onChange: (s: BroadcastState) => void) {
+  const ch = supabase.channel(`bcast:${debateId}`)
+    .on('postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'debates', filter: `id=eq.${debateId}` },
+      (payload: any) => {
+        const n = payload.new;
+        if (!n) return;
+        onChange({
+          layout: (n.bcast_layout ?? 'camera') as BcastLayout,
+          stageId: n.bcast_stage_id ?? null,
+          slidesOn: !!n.bcast_slides_on,
+        });
+      })
+    .subscribe();
+  return () => { supabase.removeChannel(ch); };
+}
+
 // Everyone follows the presenter's position in real time.
 export function subscribeSlide(debateId: string, onChange: (current: number) => void) {
   const ch = supabase.channel(`slide:${debateId}`)

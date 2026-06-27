@@ -139,7 +139,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
               </>}
         </div>
 
-        <ContextRail debateId={debateId} role={role} tab={tab} setTab={setTab}
+        <ContextRail debateId={debateId} role={role} tab={tab} setTab={setTab} members={room.members}
           ros={{
             segments: dz.segments, segIdx: dz.segIdx, remaining: dz.remaining,
             running: dz.running, phase: dz.phase,
