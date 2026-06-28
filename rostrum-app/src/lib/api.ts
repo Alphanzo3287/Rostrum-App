@@ -10,6 +10,20 @@ import type {
   Profile, Team, TeamMember, Perk, Achievement, DebateFormat, Visibility, Side, DebateRole, TeamRole,
 } from './types';
 
+/* --------------------- EMERGENCY ROOM CONTROL -------------------- */
+export interface OpenRoom { id: string; motion: string; status: string; created_at: string; }
+// The host's rooms that are still open (any non-ended status).
+export async function myOpenRooms(): Promise<OpenRoom[]> {
+  const { data, error } = await supabase.rpc('my_open_rooms');
+  if (error) throw error;
+  return (data ?? []) as OpenRoom[];
+}
+// Force a room to end regardless of its state (recovers a crashed live room).
+export async function forceCloseRoom(debateId: string): Promise<void> {
+  const { error } = await supabase.rpc('force_close_room', { p_debate: debateId });
+  if (error) throw error;
+}
+
 /* ----------------------------- LOBBY ----------------------------- */
 
 export async function listLiveDebates(): Promise<Debate[]> {

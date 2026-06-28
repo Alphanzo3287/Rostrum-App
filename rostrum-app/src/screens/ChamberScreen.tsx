@@ -125,7 +125,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
                 {/* canvas — mirrors the live broadcast composition (isolated so a
                     rendering error can never take down the host's controls) */}
                 <div style={{ flex:1, minHeight:0, position:'relative', borderRadius:7, overflow:'hidden', border:`1px solid ${C.hair}`, background:C.base2 }}>
-                  <SafePanel resetKey={`${bs.layout}:${bs.presenterId ?? ''}:${dz.phase}`} label="Preview">
+                  <SafePanel resetKey={`${bs.layout}:${bs.presenterId ?? ''}:${dz.phase}`} label="Preview" fill>
                     <ChamberPreview members={room.members} bs={bs} debateId={debateId}
                       speaker={speaker} speakerSide={speakerSide} meId={me?.identity} />
                   </SafePanel>

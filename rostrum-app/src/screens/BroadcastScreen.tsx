@@ -191,7 +191,7 @@ function BroadcastInner() {
             {/* Stage */}
             <div style={{ flex: (layout==='group'||layout==='cinema') ? '1 1 100%' : '1 1 72%',
               display:'flex', gap:12, minWidth:0 }}>
-              <SafePanel resetKey={`${layout}:${bs.presenterId ?? ''}:${hasScreenSource}`} label="Stage">
+              <SafePanel resetKey={`${layout}:${bs.presenterId ?? ''}:${hasScreenSource}`} label="Stage" fill>
                 <Stage layout={layout} featured={featured} debateId={debateId}
                   cams={cams} presenter={presenter} screenTrack={screenTrack}
                   presentType={bs.presentType} hasScreenShare={hasScreenShare} hasSlides={hasSlides} />
