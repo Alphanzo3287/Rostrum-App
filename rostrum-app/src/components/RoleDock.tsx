@@ -134,20 +134,26 @@ function StreamBtn({ phase, error, onStart, onStop }: {
 
   const onClick = () => {
     if (phase === 'live') onStop();
-    else if (phase !== 'connecting') {
-      if (error) alert(error);   // show why the last attempt failed, then retry
-      onStart();
-    }
+    else if (phase !== 'connecting') onStart();
   };
 
   return (
-    <Btn
-      label={label}
-      accent={phase === 'error' ? C.ember : C.garnet}
-      active={phase === 'live'}
-      onClick={onClick}
-      disabled={phase === 'connecting'}
-    />
+    <div style={{ display:'inline-flex', flexDirection:'column', alignItems:'stretch', gap:4, maxWidth:320 }}>
+      <Btn
+        label={label}
+        accent={phase === 'error' ? C.ember : C.garnet}
+        active={phase === 'live'}
+        onClick={onClick}
+        disabled={phase === 'connecting'}
+      />
+      {phase === 'error' && error && (
+        <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:10, lineHeight:1.4,
+          color:C.ember, background:`${C.ember}14`, border:`1px solid ${C.ember}40`,
+          borderRadius:6, padding:'5px 7px', maxWidth:320, wordBreak:'break-word' }}>
+          {error}
+        </div>
+      )}
+    </div>
   );
 }
 

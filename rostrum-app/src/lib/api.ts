@@ -18,6 +18,18 @@ import type {
 let _chSeq = 0;
 const uniq = () => `${Date.now().toString(36)}-${(_chSeq++).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
+// Wrap a realtime subscription so a setup/channel error can never throw into a
+// React effect (which would trip an error boundary and blank a panel).
+function safeSub(setup: () => any): () => void {
+  try {
+    const ch = setup();
+    return () => { try { supabase.removeChannel(ch); } catch { /* noop */ } };
+  } catch (e) {
+    console.error('realtime subscribe failed (non-fatal):', e);
+    return () => {};
+  }
+}
+
 /* --------------------- EMERGENCY ROOM CONTROL -------------------- */
 export interface OpenRoom { id: string; motion: string; status: string; created_at: string; }
 // The host's rooms that are still open (any non-ended status).
@@ -438,34 +450,40 @@ export async function requestPresent(debateId: string, identity: string) {
   if (error) throw error;
 }
 // Broadcast page subscribes to the debate row for live layout/presenter changes.
+// Wrapped so a realtime/channel error can NEVER throw into React render/effect
+// (which would trip an error boundary and blank the studio controls).
 export function subscribeBroadcastState(debateId: string, onChange: (s: BroadcastState) => void) {
-  const ch = supabase.channel(`bcast:${debateId}:${uniq()}`)
-    .on('postgres_changes',
-      { event: 'UPDATE', schema: 'public', table: 'debates', filter: `id=eq.${debateId}` },
-      (payload: any) => {
-        const n = payload.new;
-        if (!n) return;
-        onChange({
-          layout: (n.bcast_layout ?? 'solo') as BcastLayout,
-          stageId: n.bcast_stage_id ?? null,
-          slidesOn: !!n.bcast_slides_on,
-          presenterId: n.bcast_presenter_id ?? null,
-          presentType: (n.bcast_present_type ?? null) as 'slides' | 'screen' | null,
-          presentRequest: n.bcast_present_request ?? null,
-        });
-      })
-    .subscribe();
-  return () => { supabase.removeChannel(ch); };
+  try {
+    const ch = supabase.channel(`bcast:${debateId}:${uniq()}`)
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'debates', filter: `id=eq.${debateId}` },
+        (payload: any) => {
+          const n = payload.new;
+          if (!n) return;
+          onChange({
+            layout: (n.bcast_layout ?? 'solo') as BcastLayout,
+            stageId: n.bcast_stage_id ?? null,
+            slidesOn: !!n.bcast_slides_on,
+            presenterId: n.bcast_presenter_id ?? null,
+            presentType: (n.bcast_present_type ?? null) as 'slides' | 'screen' | null,
+            presentRequest: n.bcast_present_request ?? null,
+          });
+        })
+      .subscribe();
+    return () => { try { supabase.removeChannel(ch); } catch { /* noop */ } };
+  } catch (e) {
+    console.error('subscribeBroadcastState failed (non-fatal):', e);
+    return () => {};
+  }
 }
 
 // Everyone follows the presenter's position in real time.
 export function subscribeSlide(debateId: string, onChange: (current: number) => void) {
-  const ch = supabase.channel(`slide:${debateId}:${uniq()}`)
+  return safeSub(() => supabase.channel(`slide:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'debates', filter: `id=eq.${debateId}` },
       (payload: any) => { if (payload.new?.current_slide != null) onChange(payload.new.current_slide); })
-    .subscribe();
-  return () => { supabase.removeChannel(ch); };
+    .subscribe());
 }
 
 /* -------------------------- SEGMENT CLOCK ------------------------ */
@@ -492,42 +510,38 @@ export async function setRemaining(debateId: string, secs: number) {
 // One subscription for everything that changes on the debate row:
 // status (assembly→live→ended), current_segment, the clock, and the slide.
 export function subscribeDebate(debateId: string, onChange: (d: Partial<Debate>) => void) {
-  const ch = supabase.channel(`debate:${debateId}:${uniq()}`)
+  return safeSub(() => supabase.channel(`debate:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'debates', filter: `id=eq.${debateId}` },
       (payload: any) => onChange(payload.new as Partial<Debate>))
-    .subscribe();
-  return () => { supabase.removeChannel(ch); };
+    .subscribe());
 }
 
 /* --------------------------- REALTIME ---------------------------- */
 // Live poll bars, the "who's in the room" gallery, and the Q&A queue.
 
 export function subscribeTally(debateId: string, onChange: (t: Tally) => void) {
-  const ch = supabase.channel(`votes:${debateId}:${uniq()}`)
+  return safeSub(() => supabase.channel(`votes:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'votes', filter: `debate_id=eq.${debateId}` },
       async () => onChange(await getTally(debateId)))
-    .subscribe();
-  return () => { supabase.removeChannel(ch); };
+    .subscribe());
 }
 
 export function subscribeParticipants(debateId: string, onChange: () => void) {
-  const ch = supabase.channel(`participants:${debateId}:${uniq()}`)
+  return safeSub(() => supabase.channel(`participants:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: '*', schema: 'public', table: 'debate_participants', filter: `debate_id=eq.${debateId}` },
       () => onChange())
-    .subscribe();
-  return () => { supabase.removeChannel(ch); };
+    .subscribe());
 }
 
 export function subscribeQuestions(debateId: string, onChange: () => void) {
-  const ch = supabase.channel(`questions:${debateId}:${uniq()}`)
+  return safeSub(() => supabase.channel(`questions:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: '*', schema: 'public', table: 'questions', filter: `debate_id=eq.${debateId}` },
       () => onChange())
-    .subscribe();
-  return () => { supabase.removeChannel(ch); };
+    .subscribe());
 }
 
 /* ------------------------------- LIVE CHAT ----------------------------- */
@@ -545,12 +559,11 @@ export async function sendChat(debateId: string, body: string) {
   if (error) throw error;
 }
 export function subscribeChat(debateId: string, onInsert: (m: ChatMsg) => void) {
-  const ch = supabase.channel(`chat:${debateId}:${uniq()}`)
+  return safeSub(() => supabase.channel(`chat:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `debate_id=eq.${debateId}` },
       (p: any) => onInsert(p.new as ChatMsg))
-    .subscribe();
-  return () => { supabase.removeChannel(ch); };
+    .subscribe());
 }
 
 /* --------------------------- NOTIFICATIONS --------------------------- */
@@ -570,10 +583,9 @@ export async function markNotificationsRead(ids?: string[]) {
   if (error) throw error;
 }
 export function subscribeNotifications(userId: string, onInsert: (n: AppNotification) => void) {
-  const ch = supabase.channel(`notifs:${userId}:${uniq()}`)
+  return safeSub(() => supabase.channel(`notifs:${userId}:${uniq()}`)
     .on('postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
       (p: any) => onInsert(p.new as AppNotification))
-    .subscribe();
-  return () => { supabase.removeChannel(ch); };
+    .subscribe());
 }
