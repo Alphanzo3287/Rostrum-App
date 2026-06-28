@@ -10,6 +10,14 @@ import type {
   Profile, Team, TeamMember, Perk, Achievement, DebateFormat, Visibility, Side, DebateRole, TeamRole,
 } from './types';
 
+// Every realtime subscription gets a UNIQUE channel name. Supabase reuses a
+// channel by name and throws "cannot add postgres_changes callbacks after
+// subscribe()" if a second component attaches a listener to an
+// already-subscribed channel. A unique suffix guarantees each caller owns its
+// own channel, so multiple components can subscribe to the same data safely.
+let _chSeq = 0;
+const uniq = () => `${Date.now().toString(36)}-${(_chSeq++).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
 /* --------------------- EMERGENCY ROOM CONTROL -------------------- */
 export interface OpenRoom { id: string; motion: string; status: string; created_at: string; }
 // The host's rooms that are still open (any non-ended status).
@@ -431,7 +439,7 @@ export async function requestPresent(debateId: string, identity: string) {
 }
 // Broadcast page subscribes to the debate row for live layout/presenter changes.
 export function subscribeBroadcastState(debateId: string, onChange: (s: BroadcastState) => void) {
-  const ch = supabase.channel(`bcast:${debateId}`)
+  const ch = supabase.channel(`bcast:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'debates', filter: `id=eq.${debateId}` },
       (payload: any) => {
@@ -452,7 +460,7 @@ export function subscribeBroadcastState(debateId: string, onChange: (s: Broadcas
 
 // Everyone follows the presenter's position in real time.
 export function subscribeSlide(debateId: string, onChange: (current: number) => void) {
-  const ch = supabase.channel(`slide:${debateId}`)
+  const ch = supabase.channel(`slide:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'debates', filter: `id=eq.${debateId}` },
       (payload: any) => { if (payload.new?.current_slide != null) onChange(payload.new.current_slide); })
@@ -484,7 +492,7 @@ export async function setRemaining(debateId: string, secs: number) {
 // One subscription for everything that changes on the debate row:
 // status (assembly→live→ended), current_segment, the clock, and the slide.
 export function subscribeDebate(debateId: string, onChange: (d: Partial<Debate>) => void) {
-  const ch = supabase.channel(`debate:${debateId}`)
+  const ch = supabase.channel(`debate:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'debates', filter: `id=eq.${debateId}` },
       (payload: any) => onChange(payload.new as Partial<Debate>))
@@ -496,7 +504,7 @@ export function subscribeDebate(debateId: string, onChange: (d: Partial<Debate>)
 // Live poll bars, the "who's in the room" gallery, and the Q&A queue.
 
 export function subscribeTally(debateId: string, onChange: (t: Tally) => void) {
-  const ch = supabase.channel(`votes:${debateId}`)
+  const ch = supabase.channel(`votes:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'votes', filter: `debate_id=eq.${debateId}` },
       async () => onChange(await getTally(debateId)))
@@ -505,7 +513,7 @@ export function subscribeTally(debateId: string, onChange: (t: Tally) => void) {
 }
 
 export function subscribeParticipants(debateId: string, onChange: () => void) {
-  const ch = supabase.channel(`participants:${debateId}`)
+  const ch = supabase.channel(`participants:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: '*', schema: 'public', table: 'debate_participants', filter: `debate_id=eq.${debateId}` },
       () => onChange())
@@ -514,7 +522,7 @@ export function subscribeParticipants(debateId: string, onChange: () => void) {
 }
 
 export function subscribeQuestions(debateId: string, onChange: () => void) {
-  const ch = supabase.channel(`questions:${debateId}`)
+  const ch = supabase.channel(`questions:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: '*', schema: 'public', table: 'questions', filter: `debate_id=eq.${debateId}` },
       () => onChange())
@@ -537,7 +545,7 @@ export async function sendChat(debateId: string, body: string) {
   if (error) throw error;
 }
 export function subscribeChat(debateId: string, onInsert: (m: ChatMsg) => void) {
-  const ch = supabase.channel(`chat:${debateId}`)
+  const ch = supabase.channel(`chat:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `debate_id=eq.${debateId}` },
       (p: any) => onInsert(p.new as ChatMsg))
@@ -562,7 +570,7 @@ export async function markNotificationsRead(ids?: string[]) {
   if (error) throw error;
 }
 export function subscribeNotifications(userId: string, onInsert: (n: AppNotification) => void) {
-  const ch = supabase.channel(`notifs:${userId}`)
+  const ch = supabase.channel(`notifs:${userId}:${uniq()}`)
     .on('postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
       (p: any) => onInsert(p.new as AppNotification))
