@@ -85,7 +85,6 @@ export function RoleDock(p: Props) {
           label={p.canPublish ? (p.micOn ? 'Mic on' : 'Mic off') : 'Not your turn'}
           onClick={p.toggleMic} accent={C.jade} />
         <Btn active={p.camOn} disabled={!p.canPublish} label="Camera" onClick={p.toggleCam} />
-        <ShareSlides debateId={p.debateId} disabled={false} />
         <Sep />
         <Note>
           {p.canPublish ? 'You hold the floor — opponents are muted until their segment.'

@@ -56,6 +56,7 @@ export function useRoom(debateId: string | null): UseRoom {
       const md = meta(p);
       const cam: TrackPublication | undefined = p.getTrackPublication(Track.Source.Camera);
       const mic: TrackPublication | undefined = p.getTrackPublication(Track.Source.Microphone);
+      const scr: TrackPublication | undefined = p.getTrackPublication(Track.Source.ScreenShare);
       return {
         identity: p.identity,
         name: p.name || 'Guest',
@@ -69,6 +70,7 @@ export function useRoom(debateId: string | null): UseRoom {
         camOn: !!cam && !cam.isMuted,
         videoTrack: cam?.track ?? undefined,
         audioTrack: mic?.track ?? undefined,
+        screenTrack: scr?.track ?? undefined,
       };
     }));
   }, []);

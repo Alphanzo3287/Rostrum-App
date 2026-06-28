@@ -28,9 +28,10 @@ const LAYOUTS: { key: BcastLayout; label: string; needsScreen?: boolean }[] = [
   { key: 'cinema',    label: 'Cinema', needsScreen: true },
 ];
 
-export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScreenShare }: {
+export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScreenShare, onLocalState }: {
   debateId: string; role: Role; identity: string; members: any[]; lkRoom?: any;
   setScreenShare?: (on: boolean) => Promise<boolean>;
+  onLocalState?: (patch: Partial<BroadcastState>) => void;
 }) {
   const [bs, setBs] = useState<BroadcastState>({ layout: 'solo', stageId: null, slidesOn: false, presenterId: null, presentType: null, presentRequest: null });
   const [busy, setBusy] = useState(false);
@@ -50,6 +51,7 @@ export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScr
   function pushLayout(layout: BcastLayout) {
     if (!isHost) return;
     setBs(b => ({ ...b, layout }));
+    onLocalState?.({ layout });
     publishBcastControl(lkRoom, { layout });
     setBroadcastState(debateId, { layout }).catch(() => {});
   }
@@ -57,6 +59,7 @@ export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScr
   async function grantPresenter(id: string | null, type: 'slides' | 'screen' = 'slides') {
     if (!isHost) return;
     setBs(b => ({ ...b, presenterId: id, presentType: id ? type : null }));
+    onLocalState?.({ presenterId: id, presentType: id ? type : null });
     publishBcastControl(lkRoom, { presenterId: id, presentType: id ? type : null });
     try { await setPresenter(debateId, id, type); } catch (e: any) { alert(e?.message ?? 'Could not set presenter'); }
   }
@@ -65,10 +68,12 @@ export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScr
     setBusy(true);
     try {
       await uploadDeck(debateId, await rasterizeToImages(files));
+      const pid = bs.presenterId ?? identity;
       // If I'm the granted presenter (or host), make my slides the screen source.
       if (isHost && !bs.presenterId) await setPresenter(debateId, identity, 'slides');
-      publishBcastControl(lkRoom, { deckChanged: true, presentType: 'slides',
-        presenterId: bs.presenterId ?? identity });
+      setBs(b => ({ ...b, presenterId: pid, presentType: 'slides' }));
+      onLocalState?.({ presenterId: pid, presentType: 'slides' });
+      publishBcastControl(lkRoom, { deckChanged: true, presentType: 'slides', presenterId: pid });
       // Nudge layout to a screen layout so it's visible.
       if (isHost) pushLayout('news');
     } catch (e: any) { alert(e?.message ?? 'Upload failed'); }

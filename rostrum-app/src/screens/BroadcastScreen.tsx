@@ -19,12 +19,17 @@ import { SlideStage } from '../components/SlideStage';
 import { ScreenTile } from '../components/ScreenTile';
 import { C, ui, display, mono } from '../lib/theme';
 
-/* ───────────── error boundary: never leave YouTube on a black screen ──── */
-class BroadcastBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
-  constructor(p: any) { super(p); this.state = { failed: false }; }
+/* ───────────── error boundary: never leave YouTube on a black screen ────
+   Resets ONLY when resetKey changes (e.g. phase/layout/presenter shifts), so
+   a transient throw recovers cleanly without an infinite catch→retry loop. */
+class BroadcastBoundary extends Component<{ children: ReactNode; resetKey: string }, { failed: boolean; key: string }> {
+  constructor(p: any) { super(p); this.state = { failed: false, key: p.resetKey }; }
   static getDerivedStateFromError() { return { failed: true }; }
+  static getDerivedStateFromProps(props: any, state: any) {
+    if (props.resetKey !== state.key) return { failed: false, key: props.resetKey };
+    return null;
+  }
   componentDidCatch(e: any) { console.error('broadcast render error:', e); }
-  componentDidUpdate() { /* auto-recover on next state change */ if (this.state.failed) this.setState({ failed: false }); }
   render() {
     if (this.state.failed) {
       return (
@@ -41,7 +46,11 @@ class BroadcastBoundary extends Component<{ children: ReactNode }, { failed: boo
 }
 
 export function BroadcastScreen() {
-  return <BroadcastBoundary><BroadcastInner /></BroadcastBoundary>;
+  // resetKey lets the boundary recover when the broadcast meaningfully changes,
+  // without retrying on every render (which would loop on a hard error).
+  const [k, setK] = useState(0);
+  useEffect(() => { const t = setInterval(() => setK(v => v + 1), 4000); return () => clearInterval(t); }, []);
+  return <BroadcastBoundary resetKey={String(k)}><BroadcastInner /></BroadcastBoundary>;
 }
 
 function BroadcastInner() {
@@ -294,7 +303,7 @@ function Stage({ layout, featured, debateId, cams, presenter, screenTrack, prese
         <Panel>
           {ScreenContent}
           {screenCam && (
-            <div style={{ position:'absolute', bottom:14, right:14, width:220, height:124, borderRadius:10,
+            <div style={{ position:'absolute', bottom:14, right:14, width:150, height:84, borderRadius:9,
               overflow:'hidden', border:`2px solid ${tone(screenCam.side)}`, boxShadow:'0 8px 24px rgba(0,0,0,0.55)' }}>
               <VideoTile member={screenCam} active size="tile" />
             </div>
