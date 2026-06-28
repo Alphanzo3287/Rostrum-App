@@ -80,12 +80,13 @@ function Gate() {
         <Route path="messages" element={<InboxRoute />} />
         <Route path="messages/:handle" element={<ThreadRoute />} />
       </Route>
-      {/* full-bleed routes */}
-      <Route path="host" element={<CreateRoute />} />
-      <Route path="debate/:id/join" element={<InviteRoute />} />
-      <Route path="debate/:id/watch" element={<WatchRoute />} />
-      <Route path="debate/:id" element={<ChamberRoute />} />
-      <Route path="debate/:id/results" element={<ResultsRoute />} />
+      {/* full-bleed routes — each gets its own boundary so a crash shows a
+          recovery card with an escape, never a black void that traps the user */}
+      <Route path="host" element={<ErrorBoundary><CreateRoute /></ErrorBoundary>} />
+      <Route path="debate/:id/join" element={<ErrorBoundary><InviteRoute /></ErrorBoundary>} />
+      <Route path="debate/:id/watch" element={<ErrorBoundary><WatchRoute /></ErrorBoundary>} />
+      <Route path="debate/:id" element={<ErrorBoundary><ChamberRoute /></ErrorBoundary>} />
+      <Route path="debate/:id/results" element={<ErrorBoundary><ResultsRoute /></ErrorBoundary>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

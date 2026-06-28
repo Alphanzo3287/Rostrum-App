@@ -17,6 +17,7 @@ import { joinDebate, getBroadcastState, subscribeBroadcastState, type BroadcastS
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
 import { ScreenTile } from '../components/ScreenTile';
+import { SafePanel } from '../components/SafePanel';
 import { ContextRail } from '../components/ContextRail';
 import { RoleDock } from '../components/RoleDock';
 import { BroadcastBar } from '../components/BroadcastBar';
@@ -121,17 +122,22 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
                   )}
                 </div>
 
-                {/* canvas — mirrors the live broadcast composition */}
+                {/* canvas — mirrors the live broadcast composition (isolated so a
+                    rendering error can never take down the host's controls) */}
                 <div style={{ flex:1, minHeight:0, position:'relative', borderRadius:7, overflow:'hidden', border:`1px solid ${C.hair}`, background:C.base2 }}>
-                  <ChamberPreview members={room.members} bs={bs} debateId={debateId}
-                    speaker={speaker} speakerSide={speakerSide} meId={me?.identity} />
+                  <SafePanel resetKey={`${bs.layout}:${bs.presenterId ?? ''}:${dz.phase}`} label="Preview">
+                    <ChamberPreview members={room.members} bs={bs} debateId={debateId}
+                      speaker={speaker} speakerSide={speakerSide} meId={me?.identity} />
+                  </SafePanel>
                 </div>
 
                 {/* broadcast control bar — host layout switcher + present flow */}
                 {(role === 'host' || role === 'debater' || role === 'moderator') && (
-                  <BroadcastBar debateId={debateId} role={role} identity={me?.identity ?? ''}
-                    members={room.members} lkRoom={room.room} setScreenShare={room.setScreenShare}
-                    onLocalState={(patch) => setBs(b => ({ ...b, ...patch }))} />
+                  <SafePanel resetKey={`bar:${dz.phase}`} label="Controls">
+                    <BroadcastBar debateId={debateId} role={role} identity={me?.identity ?? ''}
+                      members={room.members} lkRoom={room.room} setScreenShare={room.setScreenShare}
+                      onLocalState={(patch) => setBs(b => ({ ...b, ...patch }))} />
+                  </SafePanel>
                 )}
 
                 {/* filmstrip */}

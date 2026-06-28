@@ -17,6 +17,7 @@ import {
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
 import { ScreenTile } from '../components/ScreenTile';
+import { SafePanel } from '../components/SafePanel';
 import { C, ui, display, mono } from '../lib/theme';
 
 /* ───────────── error boundary: never leave YouTube on a black screen ────
@@ -183,14 +184,18 @@ function BroadcastInner() {
         ? <BroadcastAssembly host={host} prop={prop} opp={opp}
             mod={members.find(m => m.role === 'moderator')}
             judges={members.filter(m => m.role === 'judge')} audience={audience} />
+        : cams.length === 0 && !hasScreenSource
+        ? <BroadcastStandby motion={dz.debate?.motion} segLabel={dz.seg?.label} />
         : (
           <div style={{ flex:1, display:'flex', gap:12, padding:'4px 18px 12px', overflow:'hidden' }}>
             {/* Stage */}
             <div style={{ flex: (layout==='group'||layout==='cinema') ? '1 1 100%' : '1 1 72%',
               display:'flex', gap:12, minWidth:0 }}>
-              <Stage layout={layout} featured={featured} debateId={debateId}
-                cams={cams} presenter={presenter} screenTrack={screenTrack}
-                presentType={bs.presentType} hasScreenShare={hasScreenShare} hasSlides={hasSlides} />
+              <SafePanel resetKey={`${layout}:${bs.presenterId ?? ''}:${hasScreenSource}`} label="Stage">
+                <Stage layout={layout} featured={featured} debateId={debateId}
+                  cams={cams} presenter={presenter} screenTrack={screenTrack}
+                  presentType={bs.presentType} hasScreenShare={hasScreenShare} hasSlides={hasSlides} />
+              </SafePanel>
             </div>
             {/* Name plates (hidden for full-bleed layouts) */}
             {layout!=='group' && layout!=='cinema' && (
@@ -233,6 +238,26 @@ function BroadcastInner() {
       </div>
 
       <style>{`@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.3 } }`}</style>
+    </div>
+  );
+}
+
+/* ───────────── branded standby — shown instead of a black frame ──────── */
+function BroadcastStandby({ motion, segLabel }: { motion?: string; segLabel?: string }) {
+  return (
+    <div style={{ flex:1, display:'grid', placeItems:'center', textAlign:'center', padding:24 }}>
+      <div>
+        <div style={{ fontFamily:display, fontSize:40, fontWeight:800, color:C.gold, marginBottom:14 }}>The Rostrum</div>
+        {motion && <div style={{ fontFamily:display, fontSize:24, fontWeight:600, color:C.ink, marginBottom:10, maxWidth:760 }}>{motion}</div>}
+        <div style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'8px 16px', borderRadius:999,
+          border:`1px solid ${C.hair}`, background:'rgba(255,255,255,0.03)' }}>
+          <span style={{ width:8, height:8, borderRadius:'50%', background:C.gold,
+            animation:'pulse 1.4s ease-in-out infinite' }} />
+          <span style={{ fontFamily:ui, fontSize:13, color:C.dim, letterSpacing:'.04em' }}>
+            {segLabel ? `${segLabel} — connecting the floor…` : 'The debate is starting…'}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
