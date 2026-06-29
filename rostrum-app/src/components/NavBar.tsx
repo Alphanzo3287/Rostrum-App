@@ -77,6 +77,13 @@ export function NavBar() {
           <Avatar url={profile?.avatar_url} name={profile?.display_name} size={34} />
         </button>
         {(profile as any)?.is_admin && (
+          <button onClick={() => nav('/admin')}
+            style={{ fontFamily:ui, fontSize:12, color: pathname==='/admin' ? C.gold : C.faint,
+              background:'none', border:'none', cursor:'pointer', fontWeight: pathname==='/admin'?700:400 }}>
+            Analytics
+          </button>
+        )}
+        {(profile as any)?.is_admin && (
           <button onClick={() => nav('/moderation')}
             style={{ fontFamily:ui, fontSize:12, color: pathname==='/moderation' ? C.garnet : C.faint,
               background:'none', border:'none', cursor:'pointer', fontWeight: pathname==='/moderation'?700:400 }}>
