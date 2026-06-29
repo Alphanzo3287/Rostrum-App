@@ -14,7 +14,7 @@ import { getMyWallet } from '../lib/payments';
 
 const LINKS: [string, string][] = [
   ['/', 'Lobby'], ['/leaderboard', 'Leaderboard'], ['/teams', 'Teams'],
-  ['/store', 'Store'], ['/earnings', 'Earnings'], ['/settings', 'Settings'],
+  ['/store', 'Store'], ['/earnings', 'Earnings'], ['/support', 'Help'], ['/settings', 'Settings'],
 ];
 
 export function NavBar() {
@@ -76,6 +76,13 @@ export function NavBar() {
             outline: pathname === '/me' ? `2px solid ${C.gold}` : 'none' }}>
           <Avatar url={profile?.avatar_url} name={profile?.display_name} size={34} />
         </button>
+        {(profile as any)?.is_admin && (
+          <button onClick={() => nav('/moderation')}
+            style={{ fontFamily:ui, fontSize:12, color: pathname==='/moderation' ? C.garnet : C.faint,
+              background:'none', border:'none', cursor:'pointer', fontWeight: pathname==='/moderation'?700:400 }}>
+            Mod
+          </button>
+        )}
         <button onClick={signOut} style={{ fontFamily:ui, fontSize:12, color:C.faint, background:'none', border:'none', cursor:'pointer' }}>
           Sign out
         </button>

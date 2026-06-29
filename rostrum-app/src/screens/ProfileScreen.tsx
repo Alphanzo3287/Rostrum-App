@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
 import { getProfile, getAchievements, amFollowing, follow, unfollow } from '../lib/api';
+import { ReportModal } from '../components/ReportModal';
 import type { Profile, Achievement } from '../lib/types';
 import { C, ui, display, mono, solidGold } from '../lib/theme';
 import { Avatar, RankBadge, Stat, Section, Scroll, Center, Empty, pill, ghostBtn, hrefFor } from '../components/ui';
@@ -87,6 +88,7 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
             <button onClick={toggleFollow} disabled={busy} style={following ? ghostBtn : ghostBtn}>
               {following ? 'Following ✓' : 'Follow'}
             </button>
+            <ReportModal targetType="user" targetId={profile.id} label="⚑ Report" />
           </div>
         )}
       </div>

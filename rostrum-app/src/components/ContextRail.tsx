@@ -4,6 +4,7 @@
 // askQuestion/subscribeQuestions/setQuestionStatus, Score → submitBallot.
 // =====================================================================
 import { useEffect, useRef, useState } from 'react';
+import { ReportModal } from './ReportModal';
 import {
   castVote, getTally, subscribeTally,
   askQuestion, setQuestionStatus, subscribeQuestions,
@@ -175,13 +176,20 @@ function ChatPanel({ debateId }: { debateId: string }) {
         {msgs.length === 0
           ? <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>No messages yet — say something to the room.</p>
           : msgs.map(m => (
-            <div key={m.id} style={{ display:'flex', gap:9, alignItems:'flex-start' }}>
+            <div key={m.id} style={{ display:'flex', gap:9, alignItems:'flex-start' }}
+              onMouseEnter={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.report-btn'); if (btn) btn.style.opacity='1'; }}
+              onMouseLeave={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.report-btn'); if (btn) btn.style.opacity='0'; }}>
               <Avatar url={m.sender_avatar} name={m.sender_name} size={28} />
-              <div style={{ minWidth:0 }}>
+              <div style={{ minWidth:0, flex:1 }}>
                 <div style={{ display:'flex', alignItems:'baseline', gap:7 }}>
                   <span style={{ fontFamily:ui, fontSize:12.5, fontWeight:700, color: m.sender_id===me ? C.goldHi : C.ink }}>
                     {m.sender_name}{m.sender_id===me ? ' · you' : ''}</span>
                   <span style={{ fontFamily:mono, fontSize:9.5, color:C.faint }}>{chatClock(m.created_at)}</span>
+                  {m.sender_id !== me && (
+                    <span className="report-btn" style={{ opacity:0, transition:'opacity .15s', marginLeft:'auto' }}>
+                      <ReportModal targetType="chat_message" targetId={m.id} label="⚑" />
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontFamily:ui, fontSize:13.5, color:C.dim, lineHeight:1.4, wordBreak:'break-word' }}>{m.body}</div>
               </div>

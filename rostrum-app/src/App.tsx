@@ -29,7 +29,10 @@ import { EarningsScreen } from './screens/EarningsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { WatchScreen } from './screens/WatchScreen';
 import { BroadcastScreen } from './screens/BroadcastScreen';
-import { getDebate } from './lib/api';
+import { SupportScreen } from './screens/SupportScreen';
+import { ModerationScreen } from './screens/ModerationScreen';
+import { BannedScreen } from './screens/BannedScreen';
+import { getDebate, getMyBan } from './lib/api';
 import type { DebateRole, Side } from './lib/types';
 import { C, ui } from './lib/theme';
 
@@ -43,14 +46,20 @@ export default function App() {
   );
 }
 
-/* Decide auth → onboarding → app, then hand off to the router. */
+/* Decide auth → onboarding → ban → app, then hand off to the router. */
 function Gate() {
   const { session, profile, loading } = useAuth();
   const [justSignedUp, setJustSignedUp] = useState(false);
+  const [isBanned, setIsBanned] = useState(false);
 
-  // The public broadcast view (rendered by LiveKit egress for YouTube) has no
-  // login — it authorizes via a signed token in the URL. Serve it before any
-  // auth/onboarding gate so the egress browser never hits the sign-in screen.
+  useEffect(() => {
+    if (session && profile) {
+      if ((profile as any).is_banned) { setIsBanned(true); return; }
+      // Double-check via ban table in case profile cache is stale
+      getMyBan().then(b => { if (b && !b.lifted_at) setIsBanned(true); }).catch(() => {});
+    }
+  }, [session, profile]);
+
   if (typeof window !== 'undefined' && window.location.pathname.startsWith('/broadcast/')) {
     return (
       <Routes>
@@ -61,9 +70,12 @@ function Gate() {
 
   if (loading) return <Splash />;
   if (!session) return <AuthScreen onSignedUp={() => setJustSignedUp(true)} />;
+  if (isBanned) return <BannedScreen />;
 
   const needsOnboard = justSignedUp || (profile != null && !profile.bio && profile.topics.length === 0);
   if (needsOnboard) return <OnboardScreen onDone={() => setJustSignedUp(false)} />;
+
+  const isAdmin = !!(profile as any)?.is_admin;
 
   return (
     <Routes>
@@ -75,6 +87,8 @@ function Gate() {
         <Route path="store" element={<StoreRoute />} />
         <Route path="earnings" element={<EarningsRoute />} />
         <Route path="settings" element={<SettingsRoute />} />
+        <Route path="support" element={<SupportRoute />} />
+        {isAdmin && <Route path="moderation" element={<ModerationRoute />} />}
         <Route path="me" element={<ProfileRoute />} />
         <Route path="u/:handle" element={<ProfileRoute />} />
         <Route path="messages" element={<InboxRoute />} />
@@ -191,6 +205,13 @@ function ResultsRoute() {
   const nav = useNavigate();
   if (!id) return <Navigate to="/" replace />;
   return <ResultsScreen debateId={id} onBackToLobby={() => nav('/')} />;
+}
+
+function SupportRoute() {
+  return <SupportScreen />;
+}
+function ModerationRoute() {
+  return <ModerationScreen />;
 }
 
 function Splash() {

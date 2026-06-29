@@ -607,3 +607,89 @@ export function subscribeNotifications(userId: string, onInsert: (n: AppNotifica
       (p: any) => onInsert(p.new as AppNotification))
     .subscribe());
 }
+
+/* ─────────────────── TRUST & SAFETY ─────────────────── */
+export type ReportTargetType = 'user' | 'debate' | 'chat_message' | 'question';
+export type ReportReason = 'spam' | 'harassment' | 'hate_speech' | 'misinformation' | 'impersonation' | 'inappropriate_content' | 'other';
+export type ReportStatus = 'pending' | 'reviewed' | 'actioned' | 'dismissed';
+export type AppealStatus = 'open' | 'approved' | 'denied';
+export type TicketCategory = 'account' | 'billing' | 'technical' | 'content' | 'other';
+export type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+
+export interface Report { id: string; reporter_id: string; target_type: ReportTargetType; target_id: string; reason: ReportReason; body: string | null; status: ReportStatus; mod_note: string | null; created_at: string; }
+export interface Ban { id: string; user_id: string; admin_id: string; reason: string; expires_at: string | null; lifted_at: string | null; created_at: string; }
+export interface Appeal { id: string; ban_id: string; user_id: string; body: string; status: AppealStatus; admin_reply: string | null; created_at: string; }
+export interface SupportTicket { id: string; user_id: string; category: TicketCategory; subject: string; body: string; status: TicketStatus; created_at: string; updated_at: string; }
+export interface TicketMessage { id: string; ticket_id: string; author_id: string; body: string; is_admin: boolean; created_at: string; }
+export interface FaqItem { id: string; category: string; question: string; answer: string; sort: number; }
+
+export async function fileReport(targetType: ReportTargetType, targetId: string, reason: ReportReason, body?: string): Promise<string> {
+  const { data, error } = await supabase.rpc('file_report', { p_target_type: targetType, p_target_id: targetId, p_reason: reason, p_body: body ?? null });
+  if (error) throw error; return data as string;
+}
+export async function getMyReports(): Promise<Report[]> {
+  const { data, error } = await supabase.from('reports').select('*').order('created_at', { ascending: false });
+  if (error) throw error; return (data ?? []) as Report[];
+}
+export async function getAllReports(status?: ReportStatus): Promise<Report[]> {
+  let q = supabase.from('reports').select('*').order('created_at', { ascending: false });
+  if (status) q = (q as any).eq('status', status);
+  const { data, error } = await q; if (error) throw error; return (data ?? []) as Report[];
+}
+export async function reviewReport(reportId: string, status: ReportStatus, note?: string, ban?: boolean, banReason?: string, banDays?: number): Promise<void> {
+  const { error } = await supabase.rpc('review_report', { p_report: reportId, p_status: status, p_note: note ?? null, p_ban: ban ?? false, p_ban_reason: banReason ?? null, p_ban_days: banDays ?? null });
+  if (error) throw error;
+}
+export async function liftBan(banId: string): Promise<void> {
+  const { error } = await supabase.rpc('lift_ban', { p_ban: banId }); if (error) throw error;
+}
+export async function getAllBans(): Promise<Ban[]> {
+  const { data, error } = await supabase.from('bans').select('*').order('created_at', { ascending: false });
+  if (error) throw error; return (data ?? []) as Ban[];
+}
+export async function submitTicket(category: TicketCategory, subject: string, body: string): Promise<string> {
+  const { data, error } = await supabase.rpc('submit_ticket', { p_category: category, p_subject: subject, p_body: body });
+  if (error) throw error; return data as string;
+}
+export async function getMyTickets(): Promise<SupportTicket[]> {
+  const { data, error } = await supabase.from('support_tickets').select('*').order('updated_at', { ascending: false });
+  if (error) throw error; return (data ?? []) as SupportTicket[];
+}
+export async function getAllTickets(): Promise<SupportTicket[]> {
+  const { data, error } = await supabase.from('support_tickets').select('*').order('updated_at', { ascending: false });
+  if (error) throw error; return (data ?? []) as SupportTicket[];
+}
+export async function getTicketMessages(ticketId: string): Promise<TicketMessage[]> {
+  const { data, error } = await supabase.from('ticket_messages').select('*').eq('ticket_id', ticketId).order('created_at');
+  if (error) throw error; return (data ?? []) as TicketMessage[];
+}
+export async function replyTicket(ticketId: string, body: string): Promise<void> {
+  const { error } = await supabase.rpc('reply_ticket', { p_ticket: ticketId, p_body: body }); if (error) throw error;
+}
+export async function resolveTicket(ticketId: string): Promise<void> {
+  const { error } = await supabase.rpc('resolve_ticket', { p_ticket: ticketId }); if (error) throw error;
+}
+export async function fileAppeal(banId: string, body: string): Promise<string> {
+  const { data, error } = await supabase.rpc('file_appeal', { p_ban: banId, p_body: body });
+  if (error) throw error; return data as string;
+}
+export async function getMyAppeals(): Promise<Appeal[]> {
+  const { data, error } = await supabase.from('appeals').select('*').order('created_at', { ascending: false });
+  if (error) throw error; return (data ?? []) as Appeal[];
+}
+export async function getAllAppeals(): Promise<Appeal[]> {
+  const { data, error } = await supabase.from('appeals').select('*').order('created_at', { ascending: false });
+  if (error) throw error; return (data ?? []) as Appeal[];
+}
+export async function ruleAppeal(appealId: string, status: AppealStatus, reply?: string): Promise<void> {
+  const { error } = await supabase.rpc('rule_appeal', { p_appeal: appealId, p_status: status, p_reply: reply ?? null });
+  if (error) throw error;
+}
+export async function getFaq(): Promise<FaqItem[]> {
+  const { data, error } = await supabase.from('faq_items').select('*').eq('published', true).order('sort');
+  if (error) throw error; return (data ?? []) as FaqItem[];
+}
+export async function getMyBan(): Promise<Ban | null> {
+  const { data } = await supabase.from('bans').select('*').is('lifted_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle();
+  return (data as Ban) ?? null;
+}
