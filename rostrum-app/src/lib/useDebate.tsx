@@ -31,6 +31,20 @@ export function useDebate(debateId: string) {
     return off;
   }, [debateId]);
 
+  // Safety net: realtime postgres_changes can be dropped for some clients
+  // (anon broadcast viewers, RLS edge cases, reconnects). A slow refetch makes
+  // sure poll_open / winner_announced / segment state always converge even if a
+  // single change event is missed. Stops once the debate has ended.
+  useEffect(() => {
+    if (debate?.status === 'ended') return;
+    const t = setInterval(() => {
+      getDebate(debateId)
+        .then(({ debate: fresh }) => { if (fresh) setDebate(prev => ({ ...(prev ?? {}), ...fresh } as Debate)); })
+        .catch(() => {});
+    }, 4000);
+    return () => clearInterval(t);
+  }, [debateId, debate?.status]);
+
   // Auto-load results when the host announces the winner (all participants)
   useEffect(() => {
     if (debate?.winner_announced && !results) {
