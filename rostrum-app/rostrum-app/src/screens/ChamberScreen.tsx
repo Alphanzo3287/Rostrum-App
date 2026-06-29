@@ -12,11 +12,17 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { useRoom } from '../lib/useRoom';
 import { useDebate } from '../lib/useDebate';
-import { joinDebate } from '../lib/api';
+import { useYouTubeStream } from '../lib/useYouTubeStream';
+import { joinDebate, getBroadcastState, subscribeBroadcastState, getResults, type BroadcastState } from '../lib/api';
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
+import { ScreenTile } from '../components/ScreenTile';
+import { SafePanel } from '../components/SafePanel';
 import { ContextRail } from '../components/ContextRail';
 import { RoleDock } from '../components/RoleDock';
+import { WinnerOverlay } from '../components/WinnerOverlay';
+import { BroadcastBar } from '../components/BroadcastBar';
+import { ShareButton } from '../components/ShareSheet';
 import { C, ui, display, mono } from '../lib/theme';
 
 type Layout = 'slides' | 'spotlight' | 'grid';
@@ -29,8 +35,21 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   const dz = useDebate(debateId);
   const nav = useNavigate();
   const openProfile = (handle?: string | null) => { if (handle) nav(`/u/${handle}`); };
-  const [layout, setLayout] = useState<Layout>('slides');
   const [tab, setTab] = useState('vote');
+
+  // Mirror the live broadcast composition so the host's preview matches what
+  // YouTube sees, and the layout strip gives immediate visual feedback.
+  const [bs, setBs] = useState<BroadcastState>({ layout: 'solo', stageId: null, slidesOn: false, presenterId: null, presentType: null, presentRequest: null });
+  useEffect(() => {
+    let alive = true;
+    getBroadcastState(debateId).then(s => { if (alive) setBs(s); }).catch(() => {});
+    const off = subscribeBroadcastState(debateId, s => { if (alive) setBs(s); });
+    return () => { alive = false; off(); };
+  }, [debateId]);
+
+  // YouTube simulcast state, lifted here so it survives the dock remount
+  // when the debate moves from assembly → live.
+  const yt = useYouTubeStream(debateId, true);
 
   // make sure a participant row exists (token also upserts audience as a fallback)
   useEffect(() => { joinDebate(debateId).catch(() => {}); }, [debateId]);
@@ -66,7 +85,16 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         <div style={{ fontFamily:display, fontSize:18, color:C.ink, fontWeight:600, overflow:'hidden',
           whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{dz.debate?.motion ?? '…'}</div>
         <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:16, fontFamily:mono, fontSize:12, color:C.dim }}>
+          <ShareButton compact url={typeof window!=='undefined' ? `${window.location.origin}/debate/${debateId}` : ''}
+            title={dz.debate?.motion ?? 'A debate on The Rostrum'}
+            text={dz.debate?.motion ? `Watch: ${dz.debate.motion}` : 'Watch this debate on The Rostrum'} />
           <span>{Math.max(dz.debate?.viewer_count ?? 0, room.members.length).toLocaleString()} watching</span>
+          <button onClick={() => nav(`/debate/${debateId}/watch`)} title="Immersive view"
+            style={{ padding:'4px 10px', borderRadius:4, border:`1px solid ${C.hair}`,
+              color:C.dim, fontSize:12, fontFamily:ui, fontWeight:600,
+              background:'transparent', cursor:'pointer' }}>
+            ⛶ Immersive
+          </button>
           <button onClick={() => role==='host' && setTab('ros')}
             title={role==='host' ? 'Edit time in Run of show' : undefined}
             style={{ padding:'4px 10px', borderRadius:4, border:`1px solid ${low ? C.ember : C.hair}`,
@@ -83,35 +111,60 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
           {dz.phase === 'assembly'
             ? <Assembly members={room.members} onProfile={openProfile} />
             : <>
-                {/* segment + layout switch */}
+                {/* segment label + "what YouTube sees" hint */}
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
                   <span style={{ fontFamily:ui, fontSize:10.5, fontWeight:700, letterSpacing:2.5, textTransform:'uppercase',
                     color: speakerSide==='opp' ? C.garnetHi : speakerSide==='prop' ? C.jadeHi : C.gold }}>
                     {dz.seg?.label ?? 'Segment'}</span>
-                  <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
-                    {(['slides','spotlight','grid'] as Layout[]).map(k => (
-                      <button key={k} onClick={() => setLayout(k)} style={{ ...iconBtn,
-                        borderColor: layout===k ? C.gold : C.hair, color: layout===k ? C.gold : C.dim, fontSize:11 }}>{k[0].toUpperCase()}</button>
-                    ))}
-                  </div>
+                  {role === 'host' && (
+                    <span style={{ marginLeft:'auto', fontFamily:ui, fontSize:10, color:C.faint, letterSpacing:'.04em' }}>
+                      Preview · {bs.layout}{bs.presenterId ? ' · presenting' : ''}
+                    </span>
+                  )}
                 </div>
 
-                {/* canvas */}
+                {/* canvas — mirrors the live broadcast composition (isolated so a
+                    rendering error can never take down the host's controls) */}
                 <div style={{ flex:1, minHeight:0, position:'relative', borderRadius:7, overflow:'hidden', border:`1px solid ${C.hair}`, background:C.base2 }}>
-                  {layout === 'grid'
-                    ? <div style={{ position:'absolute', inset:0, padding:12, display:'grid', gap:10,
-                        gridTemplateColumns:'repeat(3,1fr)', alignContent:'center' }}>
-                        {room.members.map(m => <VideoTile key={m.identity} member={m} active={m.identity===speaker?.identity} />)}
-                      </div>
-                    : <>
-                        <SlideStage debateId={debateId} canPresent={room.canPublish && role !== 'host'} dim={layout==='spotlight'} />
-                        {speaker && (
-                          <div style={{ position:'absolute', right:'3%', bottom:'7%', width: layout==='spotlight' ? '46%' : '31%', aspectRatio:'4 / 3' }}>
-                            <VideoTile member={speaker} active size={layout==='spotlight' ? 'stage' : 'tile'} />
-                          </div>
-                        )}
-                      </>}
+                  <SafePanel resetKey={`${bs.layout}:${bs.presenterId ?? ''}:${dz.phase}`} label="Preview" fill>
+                    <ChamberPreview members={room.members} bs={bs} debateId={debateId}
+                      speaker={speaker} speakerSide={speakerSide} meId={me?.identity} />
+                  </SafePanel>
+
+                  {/* Voting now indicator */}
+                  {dz.debate?.poll_open && (
+                    <div style={{ position:'absolute', top:10, right:10, zIndex:20, display:'flex', alignItems:'center', gap:6,
+                      padding:'5px 12px', borderRadius:20, background:'rgba(0,0,0,0.7)', backdropFilter:'blur(6px)',
+                      border:`1px solid ${C.jade}55` }}>
+                      <span style={{ width:8, height:8, borderRadius:'50%', background:C.jade,
+                        boxShadow:`0 0 6px ${C.jade}`, animation:'pulse 1.5s infinite' }} />
+                      <span style={{ fontFamily:ui, fontSize:11, fontWeight:700, color:C.jade,
+                        textTransform:'uppercase', letterSpacing:'.08em' }}>Voting open</span>
+                    </div>
+                  )}
+
+                  {/* Winner reveal overlay */}
+                  {dz.debate?.winner_announced && dz.results && (
+                    <WinnerOverlay
+                      winnerSide={dz.results.winner_side}
+                      winMode={dz.debate.win_mode ?? 'public'}
+                      peoplesChoice={dz.results.peoples_choice_side}
+                      propScore={dz.results.prop_judge_total}
+                      oppScore={dz.results.opp_judge_total}
+                      propAudience={dz.results.prop_audience}
+                      oppAudience={dz.results.opp_audience}
+                    />
+                  )}
                 </div>
+
+                {/* broadcast control bar — host layout switcher + present flow */}
+                {(role === 'host' || role === 'debater' || role === 'moderator') && (
+                  <SafePanel resetKey={`bar:${dz.phase}`} label="Controls">
+                    <BroadcastBar debateId={debateId} role={role} identity={me?.identity ?? ''}
+                      members={room.members} lkRoom={room.room} setScreenShare={room.setScreenShare}
+                      onLocalState={(patch) => setBs(b => ({ ...b, ...patch }))} />
+                  </SafePanel>
+                )}
 
                 {/* filmstrip */}
                 <div style={{ display:'flex', gap:9, overflowX:'auto', padding:'12px 2px 14px' }}>
@@ -124,7 +177,8 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
               </>}
         </div>
 
-        <ContextRail debateId={debateId} role={role} tab={tab} setTab={setTab}
+        <ContextRail debateId={debateId} role={role} tab={tab} setTab={setTab} members={room.members} lkRoom={room.room}
+          pollOpen={!!dz.debate?.poll_open}
           ros={{
             segments: dz.segments, segIdx: dz.segIdx, remaining: dz.remaining,
             running: dz.running, phase: dz.phase,
@@ -150,11 +204,93 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         onNextSegment={() => dz.nextSegment(room.members)}
         onToggleTimer={dz.toggleTimer}
         onEnd={dz.endDebate}
+        onCancel={async () => { await dz.cancelEvent(); onLeave(); }}
+        streamPhase={yt.phase}
+        streamError={yt.error}
+        onStreamStart={yt.start}
+        onStreamStop={yt.stop}
         setTab={setTab}
         onLeave={onLeave}
+        pollOpen={!!dz.debate?.poll_open}
+        onTogglePoll={dz.togglePoll}
+        winMode={dz.debate?.win_mode}
+        onFinalize={dz.doFinalize}
+        onAnnounce={dz.doAnnounce}
+        resultsReady={!!dz.results}
+        winnerAnnounced={!!dz.debate?.winner_announced}
       />
     </div>
   );
+}
+
+/* ---- chamber preview: mirrors the live broadcast composition ---- */
+function ChamberPreview({ members, bs, debateId, speaker, speakerSide, meId }: {
+  members: M[]; bs: BroadcastState; debateId: string; speaker?: M; speakerSide: string | null; meId?: string;
+}) {
+  const presenter = bs.presenterId ? members.find(m => m.identity === bs.presenterId) : undefined;
+  const screenTrack = (presenter as any)?.screenTrack;
+  const hasScreen = bs.presentType === 'screen' && !!screenTrack;
+  const iPresent = !!meId && bs.presenterId === meId && bs.presentType === 'slides';
+  const featured = (bs.stageId ? members.find(m => m.identity === bs.stageId) : undefined)
+    ?? presenter ?? speaker
+    ?? members.find(m => m.role === 'debater' && m.side === speakerSide)
+    ?? members.find(m => m.role === 'host')
+    ?? members[0];
+  const cams = members.filter(m => ['host','debater','moderator'].includes(m.role));
+  const screenCam = presenter ?? featured;
+
+  const Content = hasScreen
+    ? <ScreenTile track={screenTrack} fit="contain" />
+    : <SlideStage debateId={debateId} canPresent={iPresent} />;
+
+  const cam = (m?: M, big = true) => m
+    ? <div style={{ position:'absolute', inset:0 }}><VideoTile member={m} active size={big ? 'stage' : 'tile'} /></div>
+    : <div style={{ position:'absolute', inset:0, display:'grid', placeItems:'center', color:C.faint, fontSize:13 }}>Waiting…</div>;
+
+  const wrap = (children: React.ReactNode) =>
+    <div style={{ position:'absolute', inset:0, padding:8 }}>{children}</div>;
+
+  switch (bs.layout) {
+    case 'group':
+      return wrap(
+        <div style={{ width:'100%', height:'100%', display:'grid', gap:8,
+          gridTemplateColumns:`repeat(${cams.length<=1?1:cams.length<=4?2:3},1fr)`, alignContent:'center' }}>
+          {cams.map(m => <div key={m.identity} style={{ position:'relative' }}><VideoTile member={m} active={m.identity===speaker?.identity} /></div>)}
+        </div>);
+    case 'news':
+      return wrap(
+        <div style={{ width:'100%', height:'100%', display:'flex', gap:8 }}>
+          <div style={{ flex:'1 1 38%', position:'relative' }}>{cam(screenCam)}</div>
+          <div style={{ flex:'1 1 62%', position:'relative', borderRadius:6, overflow:'hidden' }}>{Content}</div>
+        </div>);
+    case 'screen':
+      return wrap(
+        <div style={{ width:'100%', height:'100%', display:'flex', gap:8 }}>
+          <div style={{ flex:'1 1 78%', position:'relative', borderRadius:6, overflow:'hidden' }}>{Content}</div>
+          <div style={{ flex:'1 1 22%', position:'relative' }}>{cam(screenCam,false)}</div>
+        </div>);
+    case 'pip':
+      return (
+        <>
+          <div style={{ position:'absolute', inset:0 }}>{Content}</div>
+          <div style={{ position:'absolute', right:'3%', bottom:'6%', width:'20%', aspectRatio:'16/9' }}>{cam(screenCam,false)}</div>
+        </>);
+    case 'cinema':
+      return <div style={{ position:'absolute', inset:0 }}>{Content}</div>;
+    case 'spotlight': {
+      const others = cams.filter(m => m.identity !== featured?.identity).slice(0,5);
+      return wrap(
+        <div style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', gap:8 }}>
+          <div style={{ flex:1, position:'relative' }}>{cam(featured)}</div>
+          {others.length>0 && <div style={{ flex:'0 0 22%', display:'flex', gap:8 }}>
+            {others.map(m => <div key={m.identity} style={{ flex:1, position:'relative' }}>{cam(m,false)}</div>)}
+          </div>}
+        </div>);
+    }
+    case 'solo':
+    default:
+      return cam(featured);
+  }
 }
 
 /* ---- assembly: the seated chamber before the gavel (real members) ---- */

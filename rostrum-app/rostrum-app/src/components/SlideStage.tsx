@@ -53,6 +53,7 @@ export function SlideStage({ debateId, canPresent, dim }: {
     <div style={{ position:'absolute', inset:0, background:'#0E0D11', opacity: dim ? 0.32 : 1, transition:'opacity .3s' }}>
       {urls.length
         ? <img src={urls[idx]} alt={`slide ${idx + 1}`}
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '0'; }}
             style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'contain' }} />
         : <div style={{ position:'absolute', inset:0, display:'grid', placeItems:'center', color:C.faint, fontFamily:ui, fontSize:13 }}>
             No deck uploaded — share slides from the dock</div>}

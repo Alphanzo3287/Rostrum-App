@@ -23,6 +23,7 @@ export interface RoomMember {
   camOn: boolean;
   videoTrack?: Track;
   audioTrack?: Track;
+  screenTrack?: Track;
 }
 
 interface UseRoom {
@@ -33,6 +34,7 @@ interface UseRoom {
   camOn: boolean;
   toggleMic: () => Promise<void>;
   toggleCam: () => Promise<void>;
+  setScreenShare: (on: boolean) => Promise<boolean>;
   room: Room | null;
 }
 
@@ -54,6 +56,7 @@ export function useRoom(debateId: string | null): UseRoom {
       const md = meta(p);
       const cam: TrackPublication | undefined = p.getTrackPublication(Track.Source.Camera);
       const mic: TrackPublication | undefined = p.getTrackPublication(Track.Source.Microphone);
+      const scr: TrackPublication | undefined = p.getTrackPublication(Track.Source.ScreenShare);
       return {
         identity: p.identity,
         name: p.name || 'Guest',
@@ -67,6 +70,7 @@ export function useRoom(debateId: string | null): UseRoom {
         camOn: !!cam && !cam.isMuted,
         videoTrack: cam?.track ?? undefined,
         audioTrack: mic?.track ?? undefined,
+        screenTrack: scr?.track ?? undefined,
       };
     }));
   }, []);
@@ -131,5 +135,12 @@ export function useRoom(debateId: string | null): UseRoom {
     setCamOn(next);
   }, [camOn]);
 
-  return { members, state, canPublish, micOn, camOn, toggleMic, toggleCam, room: roomRef.current };
+  const setScreenShare = useCallback(async (on: boolean) => {
+    const room = roomRef.current;
+    if (!room || !room.localParticipant.permissions?.canPublish) return false;
+    try { await room.localParticipant.setScreenShareEnabled(on); return true; }
+    catch { return false; }
+  }, []);
+
+  return { members, state, canPublish, micOn, camOn, toggleMic, toggleCam, setScreenShare, room: roomRef.current };
 }

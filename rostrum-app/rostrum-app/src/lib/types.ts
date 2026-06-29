@@ -5,8 +5,8 @@
 // =====================================================================
 
 export type DebateFormat = 'oxford' | 'cross_exam' | 'lincoln_douglas' | 'town_hall' | 'freestyle';
-export type DebateStatus = 'draft' | 'assembly' | 'live' | 'ended' | 'cancelled';
-export type Visibility   = 'public' | 'unlisted';
+export type DebateStatus = 'draft' | 'scheduled' | 'assembly' | 'live' | 'ended' | 'cancelled';
+export type Visibility   = 'public' | 'unlisted' | 'private';
 export type DebateRole   = 'host' | 'moderator' | 'debater' | 'judge' | 'audience';
 export type Side         = 'prop' | 'opp';
 export type TeamRole     = 'owner' | 'admin' | 'member';
@@ -51,6 +51,7 @@ export interface Debate {
   is_paid: boolean;
   price_cents: number;
   viewer_count: number;
+  scheduled_at: string | null;
   started_at: string | null;
   ended_at: string | null;
   recording_url: string | null;
@@ -63,6 +64,10 @@ export interface Debate {
   segment_paused_secs: number | null;
   // joined for convenience
   host?: Pick<Profile, 'display_name' | 'handle' | 'avatar_url'>;
+  // winner system
+  win_mode?: string;
+  poll_open?: boolean;
+  winner_announced?: boolean;
 }
 
 export interface Segment { id: string; debate_id: string; idx: number; label: string; side: Side | null; duration_secs: number; }
@@ -72,6 +77,7 @@ export interface DebateResult {
   debate_id: string; winner_side: Side | null;
   prop_judge_total: number; opp_judge_total: number;
   prop_audience: number; opp_audience: number; decided_at: string;
+  peoples_choice_side?: Side | null;
 }
 export interface Question { id: string; debate_id: string; asker_id: string; body: string; status: QuestionStatus; created_at: string; }
 export interface Team {

@@ -31,6 +31,10 @@ export async function openConversation(otherId: string): Promise<string> {
   if (error) throw error;
   return data as string;
 }
+export async function deleteConversation(cid: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_conversation', { p_convo: cid });
+  if (error) throw error;
+}
 export async function getMessages(cid: string): Promise<DMessage[]> {
   const { data, error } = await supabase.from('messages').select('*')
     .eq('conversation_id', cid).order('created_at', { ascending: true });
@@ -45,13 +49,16 @@ export async function sendMessage(cid: string, body: string): Promise<void> {
   const { error } = await supabase.from('messages').insert({ conversation_id: cid, sender_id: user.id, body: text });
   if (error) throw error;
 }
-export async function markRead(cid: string): Promise<void> { await supabase.rpc('mark_read', { p_convo: cid }); }
+export async function markRead(cid: string): Promise<void> {
+  await supabase.rpc('mark_read', { p_convo: cid });
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('rostrum:unread'));
+}
 export async function unreadTotal(): Promise<number> {
   const { data } = await supabase.rpc('unread_total');
   return (data as number) ?? 0;
 }
 export function subscribeMessages(cid: string, onInsert: (m: DMessage) => void) {
-  const ch = supabase.channel(`messages:${cid}`)
+  const ch = supabase.channel(`messages:${cid}:${Math.random().toString(36).slice(2)}`)
     .on('postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${cid}` },
       (p: any) => onInsert(p.new as DMessage))
@@ -100,24 +107,36 @@ export function InboxScreen({ onOpen, onBack }: { onOpen: (handle: string) => vo
           ? <Empty>No conversations yet. Open someone's profile and tap <b>Message</b> to start one.</Empty>
           : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {rows.map(c => (
-                <button key={c.id} onClick={() => onOpen(c.handle)} style={{ display: 'flex', alignItems: 'center', gap: 13,
-                  textAlign: 'left', padding: '12px', borderRadius: 11, border: `1px solid ${C.hair}`, background: C.panel, cursor: 'pointer' }}>
-                  <Avatar url={c.avatar_url} name={c.display_name} size={46} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontFamily: ui, fontSize: 15, fontWeight: 600, color: C.ink }}>{c.display_name}</span>
-                      <span style={{ fontFamily: mono, fontSize: 11.5, color: C.faint }}>@{c.handle}</span>
-                      <span style={{ marginLeft: 'auto', fontFamily: ui, fontSize: 11, color: C.faint }}>{timeAgo(c.last_message_at)}</span>
+                <div key={c.id} style={{ display: 'flex', alignItems: 'stretch', gap: 8 }}>
+                  <button onClick={() => onOpen(c.handle)} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 13,
+                    textAlign: 'left', padding: '12px', borderRadius: 11, border: `1px solid ${C.hair}`, background: C.panel, cursor: 'pointer' }}>
+                    <Avatar url={c.avatar_url} name={c.display_name} size={46} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontFamily: ui, fontSize: 15, fontWeight: 600, color: C.ink }}>{c.display_name}</span>
+                        <span style={{ fontFamily: mono, fontSize: 11.5, color: C.faint }}>@{c.handle}</span>
+                        <span style={{ marginLeft: 'auto', fontFamily: ui, fontSize: 11, color: C.faint }}>{timeAgo(c.last_message_at)}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
+                        <span style={{ flex: 1, minWidth: 0, fontFamily: ui, fontSize: 13, color: c.unread ? C.ink : C.dim,
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: c.unread ? 600 : 400 }}>
+                          {c.last_preview ?? 'New conversation'}</span>
+                        {c.unread > 0 && <span style={{ background: C.gold, color: C.base, borderRadius: 999, minWidth: 18, height: 18,
+                          padding: '0 5px', display: 'grid', placeItems: 'center', fontFamily: ui, fontSize: 11, fontWeight: 700 }}>{c.unread}</span>}
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
-                      <span style={{ flex: 1, minWidth: 0, fontFamily: ui, fontSize: 13, color: c.unread ? C.ink : C.dim,
-                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: c.unread ? 600 : 400 }}>
-                        {c.last_preview ?? 'New conversation'}</span>
-                      {c.unread > 0 && <span style={{ background: C.gold, color: C.base, borderRadius: 999, minWidth: 18, height: 18,
-                        padding: '0 5px', display: 'grid', placeItems: 'center', fontFamily: ui, fontSize: 11, fontWeight: 700 }}>{c.unread}</span>}
-                    </div>
-                  </div>
-                </button>
+                  </button>
+                  <button title="Delete conversation"
+                    onClick={async () => {
+                      if (!window.confirm(`Delete your conversation with ${c.display_name}? This removes it for you and can't be undone.`)) return;
+                      try { await deleteConversation(c.id); setRows(rs => (rs ?? []).filter(r => r.id !== c.id)); }
+                      catch (e: any) { alert(e?.message ?? 'Could not delete conversation'); }
+                    }}
+                    style={{ flexShrink: 0, width: 44, borderRadius: 11, border: `1px solid ${C.hair}`,
+                      background: 'transparent', color: C.faint, cursor: 'pointer', fontSize: 17 }}>
+                    🗑
+                  </button>
+                </div>
               ))}
             </div>}
     </Scroll>

@@ -4,8 +4,9 @@
 // the thumbnail + provisions the LiveKit room), optionally stores the
 // YouTube key, then opens the room in Assembly. Debaters bring their own decks.
 // =====================================================================
-import { useState } from 'react';
-import { createDebate, setBroadcastKey } from '../lib/api';
+import { useState, useEffect } from 'react';
+import { createDebate } from '../lib/api';
+import { createYouTubeBroadcast, getYouTubeConnection, type YouTubeConnection } from '../lib/youtube';
 import type { DebateFormat, Side, Visibility } from '../lib/types';
 import { C, ui, display, mono, solidGold, field } from '../lib/theme';
 
@@ -45,17 +46,26 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
   const [motion, setMotion] = useState('This House would abolish the electoral college');
   const [format, setFormat] = useState<DebateFormat>('oxford');
   const [vis, setVis] = useState<Visibility>('public');
+  const [when, setWhen] = useState<'now' | 'later'>('now');
+  const [whenAt, setWhenAt] = useState('');
   const [thumb, setThumb] = useState<File | null>(null);
   const [thumbPrev, setThumbPrev] = useState<string | null>(null);
   const [voters, setVoters] = useState(true);
+  const [winMode, setWinMode] = useState<'academic' | 'public' | 'hybrid'>('public');
   const [segs, setSegs] = useState<Seg[]>(FORMATS.oxford);
   const [paid, setPaid] = useState(false);
   const [price, setPrice] = useState(5);
   const [gifts, setGifts] = useState(true);
   const [recording, setRecording] = useState(true);
-  const [youtubeKey, setYoutubeKey] = useState('');
+  const [ytEnabled, setYtEnabled] = useState(false);
+  const [ytTitle, setYtTitle] = useState('');
+  const [ytDesc, setYtDesc] = useState('');
+  const [ytPrivacy, setYtPrivacy] = useState<'public' | 'unlisted' | 'private'>('unlisted');
+  const [ytConn, setYtConn] = useState<YouTubeConnection | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => { getYouTubeConnection().then(setYtConn).catch(() => {}); }, []);
 
   const pickFormat = (f: DebateFormat) => { setFormat(f); setSegs(FORMATS[f]); };
   const totalMin = segs.reduce((a, b) => a + b.min, 0);
@@ -63,16 +73,32 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
   const sideLabel = (s: Side | null) => (s === 'prop' ? 'PROP' : s === 'opp' ? 'OPP' : 'BOTH');
 
   async function create() {
-    setErr(null); setBusy(true);
+    setErr(null);
+    const scheduledAt = when === 'later' ? (whenAt ? new Date(whenAt).toISOString() : null) : null;
+    if (when === 'later' && !scheduledAt) { setErr('Pick a date and time for the scheduled debate.'); return; }
+    if (scheduledAt && new Date(scheduledAt).getTime() < Date.now()) { setErr('Scheduled time must be in the future.'); return; }
+    setBusy(true);
     try {
       const debate = await createDebate({
         motion, format, visibility: vis,
         isPaid: paid, priceCents: paid ? Math.round(price * 100) : 0,
         giftsEnabled: gifts, recordingEnabled: recording, votersEnabled: voters,
+        winMode,
+        scheduledAt,
         segments: segs.map(s => ({ label: s.label, side: s.side, durationSecs: s.min * 60 })),
         thumbnailFile: thumb,
       });
-      if (youtubeKey.trim()) await setBroadcastKey(debate.id, youtubeKey.trim());
+      // If YouTube is connected and enabled, create the broadcast automatically.
+      if (ytEnabled && ytConn?.connected) {
+        await createYouTubeBroadcast({
+          debateId: debate.id,
+          title: ytTitle.trim() || motion,
+          description: ytDesc.trim() || undefined,
+          privacy: ytPrivacy,
+          thumbnailUrl: thumbPrev ?? undefined,
+          scheduledAt: scheduledAt ?? undefined,
+        });
+      }
       onCreated(debate.id);
     } catch (e: any) {
       setErr(e?.message ?? 'Could not create the debate'); setBusy(false);
@@ -113,10 +139,23 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
               ))}
             </div>
             <Label>Visibility</Label>
-            <div style={{ display:'flex', gap:8, marginTop:8, marginBottom:22 }}>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:8, marginBottom:22 }}>
               <Chip on={vis === 'public'} onClick={() => setVis('public')}>Public</Chip>
               <Chip on={vis === 'unlisted'} onClick={() => setVis('unlisted')}>Unlisted · link only</Chip>
+              <Chip on={vis === 'private'} onClick={() => setVis('private')}>Private · invite only</Chip>
             </div>
+
+            <Label>When</Label>
+            <div style={{ display:'flex', gap:8, marginTop:8 }}>
+              <Chip on={when === 'now'} onClick={() => setWhen('now')}>Go live now</Chip>
+              <Chip on={when === 'later'} onClick={() => setWhen('later')}>Schedule for later</Chip>
+            </div>
+            {when === 'later' && (
+              <input type="datetime-local" value={whenAt} onChange={e => setWhenAt(e.target.value)}
+                min={new Date(Date.now() + 5 * 60000).toISOString().slice(0, 16)}
+                style={{ ...field, marginTop:10, colorScheme:'dark', maxWidth:320 }} />
+            )}
+            <div style={{ height:22 }} />
             <Label>Cover thumbnail</Label>
             <label style={{ display:'block', marginTop:9, cursor:'pointer' }}>
               <input type="file" accept="image/*" style={{ display:'none' }}
@@ -161,6 +200,22 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
 
           {step === 3 && <>
             <Toggle label="Audience voting" sub="Let viewers vote a verdict from their seats" on={voters} set={setVoters} />
+
+            {/* Win mode selector */}
+            <div style={{ padding:'15px 0', borderBottom:`1px solid ${C.hair}` }}>
+              <div style={{ fontFamily:ui, fontSize:14, color:C.ink, fontWeight:600, marginBottom:2 }}>Winner decided by</div>
+              <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginBottom:10 }}>
+                {winMode === 'academic' ? 'Judges score each segment; their ballots determine the winner.'
+                  : winMode === 'hybrid' ? 'Judges pick the official winner; audience picks the People\'s Choice.'
+                  : 'The audience votes live; majority wins.'}
+              </div>
+              <div style={{ display:'flex', gap:8 }}>
+                <Chip on={winMode==='public'} onClick={() => setWinMode('public')}>Audience</Chip>
+                <Chip on={winMode==='academic'} onClick={() => setWinMode('academic')}>Judges</Chip>
+                <Chip on={winMode==='hybrid'} onClick={() => setWinMode('hybrid')}>Hybrid</Chip>
+              </div>
+            </div>
+
             <Toggle label="Gifts & donations" sub="Audience can tip debaters and the host live" on={gifts} set={setGifts} />
             <Toggle label="Record & allow downloads" sub="Host and debaters get the MP4 afterward" on={recording} set={setRecording} />
             <div style={{ display:'flex', alignItems:'center', gap:14, padding:'15px 0', borderBottom:`1px solid ${C.hair}` }}>
@@ -175,11 +230,68 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
             </div>
 
             <div style={{ marginTop:18 }}>
-              <Label>YouTube stream key <span style={{ color:C.faint, fontWeight:400 }}>(optional — simulcast)</span></Label>
-              <input value={youtubeKey} onChange={e => setYoutubeKey(e.target.value)} placeholder="xxxx-xxxx-xxxx-xxxx"
-                style={{ ...field, marginTop:8 }} />
-              <p style={{ fontFamily:ui, fontSize:11.5, color:C.faint, marginTop:6 }}>
-                Stored privately — only used server-side when you go live.</p>
+              <div style={{ display:'flex', alignItems:'center', gap:14, padding:'15px 0', borderBottom:`1px solid ${C.hair}` }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontFamily:ui, fontSize:14, color:C.ink, fontWeight:600 }}>
+                    Stream to YouTube <span style={{ fontFamily:ui, fontSize:11, fontWeight:400, color:C.faint }}>(optional)</span>
+                  </div>
+                  <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginTop:2 }}>
+                    {ytConn?.connected
+                      ? `Connected as ${ytConn.channel_title ?? 'your channel'} — broadcast created automatically`
+                      : 'Skip this or connect your YouTube account to stream automatically.'}
+                  </div>
+                </div>
+                {ytConn?.connected
+                  ? <Chip on={ytEnabled} onClick={() => setYtEnabled(e => !e)}>{ytEnabled ? 'On' : 'Off'}</Chip>
+                  : (
+                    <a href="/settings" style={{ fontFamily:ui, fontSize:11, fontWeight:600,
+                      color:C.gold, textDecoration:'none', whiteSpace:'nowrap',
+                      padding:'5px 10px', border:`1px solid ${C.gold}44`, borderRadius:6 }}>
+                      Connect account
+                    </a>
+                  )}
+              </div>
+              {ytEnabled && ytConn?.connected && (
+                <div style={{ paddingTop:14, display:'flex', flexDirection:'column', gap:10 }}>
+                  <div>
+                    <Label>YouTube title</Label>
+                    <input value={ytTitle} onChange={e => setYtTitle(e.target.value)}
+                      placeholder={motion || 'Debate title on YouTube'}
+                      style={{ ...field, marginTop:6 }} />
+                  </div>
+                  <div>
+                    <Label>Description <span style={{ color:C.faint, fontWeight:400 }}>(optional)</span></Label>
+                    <textarea value={ytDesc} onChange={e => setYtDesc(e.target.value)}
+                      placeholder="What this debate is about..."
+                      rows={3} style={{ ...field, marginTop:6, resize:'vertical' }} />
+                  </div>
+                  <div>
+                    <Label>YouTube privacy</Label>
+                    <div style={{ display:'flex', gap:8, marginTop:6 }}>
+                      {([
+                        ['public',   'Public',   'Anyone can find and watch'],
+                        ['unlisted', 'Unlisted', 'Only people with the link'],
+                        ['private',  'Private',  'Only you — best for testing'],
+                      ] as const).map(([val, label, hint]) => (
+                        <button key={val} type="button" onClick={() => setYtPrivacy(val)}
+                          style={{
+                            flex:1, padding:'10px 12px', borderRadius:8, cursor:'pointer', textAlign:'left',
+                            border:`1px solid ${ytPrivacy===val ? C.gold : C.hair}`,
+                            background: ytPrivacy===val ? `${C.gold}1a` : 'transparent' }}>
+                          <div style={{ fontFamily:ui, fontSize:13, fontWeight:600,
+                            color: ytPrivacy===val ? C.gold : C.ink }}>{label}</div>
+                          <div style={{ fontFamily:ui, fontSize:10.5, color:C.faint, marginTop:2, lineHeight:1.3 }}>{hint}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <p style={{ fontFamily:ui, fontSize:11.5, color:C.faint, margin:0 }}>
+                    The broadcast is created on your YouTube channel automatically when you create this debate.
+                    When you press go live in the studio, streaming starts instantly — no stream key needed.
+                    {ytPrivacy !== 'public' && ` Set to ${ytPrivacy} — ${ytPrivacy === 'private' ? 'only you can see it' : 'only people with the link can watch'}.`}
+                  </p>
+                </div>
+              )}
             </div>
 
             <p style={{ fontFamily:ui, fontSize:11.5, color:C.faint, marginTop:18, lineHeight:1.5 }}>
@@ -200,7 +312,8 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
           {step < 3
             ? <button onClick={() => setStep(s => s + 1)} style={solidGold}>Continue</button>
             : <button onClick={create} disabled={busy} style={{ ...solidGold, opacity: busy ? 0.6 : 1 }}>
-                {busy ? 'Opening the hall…' : 'Create & open the hall'}</button>}
+                {busy ? (when==='later' ? 'Scheduling…' : 'Opening the hall…')
+                      : (when==='later' ? 'Schedule debate' : 'Create & open the hall')}</button>}
         </div>
       </div>
     </div>

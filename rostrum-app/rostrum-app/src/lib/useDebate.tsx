@@ -7,10 +7,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   getDebate, setDebateStatus, setSegment, pauseTimer, resumeTimer,
-  finalizeDebate, subscribeDebate, setRemaining as apiSetRemaining,
+  finalizeDebate, cancelDebate, subscribeDebate, setRemaining as apiSetRemaining,
+  openPoll as apiOpenPoll, closePoll as apiClosePoll, announceWinner as apiAnnounce,
+  getResults, type WinMode,
 } from './api';
-import { startRecording, startYouTube, stopEgress, applySegmentMics } from './livekit';
-import type { Debate, Segment, Side } from './types';
+import { startRecording, stopEgress, applySegmentMics } from './livekit';
+import { endYouTubeBroadcast } from './youtube';
+import type { Debate, Segment, Side, DebateResult } from './types';
 
 export type Phase = 'assembly' | 'live' | 'ended';
 type Mover = { identity: string; role: string; side: Side | null };
@@ -19,6 +22,7 @@ export function useDebate(debateId: string) {
   const [debate, setDebate] = useState<Debate | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [remaining, setRemaining] = useState(0);
+  const [results, setResults] = useState<DebateResult | null>(null);
   const egress = useRef<{ rec?: string; yt?: string }>({});
 
   useEffect(() => {
@@ -26,6 +30,27 @@ export function useDebate(debateId: string) {
     const off = subscribeDebate(debateId, (patch) => setDebate(prev => (prev ? { ...prev, ...patch } : prev)));
     return off;
   }, [debateId]);
+
+  // Safety net: realtime postgres_changes can be dropped for some clients
+  // (anon broadcast viewers, RLS edge cases, reconnects). A slow refetch makes
+  // sure poll_open / winner_announced / segment state always converge even if a
+  // single change event is missed. Stops once the debate has ended.
+  useEffect(() => {
+    if (debate?.status === 'ended') return;
+    const t = setInterval(() => {
+      getDebate(debateId)
+        .then(({ debate: fresh }) => { if (fresh) setDebate(prev => ({ ...(prev ?? {}), ...fresh } as Debate)); })
+        .catch(() => {});
+    }, 4000);
+    return () => clearInterval(t);
+  }, [debateId, debate?.status]);
+
+  // Auto-load results when the host announces the winner (all participants)
+  useEffect(() => {
+    if (debate?.winner_announced && !results) {
+      getResults(debateId).then(r => { if (r) setResults(r); }).catch(() => {});
+    }
+  }, [debate?.winner_announced, debateId, results]);
 
   // local 2Hz tick that resolves the authoritative clock fields into seconds
   useEffect(() => {
@@ -60,7 +85,8 @@ export function useDebate(debateId: string) {
     await setSegment(debateId, 0);
     await applySegmentMics(debateId, debaters(members), segments[0]?.side ?? null);
     try { egress.current.rec = (await startRecording(debateId)).egressId; } catch { /* recording optional */ }
-    try { const y = await startYouTube(debateId); if (y?.egressId) egress.current.yt = y.egressId; } catch { /* simulcast optional */ }
+    // YouTube streaming is controlled manually via the dock's stream button
+    // (so the host can start it during assembly, before the debate begins).
   }, [debateId, segments]);
 
   // host: advance the run of show + flip mics to the new speaking side
@@ -86,13 +112,40 @@ export function useDebate(debateId: string) {
     await apiSetRemaining(debateId, secs);
   }, [debateId]);
 
-  // host: stop tape, decide the winner, mark ended (status flips via finalize)
+  // host: toggle the audience poll open/closed
+  const togglePoll = useCallback(async () => {
+    if (!debate) return;
+    if (debate.poll_open) await apiClosePoll(debateId);
+    else await apiOpenPoll(debateId);
+  }, [debateId, debate]);
+
+  // host: compute results (does NOT end the debate — host announces first)
+  const doFinalize = useCallback(async () => {
+    await finalizeDebate(debateId);
+    const r = await getResults(debateId);
+    setResults(r);
+  }, [debateId]);
+
+  // host: live reveal of the winner (sets winner_announced on the debate row)
+  const doAnnounce = useCallback(async () => {
+    await apiAnnounce(debateId);
+  }, [debateId]);
+
+  // host: stop tape, end broadcast, mark ended (after the winner is announced)
   const endDebate = useCallback(async () => {
     if (egress.current.rec) { try { await stopEgress(debateId, egress.current.rec); } catch {} }
     if (egress.current.yt)  { try { await stopEgress(debateId, egress.current.yt); } catch {} }
-    await finalizeDebate(debateId);
+    try { await endYouTubeBroadcast(debateId); } catch { /* optional */ }
+    // If not finalized yet, do it now as a safety net
+    if (!results) { try { await finalizeDebate(debateId); } catch {} }
+    await setDebateStatus(debateId, 'ended');
+  }, [debateId, results]);
+
+  const cancelEvent = useCallback(async () => {
+    await cancelDebate(debateId);
   }, [debateId]);
 
-  return { debate, segments, seg, segIdx, remaining, running, phase, isHost,
-           goLive, nextSegment, toggleTimer, endDebate, goToSegment, setClock };
+  return { debate, segments, seg, segIdx, remaining, running, phase, isHost, results,
+           goLive, nextSegment, toggleTimer, endDebate, cancelEvent, goToSegment, setClock,
+           togglePoll, doFinalize, doAnnounce };
 }

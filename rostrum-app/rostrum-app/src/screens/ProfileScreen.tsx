@@ -6,9 +6,11 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
 import { getProfile, getAchievements, amFollowing, follow, unfollow } from '../lib/api';
+import { ReportModal } from '../components/ReportModal';
 import type { Profile, Achievement } from '../lib/types';
 import { C, ui, display, mono, solidGold } from '../lib/theme';
 import { Avatar, RankBadge, Stat, Section, Scroll, Center, Empty, pill, ghostBtn, hrefFor } from '../components/ui';
+import { getMyWallet, getMyProgress, type Wallet, type Progress } from '../lib/payments';
 
 export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
   handle?: string; onBack?: () => void; onOpenStore?: () => void; onMessage?: (handle: string) => void;
@@ -19,6 +21,8 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
   const [achievements, setAch] = useState<(Achievement & { earned_at: string })[]>([]);
   const [following, setFollowing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [progress, setProgress] = useState<Progress | null>(null);
 
   useEffect(() => {
     if (isSelf) setProfile(me);
@@ -30,6 +34,13 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
     getAchievements(profile.id).then(setAch);
     if (!isSelf) amFollowing(profile.id).then(setFollowing);
   }, [profile, isSelf]);
+
+  useEffect(() => {
+    if (isSelf) {
+      getMyWallet().then(setWallet).catch(() => {});
+      getMyProgress().then(setProgress).catch(() => {});
+    }
+  }, [isSelf]);
 
   if (!profile) return <Center>Loading profile…</Center>;
 
@@ -77,6 +88,7 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
             <button onClick={toggleFollow} disabled={busy} style={following ? ghostBtn : ghostBtn}>
               {following ? 'Following ✓' : 'Follow'}
             </button>
+            <ReportModal targetType="user" targetId={profile.id} label="⚑ Report" />
           </div>
         )}
       </div>
@@ -92,15 +104,47 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
         <Stat label="Following" value={profile.following_count} />
       </div>
 
-      {/* wallet (self) */}
+      {/* D-Bucks wallet + XP progress (self only) */}
       {isSelf && (
-        <div style={{ display:'flex', alignItems:'center', gap:14, marginTop:22, padding:'16px 18px',
-          borderRadius:10, border:`1px solid ${C.hair}`, background:C.panel }}>
-          <div style={{ flex:1 }}>
-            <div style={{ fontFamily:ui, fontSize:11, letterSpacing:'.6px', textTransform:'uppercase', color:C.faint }}>Wallet</div>
-            <div style={{ fontFamily:mono, fontSize:26, fontWeight:700, color:C.gold }}>◈ {profile.virtual_cash.toLocaleString()}</div>
+        <div style={{ marginTop:22, display:'flex', gap:14, flexWrap:'wrap' }}>
+          {/* Wallet */}
+          <div style={{ flex:'1 1 220px', padding:'16px 18px', borderRadius:10, border:`1px solid ${C.hair}`, background:C.panel }}>
+            <div style={{ fontFamily:ui, fontSize:11, letterSpacing:'.6px', textTransform:'uppercase', color:C.faint }}>D-Bucks</div>
+            <div style={{ fontFamily:mono, fontSize:26, fontWeight:700, color:C.gold, marginTop:4 }}>
+              {wallet ? wallet.total.toLocaleString() : '...'}
+            </div>
+            <div style={{ display:'flex', gap:14, marginTop:8 }}>
+              <span style={{ fontFamily:ui, fontSize:11, color:C.faint }}>Spendable <span style={{ color:C.gold, fontFamily:mono }}>{wallet?.promo ?? 0}</span></span>
+              <span style={{ fontFamily:ui, fontSize:11, color:C.faint }}>Redeemable <span style={{ color:C.jadeHi, fontFamily:mono }}>{wallet?.redeemable ?? 0}</span></span>
+            </div>
+            {onOpenStore && <button onClick={onOpenStore} style={{ ...ghostBtn, marginTop:12 }}>Visit the store</button>}
           </div>
-          {onOpenStore && <button onClick={onOpenStore} style={ghostBtn}>Visit the store</button>}
+          {/* XP + Level progress */}
+          {progress && (() => {
+            const curLevelXP = 50 * progress.level * (progress.level + 1);
+            const pct = progress.next_level_xp > curLevelXP
+              ? Math.min(100, Math.round(((progress.xp - curLevelXP) / (progress.next_level_xp - curLevelXP)) * 100))
+              : 100;
+            const mins = Math.floor(progress.verified_speaking_seconds / 60);
+            return (
+              <div style={{ flex:'1 1 260px', padding:'16px 18px', borderRadius:10, border:`1px solid ${C.hair}`, background:C.panel }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline' }}>
+                  <div style={{ fontFamily:ui, fontSize:11, letterSpacing:'.6px', textTransform:'uppercase', color:C.faint }}>Level {progress.level}</div>
+                  <div style={{ fontFamily:mono, fontSize:12, color:C.dim }}>{progress.xp.toLocaleString()} / {progress.next_level_xp.toLocaleString()} XP</div>
+                </div>
+                <div style={{ height:8, borderRadius:4, background:C.hair, marginTop:8, overflow:'hidden' }}>
+                  <div style={{ height:'100%', borderRadius:4, background:C.gold, width:`${pct}%`, transition:'width .3s' }} />
+                </div>
+                <div style={{ display:'flex', gap:16, marginTop:10, flexWrap:'wrap' }}>
+                  <span style={{ fontFamily:ui, fontSize:11, color:C.faint }}>Qualifying debates <span style={{ color:C.ink, fontFamily:mono }}>{progress.qualifying_debates}</span></span>
+                  <span style={{ fontFamily:ui, fontSize:11, color:C.faint }}>Speaking time <span style={{ color:C.ink, fontFamily:mono }}>{mins} min</span></span>
+                </div>
+                {progress.cashout_unlocked && (
+                  <div style={{ fontFamily:ui, fontSize:11, fontWeight:600, color:C.jadeHi, marginTop:8 }}>Cash-out unlocked</div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 

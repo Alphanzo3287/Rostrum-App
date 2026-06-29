@@ -10,6 +10,40 @@ import type {
   Profile, Team, TeamMember, Perk, Achievement, DebateFormat, Visibility, Side, DebateRole, TeamRole,
 } from './types';
 
+// Every realtime subscription gets a UNIQUE channel name. Supabase reuses a
+// channel by name and throws "cannot add postgres_changes callbacks after
+// subscribe()" if a second component attaches a listener to an
+// already-subscribed channel. A unique suffix guarantees each caller owns its
+// own channel, so multiple components can subscribe to the same data safely.
+let _chSeq = 0;
+const uniq = () => `${Date.now().toString(36)}-${(_chSeq++).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+// Wrap a realtime subscription so a setup/channel error can never throw into a
+// React effect (which would trip an error boundary and blank a panel).
+function safeSub(setup: () => any): () => void {
+  try {
+    const ch = setup();
+    return () => { try { supabase.removeChannel(ch); } catch { /* noop */ } };
+  } catch (e) {
+    console.error('realtime subscribe failed (non-fatal):', e);
+    return () => {};
+  }
+}
+
+/* --------------------- EMERGENCY ROOM CONTROL -------------------- */
+export interface OpenRoom { id: string; motion: string; status: string; created_at: string; }
+// The host's rooms that are still open (any non-ended status).
+export async function myOpenRooms(): Promise<OpenRoom[]> {
+  const { data, error } = await supabase.rpc('my_open_rooms');
+  if (error) throw error;
+  return (data ?? []) as OpenRoom[];
+}
+// Force a room to end regardless of its state (recovers a crashed live room).
+export async function forceCloseRoom(debateId: string): Promise<void> {
+  const { error } = await supabase.rpc('force_close_room', { p_debate: debateId });
+  if (error) throw error;
+}
+
 /* ----------------------------- LOBBY ----------------------------- */
 
 export async function listLiveDebates(): Promise<Debate[]> {
@@ -17,7 +51,19 @@ export async function listLiveDebates(): Promise<Debate[]> {
     .from('debates')
     .select('*, host:profiles!debates_host_id_fkey(display_name,handle,avatar_url)')
     .in('status', ['assembly', 'live'])
+    .eq('visibility', 'public')
     .order('viewer_count', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as Debate[];
+}
+
+export async function listUpcomingDebates(): Promise<Debate[]> {
+  const { data, error } = await supabase
+    .from('debates')
+    .select('*, host:profiles!debates_host_id_fkey(display_name,handle,avatar_url)')
+    .eq('status', 'scheduled')
+    .eq('visibility', 'public')
+    .order('scheduled_at', { ascending: true });
   if (error) throw error;
   return (data ?? []) as Debate[];
 }
@@ -45,6 +91,8 @@ export interface CreateDebateInput {
   giftsEnabled: boolean;
   recordingEnabled: boolean;
   votersEnabled: boolean;
+  winMode: WinMode;
+  scheduledAt?: string | null;
   segments: { label: string; side: Side | null; durationSecs: number }[];
   thumbnailFile?: File | null;
 }
@@ -65,7 +113,9 @@ export async function createDebate(input: CreateDebateInput): Promise<Debate> {
     gifts_enabled: input.giftsEnabled,
     recording_enabled: input.recordingEnabled,
     voters_enabled: input.votersEnabled,
-    status: 'assembly',
+    win_mode: input.winMode ?? 'public',
+    scheduled_at: input.scheduledAt ?? null,
+    status: input.scheduledAt ? 'scheduled' : 'assembly',
   }).select().single();
   if (error) throw error;
   const d = debate as Debate;
@@ -103,6 +153,36 @@ export async function setDebateStatus(id: string, status: 'assembly' | 'live' | 
   if (status === 'live') patch.started_at = new Date().toISOString();
   const { error } = await supabase.from('debates').update(patch).eq('id', id);
   if (error) throw error;
+}
+
+// Host opens the doors on a scheduled debate (scheduled → assembly).
+export async function startDebate(id: string) {
+  const { error } = await supabase.rpc('start_debate', { p_debate: id });
+  if (error) throw error;
+}
+export async function cancelDebate(id: string) {
+  const { error } = await supabase.rpc('cancel_debate', { p_debate: id });
+  if (error) throw error;
+}
+
+/* ------------------------------- RSVP ---------------------------- */
+export interface RsvpInfo { going: number; interested: number; mine: 'going' | 'interested' | null; }
+export async function getRsvp(debateId: string): Promise<RsvpInfo> {
+  const { data } = await supabase.rpc('get_rsvp', { p_debate: debateId });
+  const row = (Array.isArray(data) ? data[0] : data) as any;
+  return { going: row?.going ?? 0, interested: row?.interested ?? 0, mine: row?.mine ?? null };
+}
+export async function setRsvp(debateId: string, status: 'going' | 'interested') {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('not authenticated');
+  const { error } = await supabase.from('debate_rsvps')
+    .upsert({ debate_id: debateId, user_id: user.id, status }, { onConflict: 'debate_id,user_id' });
+  if (error) throw error;
+}
+export async function clearRsvp(debateId: string) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  await supabase.from('debate_rsvps').delete().eq('debate_id', debateId).eq('user_id', user.id);
 }
 
 // Host stores the YouTube stream key (host-only table; read server-side at go-live).
@@ -159,6 +239,22 @@ export async function finalizeDebate(debateId: string) {
 export async function getResults(debateId: string): Promise<DebateResult | null> {
   const { data } = await supabase.from('debate_results').select('*').eq('debate_id', debateId).maybeSingle();
   return (data as DebateResult) ?? null;
+}
+
+/* ----------------------- WINNER SYSTEM ----------------------- */
+export type WinMode = 'academic' | 'public' | 'hybrid';
+
+export async function openPoll(debateId: string) {
+  const { error } = await supabase.rpc('open_poll', { p_debate: debateId });
+  if (error) throw error;
+}
+export async function closePoll(debateId: string) {
+  const { error } = await supabase.rpc('close_poll', { p_debate: debateId });
+  if (error) throw error;
+}
+export async function announceWinner(debateId: string) {
+  const { error } = await supabase.rpc('announce_winner', { p_debate: debateId });
+  if (error) throw error;
 }
 
 /* ------------------------------ Q&A ------------------------------ */
@@ -320,14 +416,92 @@ export async function setSlide(debateId: string, idx: number) {
   if (error) throw error;
 }
 
+// Remove the whole deck (host or presenter).
+export async function clearDeck(debateId: string) {
+  const { error } = await supabase.rpc('clear_deck', { p_debate: debateId });
+  if (error) throw error;
+}
+
+/* ----------------------- BROADCAST CONTROL ----------------------- */
+export type BcastLayout = 'solo' | 'group' | 'spotlight' | 'news' | 'screen' | 'pip' | 'cinema'
+  | 'camera' | 'slides' | 'sidebyside';   // legacy values kept for back-compat
+export interface BroadcastState {
+  layout: BcastLayout;
+  stageId: string | null;
+  slidesOn: boolean;
+  presenterId: string | null;
+  presentType: 'slides' | 'screen' | null;
+  presentRequest: string | null;
+}
+export async function getBroadcastState(debateId: string): Promise<BroadcastState> {
+  const { data } = await supabase.from('debates')
+    .select('bcast_layout, bcast_stage_id, bcast_slides_on, bcast_presenter_id, bcast_present_type, bcast_present_request')
+    .eq('id', debateId).single();
+  const d = data as any;
+  return {
+    layout: (d?.bcast_layout ?? 'solo') as BcastLayout,
+    stageId: d?.bcast_stage_id ?? null,
+    slidesOn: !!d?.bcast_slides_on,
+    presenterId: d?.bcast_presenter_id ?? null,
+    presentType: (d?.bcast_present_type ?? null) as 'slides' | 'screen' | null,
+    presentRequest: d?.bcast_present_request ?? null,
+  };
+}
+// Host-only. Pass only the fields you want to change.
+export async function setBroadcastState(debateId: string, s: Partial<{ layout: BcastLayout; stageId: string | null; slidesOn: boolean }>) {
+  const { error } = await supabase.rpc('set_broadcast_state', {
+    p_debate: debateId,
+    p_layout: s.layout ?? null,
+    p_stage_id: s.stageId === null ? '__clear__' : (s.stageId ?? null),
+    p_slides_on: s.slidesOn ?? null,
+  });
+  if (error) throw error;
+}
+// Host grants/removes the active presenter (null clears the slot).
+export async function setPresenter(debateId: string, identity: string | null, type: 'slides' | 'screen' = 'slides') {
+  const { error } = await supabase.rpc('set_presenter', { p_debate: debateId, p_identity: identity, p_type: type });
+  if (error) throw error;
+}
+// A debater asks the host for permission to present.
+export async function requestPresent(debateId: string, identity: string) {
+  const { error } = await supabase.rpc('request_present', { p_debate: debateId, p_identity: identity });
+  if (error) throw error;
+}
+// Broadcast page subscribes to the debate row for live layout/presenter changes.
+// Wrapped so a realtime/channel error can NEVER throw into React render/effect
+// (which would trip an error boundary and blank the studio controls).
+export function subscribeBroadcastState(debateId: string, onChange: (s: BroadcastState) => void) {
+  try {
+    const ch = supabase.channel(`bcast:${debateId}:${uniq()}`)
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'debates', filter: `id=eq.${debateId}` },
+        (payload: any) => {
+          const n = payload.new;
+          if (!n) return;
+          onChange({
+            layout: (n.bcast_layout ?? 'solo') as BcastLayout,
+            stageId: n.bcast_stage_id ?? null,
+            slidesOn: !!n.bcast_slides_on,
+            presenterId: n.bcast_presenter_id ?? null,
+            presentType: (n.bcast_present_type ?? null) as 'slides' | 'screen' | null,
+            presentRequest: n.bcast_present_request ?? null,
+          });
+        })
+      .subscribe();
+    return () => { try { supabase.removeChannel(ch); } catch { /* noop */ } };
+  } catch (e) {
+    console.error('subscribeBroadcastState failed (non-fatal):', e);
+    return () => {};
+  }
+}
+
 // Everyone follows the presenter's position in real time.
 export function subscribeSlide(debateId: string, onChange: (current: number) => void) {
-  const ch = supabase.channel(`slide:${debateId}`)
+  return safeSub(() => supabase.channel(`slide:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'debates', filter: `id=eq.${debateId}` },
       (payload: any) => { if (payload.new?.current_slide != null) onChange(payload.new.current_slide); })
-    .subscribe();
-  return () => { supabase.removeChannel(ch); };
+    .subscribe());
 }
 
 /* -------------------------- SEGMENT CLOCK ------------------------ */
@@ -354,40 +528,168 @@ export async function setRemaining(debateId: string, secs: number) {
 // One subscription for everything that changes on the debate row:
 // status (assembly→live→ended), current_segment, the clock, and the slide.
 export function subscribeDebate(debateId: string, onChange: (d: Partial<Debate>) => void) {
-  const ch = supabase.channel(`debate:${debateId}`)
+  return safeSub(() => supabase.channel(`debate:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'debates', filter: `id=eq.${debateId}` },
       (payload: any) => onChange(payload.new as Partial<Debate>))
-    .subscribe();
-  return () => { supabase.removeChannel(ch); };
+    .subscribe());
 }
 
 /* --------------------------- REALTIME ---------------------------- */
 // Live poll bars, the "who's in the room" gallery, and the Q&A queue.
 
 export function subscribeTally(debateId: string, onChange: (t: Tally) => void) {
-  const ch = supabase.channel(`votes:${debateId}`)
+  return safeSub(() => supabase.channel(`votes:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'votes', filter: `debate_id=eq.${debateId}` },
       async () => onChange(await getTally(debateId)))
-    .subscribe();
-  return () => { supabase.removeChannel(ch); };
+    .subscribe());
 }
 
 export function subscribeParticipants(debateId: string, onChange: () => void) {
-  const ch = supabase.channel(`participants:${debateId}`)
+  return safeSub(() => supabase.channel(`participants:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: '*', schema: 'public', table: 'debate_participants', filter: `debate_id=eq.${debateId}` },
       () => onChange())
-    .subscribe();
-  return () => { supabase.removeChannel(ch); };
+    .subscribe());
 }
 
 export function subscribeQuestions(debateId: string, onChange: () => void) {
-  const ch = supabase.channel(`questions:${debateId}`)
+  return safeSub(() => supabase.channel(`questions:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: '*', schema: 'public', table: 'questions', filter: `debate_id=eq.${debateId}` },
       () => onChange())
-    .subscribe();
-  return () => { supabase.removeChannel(ch); };
+    .subscribe());
+}
+
+/* ------------------------------- LIVE CHAT ----------------------------- */
+export interface ChatMsg {
+  id: string; debate_id: string; sender_id: string;
+  sender_name: string; sender_avatar: string | null; body: string; created_at: string;
+}
+export async function getChat(debateId: string): Promise<ChatMsg[]> {
+  const { data } = await supabase.from('chat_messages').select('*')
+    .eq('debate_id', debateId).order('created_at', { ascending: true }).limit(300);
+  return (data ?? []) as ChatMsg[];
+}
+export async function sendChat(debateId: string, body: string) {
+  const { error } = await supabase.rpc('send_chat', { p_debate: debateId, p_body: body });
+  if (error) throw error;
+}
+export function subscribeChat(debateId: string, onInsert: (m: ChatMsg) => void) {
+  return safeSub(() => supabase.channel(`chat:${debateId}:${uniq()}`)
+    .on('postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `debate_id=eq.${debateId}` },
+      (p: any) => onInsert(p.new as ChatMsg))
+    .subscribe());
+}
+
+/* --------------------------- NOTIFICATIONS --------------------------- */
+export interface AppNotification {
+  id: string; user_id: string; type: string; title: string;
+  body: string | null; link: string | null; read: boolean; created_at: string;
+}
+export async function listNotifications(): Promise<AppNotification[]> {
+  const { data } = await supabase.from('notifications').select('*')
+    .order('created_at', { ascending: false }).limit(50);
+  return (data ?? []) as AppNotification[];
+}
+export async function markNotificationsRead(ids?: string[]) {
+  let q = supabase.from('notifications').update({ read: true }).eq('read', false);
+  if (ids && ids.length) q = q.in('id', ids);
+  const { error } = await q;
+  if (error) throw error;
+}
+export function subscribeNotifications(userId: string, onInsert: (n: AppNotification) => void) {
+  return safeSub(() => supabase.channel(`notifs:${userId}:${uniq()}`)
+    .on('postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
+      (p: any) => onInsert(p.new as AppNotification))
+    .subscribe());
+}
+
+/* ─────────────────── TRUST & SAFETY ─────────────────── */
+export type ReportTargetType = 'user' | 'debate' | 'chat_message' | 'question';
+export type ReportReason = 'spam' | 'harassment' | 'hate_speech' | 'misinformation' | 'impersonation' | 'inappropriate_content' | 'other';
+export type ReportStatus = 'pending' | 'reviewed' | 'actioned' | 'dismissed';
+export type AppealStatus = 'open' | 'approved' | 'denied';
+export type TicketCategory = 'account' | 'billing' | 'technical' | 'content' | 'other';
+export type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+
+export interface Report { id: string; reporter_id: string; target_type: ReportTargetType; target_id: string; reason: ReportReason; body: string | null; status: ReportStatus; mod_note: string | null; created_at: string; }
+export interface Ban { id: string; user_id: string; admin_id: string; reason: string; expires_at: string | null; lifted_at: string | null; created_at: string; }
+export interface Appeal { id: string; ban_id: string; user_id: string; body: string; status: AppealStatus; admin_reply: string | null; created_at: string; }
+export interface SupportTicket { id: string; user_id: string; category: TicketCategory; subject: string; body: string; status: TicketStatus; created_at: string; updated_at: string; }
+export interface TicketMessage { id: string; ticket_id: string; author_id: string; body: string; is_admin: boolean; created_at: string; }
+export interface FaqItem { id: string; category: string; question: string; answer: string; sort: number; }
+
+export async function fileReport(targetType: ReportTargetType, targetId: string, reason: ReportReason, body?: string): Promise<string> {
+  const { data, error } = await supabase.rpc('file_report', { p_target_type: targetType, p_target_id: targetId, p_reason: reason, p_body: body ?? null });
+  if (error) throw error; return data as string;
+}
+export async function getMyReports(): Promise<Report[]> {
+  const { data, error } = await supabase.from('reports').select('*').order('created_at', { ascending: false });
+  if (error) throw error; return (data ?? []) as Report[];
+}
+export async function getAllReports(status?: ReportStatus): Promise<Report[]> {
+  let q = supabase.from('reports').select('*').order('created_at', { ascending: false });
+  if (status) q = (q as any).eq('status', status);
+  const { data, error } = await q; if (error) throw error; return (data ?? []) as Report[];
+}
+export async function reviewReport(reportId: string, status: ReportStatus, note?: string, ban?: boolean, banReason?: string, banDays?: number): Promise<void> {
+  const { error } = await supabase.rpc('review_report', { p_report: reportId, p_status: status, p_note: note ?? null, p_ban: ban ?? false, p_ban_reason: banReason ?? null, p_ban_days: banDays ?? null });
+  if (error) throw error;
+}
+export async function liftBan(banId: string): Promise<void> {
+  const { error } = await supabase.rpc('lift_ban', { p_ban: banId }); if (error) throw error;
+}
+export async function getAllBans(): Promise<Ban[]> {
+  const { data, error } = await supabase.from('bans').select('*').order('created_at', { ascending: false });
+  if (error) throw error; return (data ?? []) as Ban[];
+}
+export async function submitTicket(category: TicketCategory, subject: string, body: string): Promise<string> {
+  const { data, error } = await supabase.rpc('submit_ticket', { p_category: category, p_subject: subject, p_body: body });
+  if (error) throw error; return data as string;
+}
+export async function getMyTickets(): Promise<SupportTicket[]> {
+  const { data, error } = await supabase.from('support_tickets').select('*').order('updated_at', { ascending: false });
+  if (error) throw error; return (data ?? []) as SupportTicket[];
+}
+export async function getAllTickets(): Promise<SupportTicket[]> {
+  const { data, error } = await supabase.from('support_tickets').select('*').order('updated_at', { ascending: false });
+  if (error) throw error; return (data ?? []) as SupportTicket[];
+}
+export async function getTicketMessages(ticketId: string): Promise<TicketMessage[]> {
+  const { data, error } = await supabase.from('ticket_messages').select('*').eq('ticket_id', ticketId).order('created_at');
+  if (error) throw error; return (data ?? []) as TicketMessage[];
+}
+export async function replyTicket(ticketId: string, body: string): Promise<void> {
+  const { error } = await supabase.rpc('reply_ticket', { p_ticket: ticketId, p_body: body }); if (error) throw error;
+}
+export async function resolveTicket(ticketId: string): Promise<void> {
+  const { error } = await supabase.rpc('resolve_ticket', { p_ticket: ticketId }); if (error) throw error;
+}
+export async function fileAppeal(banId: string, body: string): Promise<string> {
+  const { data, error } = await supabase.rpc('file_appeal', { p_ban: banId, p_body: body });
+  if (error) throw error; return data as string;
+}
+export async function getMyAppeals(): Promise<Appeal[]> {
+  const { data, error } = await supabase.from('appeals').select('*').order('created_at', { ascending: false });
+  if (error) throw error; return (data ?? []) as Appeal[];
+}
+export async function getAllAppeals(): Promise<Appeal[]> {
+  const { data, error } = await supabase.from('appeals').select('*').order('created_at', { ascending: false });
+  if (error) throw error; return (data ?? []) as Appeal[];
+}
+export async function ruleAppeal(appealId: string, status: AppealStatus, reply?: string): Promise<void> {
+  const { error } = await supabase.rpc('rule_appeal', { p_appeal: appealId, p_status: status, p_reply: reply ?? null });
+  if (error) throw error;
+}
+export async function getFaq(): Promise<FaqItem[]> {
+  const { data, error } = await supabase.from('faq_items').select('*').eq('published', true).order('sort');
+  if (error) throw error; return (data ?? []) as FaqItem[];
+}
+export async function getMyBan(): Promise<Ban | null> {
+  const { data } = await supabase.from('bans').select('*').is('lifted_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle();
+  return (data as Ban) ?? null;
 }
