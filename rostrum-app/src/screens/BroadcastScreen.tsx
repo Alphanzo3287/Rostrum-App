@@ -18,6 +18,7 @@ import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
 import { ScreenTile } from '../components/ScreenTile';
 import { SafePanel } from '../components/SafePanel';
+import { WinnerOverlay } from '../components/WinnerOverlay';
 import { C, ui, display, mono } from '../lib/theme';
 
 /* ───────────── error boundary: never leave YouTube on a black screen ────
@@ -170,6 +171,14 @@ function BroadcastInner() {
               <span style={{ fontSize:11, fontWeight:800, color:'#ff5a5a', letterSpacing:'.08em' }}>LIVE</span>
             </div>
           )}
+          {dz.debate?.poll_open && (
+            <div style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 11px', borderRadius:999,
+              background:`${C.jade}18`, border:`1px solid ${C.jade}60` }}>
+              <span style={{ width:7, height:7, borderRadius:'50%', background:C.jade,
+                boxShadow:`0 0 6px ${C.jade}`, animation:'pulse 1.5s infinite' }} />
+              <span style={{ fontSize:11, fontWeight:800, color:C.jadeHi, letterSpacing:'.08em' }}>VOTING</span>
+            </div>
+          )}
           {!assembling && (
             <div style={{ fontFamily:mono, fontSize:22, fontWeight:700,
               color: low ? C.garnetHi : C.ink, letterSpacing:'.04em', minWidth:78, textAlign:'right' }}>
@@ -226,6 +235,21 @@ function BroadcastInner() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Winner reveal overlay — YouTube viewers see this live */}
+      {dz.debate?.winner_announced && dz.results && (
+        <div style={{ position:'absolute', inset:0, zIndex:100 }}>
+          <WinnerOverlay
+            winnerSide={dz.results.winner_side}
+            winMode={dz.debate.win_mode ?? 'public'}
+            peoplesChoice={dz.results.peoples_choice_side}
+            propScore={dz.results.prop_judge_total}
+            oppScore={dz.results.opp_judge_total}
+            propAudience={dz.results.prop_audience}
+            oppAudience={dz.results.opp_audience}
+          />
         </div>
       )}
 

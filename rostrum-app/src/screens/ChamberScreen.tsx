@@ -13,13 +13,14 @@ import { useAuth } from '../lib/auth';
 import { useRoom } from '../lib/useRoom';
 import { useDebate } from '../lib/useDebate';
 import { useYouTubeStream } from '../lib/useYouTubeStream';
-import { joinDebate, getBroadcastState, subscribeBroadcastState, type BroadcastState } from '../lib/api';
+import { joinDebate, getBroadcastState, subscribeBroadcastState, getResults, type BroadcastState } from '../lib/api';
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
 import { ScreenTile } from '../components/ScreenTile';
 import { SafePanel } from '../components/SafePanel';
 import { ContextRail } from '../components/ContextRail';
 import { RoleDock } from '../components/RoleDock';
+import { WinnerOverlay } from '../components/WinnerOverlay';
 import { BroadcastBar } from '../components/BroadcastBar';
 import { ShareButton } from '../components/ShareSheet';
 import { C, ui, display, mono } from '../lib/theme';
@@ -129,6 +130,31 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
                     <ChamberPreview members={room.members} bs={bs} debateId={debateId}
                       speaker={speaker} speakerSide={speakerSide} meId={me?.identity} />
                   </SafePanel>
+
+                  {/* Voting now indicator */}
+                  {dz.debate?.poll_open && (
+                    <div style={{ position:'absolute', top:10, right:10, zIndex:20, display:'flex', alignItems:'center', gap:6,
+                      padding:'5px 12px', borderRadius:20, background:'rgba(0,0,0,0.7)', backdropFilter:'blur(6px)',
+                      border:`1px solid ${C.jade}55` }}>
+                      <span style={{ width:8, height:8, borderRadius:'50%', background:C.jade,
+                        boxShadow:`0 0 6px ${C.jade}`, animation:'pulse 1.5s infinite' }} />
+                      <span style={{ fontFamily:ui, fontSize:11, fontWeight:700, color:C.jade,
+                        textTransform:'uppercase', letterSpacing:'.08em' }}>Voting open</span>
+                    </div>
+                  )}
+
+                  {/* Winner reveal overlay */}
+                  {dz.debate?.winner_announced && dz.results && (
+                    <WinnerOverlay
+                      winnerSide={dz.results.winner_side}
+                      winMode={dz.debate.win_mode ?? 'public'}
+                      peoplesChoice={dz.results.peoples_choice_side}
+                      propScore={dz.results.prop_judge_total}
+                      oppScore={dz.results.opp_judge_total}
+                      propAudience={dz.results.prop_audience}
+                      oppAudience={dz.results.opp_audience}
+                    />
+                  )}
                 </div>
 
                 {/* broadcast control bar — host layout switcher + present flow */}
@@ -152,6 +178,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         </div>
 
         <ContextRail debateId={debateId} role={role} tab={tab} setTab={setTab} members={room.members} lkRoom={room.room}
+          pollOpen={!!dz.debate?.poll_open}
           ros={{
             segments: dz.segments, segIdx: dz.segIdx, remaining: dz.remaining,
             running: dz.running, phase: dz.phase,
@@ -184,6 +211,13 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         onStreamStop={yt.stop}
         setTab={setTab}
         onLeave={onLeave}
+        pollOpen={!!dz.debate?.poll_open}
+        onTogglePoll={dz.togglePoll}
+        winMode={dz.debate?.win_mode}
+        onFinalize={dz.doFinalize}
+        onAnnounce={dz.doAnnounce}
+        resultsReady={!!dz.results}
+        winnerAnnounced={!!dz.debate?.winner_announced}
       />
     </div>
   );

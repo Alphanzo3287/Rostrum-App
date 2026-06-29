@@ -51,6 +51,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
   const [thumb, setThumb] = useState<File | null>(null);
   const [thumbPrev, setThumbPrev] = useState<string | null>(null);
   const [voters, setVoters] = useState(true);
+  const [winMode, setWinMode] = useState<'academic' | 'public' | 'hybrid'>('public');
   const [segs, setSegs] = useState<Seg[]>(FORMATS.oxford);
   const [paid, setPaid] = useState(false);
   const [price, setPrice] = useState(5);
@@ -82,6 +83,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
         motion, format, visibility: vis,
         isPaid: paid, priceCents: paid ? Math.round(price * 100) : 0,
         giftsEnabled: gifts, recordingEnabled: recording, votersEnabled: voters,
+        winMode,
         scheduledAt,
         segments: segs.map(s => ({ label: s.label, side: s.side, durationSecs: s.min * 60 })),
         thumbnailFile: thumb,
@@ -198,6 +200,22 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
 
           {step === 3 && <>
             <Toggle label="Audience voting" sub="Let viewers vote a verdict from their seats" on={voters} set={setVoters} />
+
+            {/* Win mode selector */}
+            <div style={{ padding:'15px 0', borderBottom:`1px solid ${C.hair}` }}>
+              <div style={{ fontFamily:ui, fontSize:14, color:C.ink, fontWeight:600, marginBottom:2 }}>Winner decided by</div>
+              <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginBottom:10 }}>
+                {winMode === 'academic' ? 'Judges score each segment; their ballots determine the winner.'
+                  : winMode === 'hybrid' ? 'Judges pick the official winner; audience picks the People\'s Choice.'
+                  : 'The audience votes live; majority wins.'}
+              </div>
+              <div style={{ display:'flex', gap:8 }}>
+                <Chip on={winMode==='public'} onClick={() => setWinMode('public')}>Audience</Chip>
+                <Chip on={winMode==='academic'} onClick={() => setWinMode('academic')}>Judges</Chip>
+                <Chip on={winMode==='hybrid'} onClick={() => setWinMode('hybrid')}>Hybrid</Chip>
+              </div>
+            </div>
+
             <Toggle label="Gifts & donations" sub="Audience can tip debaters and the host live" on={gifts} set={setGifts} />
             <Toggle label="Record & allow downloads" sub="Host and debaters get the MP4 afterward" on={recording} set={setRecording} />
             <div style={{ display:'flex', alignItems:'center', gap:14, padding:'15px 0', borderBottom:`1px solid ${C.hair}` }}>

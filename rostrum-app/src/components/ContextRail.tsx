@@ -28,9 +28,9 @@ export type RosData = {
   onJump: (i: number) => void; onToggle: () => void; onNext: () => void; onSetRemaining: (s: number) => void;
 };
 
-export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom }: {
+export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom, pollOpen }: {
   debateId: string; role: Role; tab: string; setTab: (t: string) => void; ros?: RosData;
-  members?: any[]; lkRoom?: any;
+  members?: any[]; lkRoom?: any; pollOpen?: boolean;
 }) {
   const tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['gift','Gift']]
             : role === 'moderator' ? [['chat','Chat'],['qa','Q&A'],['poll','Poll'],['gift','Gift']]
@@ -49,7 +49,7 @@ export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom 
         {tab==='invite' && <InvitePanel debateId={debateId} />}
         {tab==='ros' && (ros ? <RosPanel ros={ros} /> : <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>Run of show is unavailable.</p>)}
         {tab==='chat' && <ChatPanel debateId={debateId} />}
-        {(tab==='vote'||tab==='poll') && <PollPanel debateId={debateId} canVote={role==='audience'} />}
+        {(tab==='vote'||tab==='poll') && <PollPanel debateId={debateId} canVote={role==='audience'} pollOpen={pollOpen} />}
         {tab==='qa' && <QAPanel debateId={debateId} canModerate={role==='host'||role==='moderator'} />}
         {tab==='score' && <ScorePanel debateId={debateId} />}
         {tab==='gift' && <GiftPanel debateId={debateId} />}
@@ -389,7 +389,7 @@ function P({ children }: { children: React.ReactNode }) {
 }
 
 /* ----- poll ----- */
-function PollPanel({ debateId, canVote }: { debateId: string; canVote: boolean }) {
+function PollPanel({ debateId, canVote, pollOpen }: { debateId: string; canVote: boolean; pollOpen?: boolean }) {
   const [t, setT] = useState({ prop: 0, opp: 0 });
   const [voted, setVoted] = useState<Side | null>(null);
   useEffect(() => {
@@ -399,7 +399,7 @@ function PollPanel({ debateId, canVote }: { debateId: string; canVote: boolean }
   const total = t.prop + t.opp || 1;
 
   async function vote(side: Side) {
-    if (voted) return;
+    if (voted || !pollOpen) return;
     setVoted(side);
     try { setT(await castVote(debateId, side)); } catch { setVoted(null); }
   }
@@ -419,16 +419,27 @@ function PollPanel({ debateId, canVote }: { debateId: string; canVote: boolean }
 
   return (
     <>
-      <h3 style={{ fontFamily:display, fontSize:21, color:C.ink, margin:'0 0 14px' }}>Audience verdict</h3>
+      <h3 style={{ fontFamily:display, fontSize:21, color:C.ink, margin:'0 0 6px' }}>Audience verdict</h3>
+      {pollOpen ? (
+        <div style={{ fontFamily:ui, fontSize:12, fontWeight:700, color:C.jade, marginBottom:12,
+          textTransform:'uppercase', letterSpacing:'.08em' }}>🗳 Voting is open</div>
+      ) : (
+        <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginBottom:12 }}>Voting is closed</div>
+      )}
       <Bar k="prop" label="Proposition" c={C.jade} />
       <Bar k="opp" label="Opposition" c={C.garnet} />
-      {canVote && (
+      {canVote && pollOpen && (
         <div style={{ marginTop:16, paddingTop:14, borderTop:`1px solid ${C.hair}` }}>
           {!voted && <div style={{ fontFamily:ui, fontSize:11, fontWeight:700, letterSpacing:1, textTransform:'uppercase', color:C.dim, marginBottom:10 }}>Cast your vote</div>}
           <div style={{ display:'flex', gap:10 }}>
             <VoteBtn label="Proposition" side="prop" c={C.jade} hi={C.jadeHi} voted={voted} onClick={() => vote('prop')} />
             <VoteBtn label="Opposition" side="opp" c={C.garnet} hi={C.garnetHi} voted={voted} onClick={() => vote('opp')} />
           </div>
+        </div>
+      )}
+      {canVote && !pollOpen && !voted && (
+        <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginTop:10, fontStyle:'italic' }}>
+          The host will open voting when it's time.
         </div>
       )}
     </>

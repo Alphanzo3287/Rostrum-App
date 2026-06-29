@@ -35,6 +35,13 @@ interface Props {
   onStreamStop: () => void;
   setTab: (t: string) => void;
   onLeave: () => void;
+  pollOpen?: boolean;
+  onTogglePoll?: () => void;
+  winMode?: string;
+  onFinalize?: () => void;
+  onAnnounce?: () => void;
+  resultsReady?: boolean;
+  winnerAnnounced?: boolean;
 }
 
 export function RoleDock(p: Props) {
@@ -70,6 +77,17 @@ export function RoleDock(p: Props) {
         <Btn label={p.running ? 'Pause clock' : 'Start clock'} onClick={p.onToggleTimer} />
         <Btn label="Next segment" onClick={p.onNextSegment} />
         <Btn label="Mute all" onClick={() => muteAudience(p.debateId)} />
+        <Sep />
+        {p.onTogglePoll && (
+          <Btn label={p.pollOpen ? '🗳 Close poll' : '🗳 Open poll'} onClick={p.onTogglePoll}
+            active={p.pollOpen} accent={p.pollOpen ? C.jade : undefined} />
+        )}
+        {p.onFinalize && !p.resultsReady && (
+          <Btn label="📊 Finalize" onClick={p.onFinalize} />
+        )}
+        {p.onAnnounce && p.resultsReady && !p.winnerAnnounced && (
+          <Btn label="🏆 Announce winner" onClick={p.onAnnounce} accent={C.gold} />
+        )}
         <Sep />
         <StreamBtn phase={p.streamPhase} error={p.streamError} onStart={p.onStreamStart} onStop={p.onStreamStop} />
         <Sep />

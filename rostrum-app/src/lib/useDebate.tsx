@@ -8,10 +8,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   getDebate, setDebateStatus, setSegment, pauseTimer, resumeTimer,
   finalizeDebate, cancelDebate, subscribeDebate, setRemaining as apiSetRemaining,
+  openPoll as apiOpenPoll, closePoll as apiClosePoll, announceWinner as apiAnnounce,
+  getResults, type WinMode,
 } from './api';
 import { startRecording, stopEgress, applySegmentMics } from './livekit';
 import { endYouTubeBroadcast } from './youtube';
-import type { Debate, Segment, Side } from './types';
+import type { Debate, Segment, Side, DebateResult } from './types';
 
 export type Phase = 'assembly' | 'live' | 'ended';
 type Mover = { identity: string; role: string; side: Side | null };
@@ -20,6 +22,7 @@ export function useDebate(debateId: string) {
   const [debate, setDebate] = useState<Debate | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [remaining, setRemaining] = useState(0);
+  const [results, setResults] = useState<DebateResult | null>(null);
   const egress = useRef<{ rec?: string; yt?: string }>({});
 
   useEffect(() => {
@@ -27,6 +30,13 @@ export function useDebate(debateId: string) {
     const off = subscribeDebate(debateId, (patch) => setDebate(prev => (prev ? { ...prev, ...patch } : prev)));
     return off;
   }, [debateId]);
+
+  // Auto-load results when the host announces the winner (all participants)
+  useEffect(() => {
+    if (debate?.winner_announced && !results) {
+      getResults(debateId).then(r => { if (r) setResults(r); }).catch(() => {});
+    }
+  }, [debate?.winner_announced, debateId, results]);
 
   // local 2Hz tick that resolves the authoritative clock fields into seconds
   useEffect(() => {
@@ -88,18 +98,40 @@ export function useDebate(debateId: string) {
     await apiSetRemaining(debateId, secs);
   }, [debateId]);
 
-  // host: stop tape, decide the winner, mark ended (status flips via finalize)
+  // host: toggle the audience poll open/closed
+  const togglePoll = useCallback(async () => {
+    if (!debate) return;
+    if (debate.poll_open) await apiClosePoll(debateId);
+    else await apiOpenPoll(debateId);
+  }, [debateId, debate]);
+
+  // host: compute results (does NOT end the debate — host announces first)
+  const doFinalize = useCallback(async () => {
+    await finalizeDebate(debateId);
+    const r = await getResults(debateId);
+    setResults(r);
+  }, [debateId]);
+
+  // host: live reveal of the winner (sets winner_announced on the debate row)
+  const doAnnounce = useCallback(async () => {
+    await apiAnnounce(debateId);
+  }, [debateId]);
+
+  // host: stop tape, end broadcast, mark ended (after the winner is announced)
   const endDebate = useCallback(async () => {
     if (egress.current.rec) { try { await stopEgress(debateId, egress.current.rec); } catch {} }
     if (egress.current.yt)  { try { await stopEgress(debateId, egress.current.yt); } catch {} }
     try { await endYouTubeBroadcast(debateId); } catch { /* optional */ }
-    await finalizeDebate(debateId);
-  }, [debateId]);
+    // If not finalized yet, do it now as a safety net
+    if (!results) { try { await finalizeDebate(debateId); } catch {} }
+    await setDebateStatus(debateId, 'ended');
+  }, [debateId, results]);
 
   const cancelEvent = useCallback(async () => {
     await cancelDebate(debateId);
   }, [debateId]);
 
-  return { debate, segments, seg, segIdx, remaining, running, phase, isHost,
-           goLive, nextSegment, toggleTimer, endDebate, cancelEvent, goToSegment, setClock };
+  return { debate, segments, seg, segIdx, remaining, running, phase, isHost, results,
+           goLive, nextSegment, toggleTimer, endDebate, cancelEvent, goToSegment, setClock,
+           togglePoll, doFinalize, doAnnounce };
 }

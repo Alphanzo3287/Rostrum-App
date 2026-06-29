@@ -64,6 +64,10 @@ export interface Debate {
   segment_paused_secs: number | null;
   // joined for convenience
   host?: Pick<Profile, 'display_name' | 'handle' | 'avatar_url'>;
+  // winner system
+  win_mode?: string;
+  poll_open?: boolean;
+  winner_announced?: boolean;
 }
 
 export interface Segment { id: string; debate_id: string; idx: number; label: string; side: Side | null; duration_secs: number; }
@@ -73,6 +77,7 @@ export interface DebateResult {
   debate_id: string; winner_side: Side | null;
   prop_judge_total: number; opp_judge_total: number;
   prop_audience: number; opp_audience: number; decided_at: string;
+  peoples_choice_side?: Side | null;
 }
 export interface Question { id: string; debate_id: string; asker_id: string; body: string; status: QuestionStatus; created_at: string; }
 export interface Team {

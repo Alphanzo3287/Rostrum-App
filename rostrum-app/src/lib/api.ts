@@ -91,6 +91,7 @@ export interface CreateDebateInput {
   giftsEnabled: boolean;
   recordingEnabled: boolean;
   votersEnabled: boolean;
+  winMode: WinMode;
   scheduledAt?: string | null;
   segments: { label: string; side: Side | null; durationSecs: number }[];
   thumbnailFile?: File | null;
@@ -112,6 +113,7 @@ export async function createDebate(input: CreateDebateInput): Promise<Debate> {
     gifts_enabled: input.giftsEnabled,
     recording_enabled: input.recordingEnabled,
     voters_enabled: input.votersEnabled,
+    win_mode: input.winMode ?? 'public',
     scheduled_at: input.scheduledAt ?? null,
     status: input.scheduledAt ? 'scheduled' : 'assembly',
   }).select().single();
@@ -237,6 +239,22 @@ export async function finalizeDebate(debateId: string) {
 export async function getResults(debateId: string): Promise<DebateResult | null> {
   const { data } = await supabase.from('debate_results').select('*').eq('debate_id', debateId).maybeSingle();
   return (data as DebateResult) ?? null;
+}
+
+/* ----------------------- WINNER SYSTEM ----------------------- */
+export type WinMode = 'academic' | 'public' | 'hybrid';
+
+export async function openPoll(debateId: string) {
+  const { error } = await supabase.rpc('open_poll', { p_debate: debateId });
+  if (error) throw error;
+}
+export async function closePoll(debateId: string) {
+  const { error } = await supabase.rpc('close_poll', { p_debate: debateId });
+  if (error) throw error;
+}
+export async function announceWinner(debateId: string) {
+  const { error } = await supabase.rpc('announce_winner', { p_debate: debateId });
+  if (error) throw error;
 }
 
 /* ------------------------------ Q&A ------------------------------ */
