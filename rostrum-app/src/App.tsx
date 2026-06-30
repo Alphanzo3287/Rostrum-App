@@ -11,6 +11,7 @@ import {
 import { AuthProvider, useAuth } from './lib/auth';
 import { ThemeProvider } from './lib/themeContext';
 import { NavBar } from './components/NavBar';
+import { Sidebar } from './components/Sidebar';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { WelcomeTour } from './components/WelcomeTour';
 import { AuthScreen } from './screens/AuthScreen';
@@ -36,7 +37,7 @@ import { BannedScreen } from './screens/BannedScreen';
 import { AdminPortalScreen } from './screens/AdminPortalScreen';
 import { getDebate, getMyBan } from './lib/api';
 import type { DebateRole, Side } from './lib/types';
-import { C, ui } from './lib/theme';
+import { C, ui, display, solidGold, a } from './lib/theme';
 
 export default function App() {
   return (
@@ -92,6 +93,11 @@ function Gate() {
         <Route path="earnings" element={<EarningsRoute />} />
         <Route path="settings" element={<SettingsRoute />} />
         <Route path="support" element={<SupportRoute />} />
+        <Route path="communities" element={<ComingSoonRoute title="Communities" subtitle="Find your tribe. Join debate communities by topic, school, or interest." />} />
+        <Route path="discover" element={<ComingSoonRoute title="Discover" subtitle="Explore debates by topic, format, and trending themes." />} />
+        <Route path="live" element={<ComingSoonRoute title="Live Arenas" subtitle="All live debates, all the time. Watch what's happening right now." />} />
+        <Route path="library" element={<ComingSoonRoute title="Library" subtitle="Your saved debates, watched history, and personal collections." />} />
+        <Route path="notifications" element={<ComingSoonRoute title="Notifications" subtitle="Catch up on what's happening across the platform." />} />
         {isAdmin && <Route path="moderation" element={<ModerationRoute />} />}
         {isAdmin && <Route path="admin" element={<AdminPortalRoute />} />}
         <Route path="me" element={<ProfileRoute />} />
@@ -113,9 +119,9 @@ function Gate() {
 
 function Shell() {
   return (
-    <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column' }}>
-      <NavBar />
-      <div style={{ flex:1, position:'relative', minHeight:0 }}>
+    <div style={{ position:'absolute', inset:0, display:'flex', overflow:'hidden' }}>
+      <Sidebar />
+      <div style={{ flex:1, position:'relative', minHeight:0, overflow:'auto' }}>
         <ErrorBoundary><Outlet /></ErrorBoundary>
       </div>
       <WelcomeTour />
@@ -220,6 +226,40 @@ function AdminPortalRoute() {
 }
 function ModerationRoute() {
   return <ModerationScreen />;
+}
+
+/* ── Coming Soon route — used for stubbed nav items. ── */
+function ComingSoonRoute({ title, subtitle }: { title: string; subtitle: string }) {
+  const nav = useNavigate();
+  return (
+    <div style={{ minHeight:'100vh', display:'grid', placeItems:'center', padding:24,
+      fontFamily:ui, background:C.base }}>
+      <div style={{ maxWidth:520, width:'100%', textAlign:'center', padding:'40px 32px',
+        borderRadius:24, background:C.panel,
+        border:`1px solid ${C.hair}`,
+        boxShadow:`0 30px 80px rgba(0,0,0,0.3), 0 1px 0 rgba(255,255,255,0.05) inset` }}>
+        <div style={{ width:64, height:64, margin:'0 auto 22px', borderRadius:18,
+          display:'grid', placeItems:'center', color:'#FFFFFF', fontSize:28,
+          background:`linear-gradient(135deg, ${C.gold}, ${C.cyan})`,
+          boxShadow:`0 12px 36px ${a(C.gold,'4D')}` }}>✨</div>
+        <div style={{ display:'inline-flex', alignItems:'center', gap:7, padding:'4px 12px',
+          borderRadius:999, background:a(C.cyan,'14'), border:`1px solid ${a(C.cyan,'33')}`,
+          marginBottom:14 }}>
+          <span style={{ fontFamily:ui, fontSize:10, fontWeight:800, color:C.cyan,
+            textTransform:'uppercase', letterSpacing:'.14em' }}>COMING SOON</span>
+        </div>
+        <h1 style={{ fontFamily:display, fontSize:34, fontWeight:700, color:C.ink,
+          margin:'0 0 12px', letterSpacing:'-.02em' }}>{title}</h1>
+        <p style={{ fontFamily:ui, fontSize:14, color:C.dim, lineHeight:1.6,
+          margin:'0 0 28px', maxWidth:380, marginLeft:'auto', marginRight:'auto' }}>
+          {subtitle}
+        </p>
+        <button onClick={() => nav('/')} style={{ ...solidGold, padding:'12px 22px', fontSize:13.5 }}>
+          Back to Home
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function Splash() {

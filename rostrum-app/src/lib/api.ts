@@ -693,3 +693,17 @@ export async function getMyBan(): Promise<Ban | null> {
   const { data } = await supabase.from('bans').select('*').is('lifted_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle();
   return (data as Ban) ?? null;
 }
+
+/* ─────────────────── PUBLIC HOMEPAGE STATS ─────────────────── */
+export interface PlatformStats { active_users: number; live_debates: number; total_debates: number; total_votes: number; countries: number; }
+export async function getPlatformStats(): Promise<PlatformStats> {
+  const { data, error } = await supabase.rpc('platform_stats');
+  if (error) throw error;
+  return data as PlatformStats;
+}
+export interface TopDebater { id: string; display_name: string; handle: string; avatar_url: string | null; wins: number; rank: string; }
+export async function getTopDebaters(limit = 5): Promise<TopDebater[]> {
+  const { data, error } = await supabase.rpc('top_debaters_public', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as TopDebater[];
+}

@@ -1,34 +1,71 @@
 // =====================================================================
 // The Rostrum · src/lib/theme.ts
-// CSS-variable-backed theme. Every C.* value resolves to a CSS variable,
-// so flipping --theme on <html> instantly re-themes the whole app without
-// touching any of the ~1,100 existing C.* references across the codebase.
+// CSS-variable-backed theme with the 2026 redesign palette.
+// Existing C.gold / C.jade / C.garnet calls keep working — they now
+// resolve to the new royal-blue / emerald / coral palette.
 // =====================================================================
 
-// The token names — single source of truth.
+// Token names — single source of truth.
 const TOKENS = [
-  'base','base2','panel','panel2','hair','hairHi',
-  'ink','dim','faint','gold','goldHi','ember',
-  'jade','jadeHi','garnet','garnetHi',
+  'base','base2','panel','panel2','glass','hair','hairHi',
+  'ink','dim','faint',
+  // brand & accents (kept under legacy names for back-compat)
+  'gold','goldHi',          // PRIMARY — royal blue
+  'cyan','cyanHi',          // SECONDARY — electric cyan
+  'jade','jadeHi',          // SUCCESS — emerald
+  'warning','warningHi',    // WARNING — amber gold
+  'garnet','garnetHi','ember', // DANGER — coral
 ] as const;
 type Token = typeof TOKENS[number];
 
-// Dark palette (the original look).
+// DARK palette (the design's primary look).
 export const DARK: Record<Token, string> = {
-  base:'#0C0B0D', base2:'#141216', panel:'#18151B', panel2:'#1E1A22',
-  hair:'rgba(255,255,255,0.07)', hairHi:'rgba(255,255,255,0.14)',
-  ink:'#F3EFE7', dim:'#9D968A', faint:'#665F55',
-  gold:'#D9B45C', goldHi:'#F1D58A', ember:'#E2503A',
-  jade:'#2E9E86', jadeHi:'#4FC2A7', garnet:'#B23A55', garnetHi:'#DA5F7C',
+  base: '#090B10',
+  base2: '#0D1118',
+  panel: '#11151C',
+  panel2: '#161B25',
+  glass: 'rgba(255,255,255,0.05)',
+  hair: 'rgba(255,255,255,0.08)',
+  hairHi: 'rgba(255,255,255,0.14)',
+  ink: '#FFFFFF',
+  dim: '#B7C0CE',
+  faint: '#7D8898',
+  gold: '#4F7CFF',        // royal blue (was warm gold)
+  goldHi: '#7194FF',
+  cyan: '#49D6FF',
+  cyanHi: '#7BE1FF',
+  jade: '#00C98D',        // emerald
+  jadeHi: '#3FDDA8',
+  warning: '#F4B740',     // amber gold
+  warningHi: '#FBC766',
+  garnet: '#FF5B6A',      // danger coral
+  garnetHi: '#FF7E8A',
+  ember: '#FF5B6A',
 };
 
-// Light palette — warm parchment, tuned so accents still read clearly.
+// LIGHT palette — refined, premium, not just "inverted dark".
 export const LIGHT: Record<Token, string> = {
-  base:'#FBF8F2', base2:'#F3EEE3', panel:'#FFFFFF', panel2:'#F6F1E8',
-  hair:'rgba(20,16,10,0.10)', hairHi:'rgba(20,16,10,0.20)',
-  ink:'#1E1A16', dim:'#5C5346', faint:'#94897A',
-  gold:'#9A7B25', goldHi:'#7A5E18', ember:'#C23A24',
-  jade:'#1E7A64', jadeHi:'#14624F', garnet:'#9A2840', garnetHi:'#7E1E32',
+  base: '#F7F8FB',
+  base2: '#EEF1F6',
+  panel: '#FFFFFF',
+  panel2: '#F2F4F9',
+  glass: 'rgba(15,20,30,0.04)',
+  hair: 'rgba(15,20,30,0.10)',
+  hairHi: 'rgba(15,20,30,0.18)',
+  ink: '#0A0E16',
+  dim: '#4A5366',
+  faint: '#7D8898',
+  gold: '#2B5BFF',
+  goldHi: '#1841E0',
+  cyan: '#0EA5C9',
+  cyanHi: '#0888A8',
+  jade: '#00956A',
+  jadeHi: '#007553',
+  warning: '#C68800',
+  warningHi: '#A06D00',
+  garnet: '#D63A4A',
+  garnetHi: '#B11E2D',
+  ember: '#D63A4A',
 };
 
 // C proxy — C.gold returns "var(--gold)". Existing code keeps working verbatim.
@@ -39,7 +76,6 @@ export const C = TOKENS.reduce((acc, t) => {
 
 export type ThemeMode = 'dark' | 'light';
 
-// Apply a theme by writing the CSS variables onto <html>.
 export function applyTheme(mode: ThemeMode) {
   if (typeof document === 'undefined') return;
   const palette = mode === 'light' ? LIGHT : DARK;
@@ -49,7 +85,6 @@ export function applyTheme(mode: ThemeMode) {
   root.setAttribute('data-theme', mode);
 }
 
-// Resolve the initial theme: saved choice → system preference → dark.
 export function initialTheme(): ThemeMode {
   if (typeof window === 'undefined') return 'dark';
   const saved = localStorage.getItem('rostrum-theme');
@@ -62,26 +97,58 @@ export function saveTheme(mode: ThemeMode) {
   try { localStorage.setItem('rostrum-theme', mode); } catch { /* noop */ }
 }
 
-// Alpha helper: turns a CSS-variable color + 2-digit hex alpha into a
-// theme-aware translucent color. Replaces the old `${a(C.gold,'18')}` pattern,
-// which would produce invalid "var(--gold)18". Uses color-mix so it tracks
-// the live theme value of the variable.
+// Alpha helper: ${C.gold}18 → a(C.gold, '18') → theme-tracking translucent.
 export function a(varColor: string, hex2: string): string {
   const pct = Math.round((parseInt(hex2, 16) / 255) * 100);
   return `color-mix(in srgb, ${varColor} ${pct}%, transparent)`;
 }
 
-// Fonts (unchanged).
-export const ui = "'Hanken Grotesk', system-ui, sans-serif";
+// ── Fonts ─────────────────────────────────────────────────────────────
+export const ui      = "'Inter', system-ui, -apple-system, sans-serif";
 export const display = "'Fraunces', Georgia, serif";
-export const mono = "'JetBrains Mono', ui-monospace, monospace";
+export const mono    = "'JetBrains Mono', ui-monospace, monospace";
 
+// ── Component primitives ──────────────────────────────────────────────
+// solidGold is the historical name kept so existing buttons re-skin
+// automatically. It now produces a royal-blue → cyan gradient.
 export const solidGold: React.CSSProperties = {
-  display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7, padding:'11px 16px',
-  border:'none', borderRadius:5, cursor:'pointer', fontFamily:ui, fontWeight:700, fontSize:14,
-  color:C.base, background:`linear-gradient(180deg, ${C.goldHi}, ${C.gold})`,
+  display:'inline-flex', alignItems:'center', justifyContent:'center', gap:8,
+  padding:'12px 20px', border:'none', borderRadius:14, cursor:'pointer',
+  fontFamily:ui, fontWeight:600, fontSize:14, color:'#FFFFFF',
+  background:`linear-gradient(135deg, ${C.gold}, ${C.cyan})`,
+  boxShadow: `0 8px 30px ${a(C.gold,'66')}, inset 0 1px 0 rgba(255,255,255,0.2)`,
+  transition: 'transform .2s ease, box-shadow .2s ease',
 };
+// Alias for clarity in new code.
+export const solidPrimary = solidGold;
+
+// Ghost / outline button.
+export const ghostBtn: React.CSSProperties = {
+  display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7,
+  padding:'10px 18px', borderRadius:14, cursor:'pointer',
+  fontFamily:ui, fontWeight:600, fontSize:13, color: C.ink,
+  background: 'transparent', border: `1px solid ${C.hair}`,
+  transition: 'all .15s ease',
+};
+
+// Input field.
 export const field: React.CSSProperties = {
-  width:'100%', padding:'11px 13px', borderRadius:5, background:C.base,
-  border:`1px solid ${C.hair}`, color:C.ink, fontFamily:ui, fontSize:14, outline:'none',
+  width:'100%', padding:'12px 14px', borderRadius:12,
+  background: C.glass, border:`1px solid ${C.hair}`,
+  color:C.ink, fontFamily:ui, fontSize:14, outline:'none',
+  transition: 'border-color .15s ease, background .15s ease',
+};
+
+// Card / surface primitives.
+export const card: React.CSSProperties = {
+  background: C.panel,
+  border: `1px solid ${C.hair}`,
+  borderRadius: 20,
+};
+export const glass: React.CSSProperties = {
+  background: C.glass,
+  border: `1px solid ${C.hair}`,
+  backdropFilter: 'blur(20px)',
+  WebkitBackdropFilter: 'blur(20px)',
+  borderRadius: 20,
 };
