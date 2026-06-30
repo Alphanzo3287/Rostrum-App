@@ -42,16 +42,18 @@ export function Section({ title, children, right }: { title: string; children: R
 }
 
 export function Scroll({ title, onBack, right, children, maxWidth = 920 }: {
-  title: string; onBack?: () => void; right?: React.ReactNode; children: React.ReactNode; maxWidth?: number;
+  title?: string; onBack?: () => void; right?: React.ReactNode; children: React.ReactNode; maxWidth?: number;
 }) {
   return (
-    <div style={{ position:'absolute', inset:0, overflowY:'auto', background:C.base }}>
-      <div style={{ maxWidth, margin:'0 auto', padding:'24px 24px 90px' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:24 }}>
-          {onBack && <button onClick={onBack} style={iconBtn}>‹</button>}
-          <h2 style={{ fontFamily:display, fontSize:30, fontWeight:600, color:C.ink, margin:0 }}>{title}</h2>
-          <div style={{ marginLeft:'auto' }}>{right}</div>
-        </div>
+    <div style={{ minHeight:'100%', background:C.base }}>
+      <div style={{ maxWidth, margin:'0 auto', padding:'28px 24px 90px' }}>
+        {(title || onBack || right) && (
+          <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:24 }}>
+            {onBack && <button onClick={onBack} style={iconBtn}>‹</button>}
+            {title && <h2 style={{ fontFamily:display, fontSize:28, fontWeight:700, color:C.ink, margin:0, letterSpacing:'-.02em' }}>{title}</h2>}
+            <div style={{ marginLeft:'auto' }}>{right}</div>
+          </div>
+        )}
         {children}
       </div>
     </div>
@@ -63,16 +65,16 @@ export const Center = ({ children }: { children: React.ReactNode }) =>
     color:C.dim, fontFamily:ui, fontSize:14 }}>{children}</div>;
 
 export const Empty = ({ children }: { children: React.ReactNode }) =>
-  <div style={{ padding:'26px 20px', borderRadius:10, border:`1px dashed ${C.hairHi}`, textAlign:'center',
+  <div style={{ padding:'28px 20px', borderRadius:16, border:`1px dashed ${C.hairHi}`, textAlign:'center',
     fontFamily:ui, fontSize:13, color:C.faint }}>{children}</div>;
 
-export const pill: React.CSSProperties = { padding:'5px 11px', borderRadius:999, fontFamily:ui, fontSize:12,
-  fontWeight:600, color:C.dim, background:C.panel, border:`1px solid ${C.hair}` };
-export const ghostBtn: React.CSSProperties = { display:'inline-flex', alignItems:'center', gap:7, padding:'10px 16px',
-  borderRadius:6, border:`1px solid ${C.hairHi}`, background:'transparent', color:C.ink, fontFamily:ui,
+export const pill: React.CSSProperties = { padding:'5px 12px', borderRadius:999, fontFamily:ui, fontSize:12,
+  fontWeight:600, color:C.dim, background:C.glass, border:`1px solid ${C.hair}` };
+export const ghostBtn: React.CSSProperties = { display:'inline-flex', alignItems:'center', gap:7, padding:'10px 18px',
+  borderRadius:12, border:`1px solid ${C.hair}`, background:'transparent', color:C.ink, fontFamily:ui,
   fontSize:13, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' };
-export const iconBtn: React.CSSProperties = { width:32, height:32, borderRadius:5, border:`1px solid ${C.hair}`,
-  background:'rgba(0,0,0,0.25)', color:C.dim, cursor:'pointer', fontSize:16, lineHeight:1 };
+export const iconBtn: React.CSSProperties = { width:34, height:34, borderRadius:10, border:`1px solid ${C.hair}`,
+  background:C.glass, color:C.dim, cursor:'pointer', fontSize:16, lineHeight:1 };
 
 export function hrefFor(network: string, value: string) {
   if (/^https?:\/\//.test(value)) return value;

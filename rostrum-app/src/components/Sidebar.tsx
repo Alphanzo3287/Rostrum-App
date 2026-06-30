@@ -209,27 +209,6 @@ export function Sidebar() {
           Upgrade Now
         </button>
       </div>
-
-      {/* ── Bottom row: profile + sign out + theme ── */}
-      <div style={{ borderTop:`1px solid ${C.hair}`, padding:'12px 12px', display:'flex',
-        alignItems:'center', gap:10 }}>
-        <button onClick={() => nav('/me')} style={{ display:'flex', alignItems:'center', gap:10,
-          background:'none', border:'none', cursor:'pointer', flex:1, minWidth:0, padding:0, textAlign:'left' }}>
-          <Avatar url={profile?.avatar_url} name={profile?.display_name} size={34} />
-          <div style={{ minWidth:0 }}>
-            <div style={{ fontFamily:ui, fontSize:13, fontWeight:600, color:C.ink,
-              whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-              {profile?.display_name ?? 'You'}
-            </div>
-            <div style={{ fontFamily:ui, fontSize:10.5, color:C.faint }}>View profile</div>
-          </div>
-        </button>
-        <ThemeToggle compact />
-        <button onClick={signOut} title="Sign out"
-          style={{ width:32, height:32, borderRadius:8, border:`1px solid ${C.hair}`,
-            background:'transparent', color:C.faint, cursor:'pointer', fontSize:14,
-            display:'grid', placeItems:'center' }}>↪</button>
-      </div>
     </>
   );
 
@@ -265,6 +244,26 @@ export function Sidebar() {
           <div style={{ position:'fixed', inset:'56px 0 0 0', zIndex:99, display:'flex', flexDirection:'column',
             background:a(C.base,'F0'), backdropFilter:'blur(20px)', overflowY:'auto', padding:'12px 0' }}>
             {sidebarBody}
+            {/* Mobile-only profile + theme + sign out (no TopBar on mobile) */}
+            <div style={{ borderTop:`1px solid ${C.hair}`, padding:'14px 18px', display:'flex',
+              alignItems:'center', gap:12 }}>
+              <button onClick={() => nav('/me')} style={{ display:'flex', alignItems:'center', gap:10,
+                background:'none', border:'none', cursor:'pointer', flex:1, minWidth:0, padding:0, textAlign:'left' }}>
+                <Avatar url={profile?.avatar_url} name={profile?.display_name} size={36} />
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontFamily:ui, fontSize:14, fontWeight:600, color:C.ink,
+                    whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                    {profile?.display_name ?? 'You'}
+                  </div>
+                  <div style={{ fontFamily:ui, fontSize:11, color:C.faint }}>View profile</div>
+                </div>
+              </button>
+              <ThemeToggle compact />
+              <button onClick={signOut} title="Sign out"
+                style={{ width:36, height:36, borderRadius:9, border:`1px solid ${C.hair}`,
+                  background:'transparent', color:C.faint, cursor:'pointer', fontSize:15,
+                  display:'grid', placeItems:'center' }}>↪</button>
+            </div>
           </div>
         )}
       </>

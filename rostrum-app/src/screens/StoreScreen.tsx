@@ -39,7 +39,7 @@ export function StoreScreen({ onBack }: { onBack?: () => void }) {
     <Scroll title="The Store" onBack={onBack}
       right={
         <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px', borderRadius:999,
-          border:`1px solid ${a(C.gold,'55')}`, background:'rgba(217,180,92,0.08)' }}>
+          border:`1px solid ${a(C.gold,'55')}`, background:a(C.gold,'14') }}>
           <span style={{ fontFamily:ui, fontSize:11, color:C.faint, textTransform:'uppercase', letterSpacing:'.5px' }}>D-Bucks</span>
           <span style={{ fontFamily:mono, fontSize:16, fontWeight:700, color:C.gold }}>{total.toLocaleString()}</span>
         </div>
@@ -61,7 +61,7 @@ export function StoreScreen({ onBack }: { onBack?: () => void }) {
       {!gifts ? <Empty>Loading gifts...</Empty> :
        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:12, marginBottom:28 }}>
          {gifts.map(g => (
-           <div key={g.id} style={{ padding:'16px 14px', borderRadius:12, border:`1px solid ${C.hair}`,
+           <div key={g.id} style={{ padding:'16px 14px', borderRadius:18, border:`1px solid ${C.hair}`,
              background:C.panel, textAlign:'center' }}>
              <div style={{ fontSize:32, lineHeight:1.2 }}>{g.icon}</div>
              <div style={{ fontFamily:display, fontSize:15, fontWeight:600, color:C.ink, marginTop:8 }}>{g.name}</div>
