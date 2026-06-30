@@ -11,6 +11,7 @@ import {
 import type { Debate } from '../lib/types';
 import { C, ui, display, mono, solidGold, a } from '../lib/theme';
 import { Avatar } from '../components/ui';
+import { GlobalActivityMap } from '../components/GlobalActivityMap';
 import { useIsTablet } from '../lib/useMediaQuery';
 
 // ── small util ────────────────────────────────────────────────────────
@@ -30,21 +31,6 @@ function fmtRelDay(d: string) {
 const TRENDING = [
   'Artificial Intelligence', 'Climate Change', 'Free Speech',
   'Education Reform', 'Universal Basic Income', 'Cryptocurrency',
-];
-
-// World map dots — fixed positions for the activity map.
-const ACTIVITY_DOTS = [
-  { x:18, y:42, label:'San Francisco', color:'#4F7CFF' },
-  { x:24, y:38, label:'New York',      color:'#49D6FF' },
-  { x:46, y:36, label:'London',        color:'#00C98D' },
-  { x:50, y:40, label:'Berlin',        color:'#4F7CFF' },
-  { x:58, y:52, label:'Lagos',         color:'#F4B740' },
-  { x:64, y:36, label:'Moscow',        color:'#49D6FF' },
-  { x:74, y:44, label:'Mumbai',        color:'#4F7CFF' },
-  { x:82, y:48, label:'Singapore',     color:'#00C98D' },
-  { x:84, y:36, label:'Tokyo',         color:'#FF5B6A' },
-  { x:32, y:62, label:'São Paulo',     color:'#F4B740' },
-  { x:88, y:68, label:'Sydney',        color:'#49D6FF' },
 ];
 
 // ── shell helpers ─────────────────────────────────────────────────────
@@ -253,48 +239,6 @@ function UpcomingRow({ d, onOpen }: { d: Debate; onOpen: () => void }) {
   );
 }
 
-// ── WORLD MAP (static) ────────────────────────────────────────────────
-function WorldMap() {
-  return (
-    <div style={{ position:'relative', height:280, marginTop:8, borderRadius:14, overflow:'hidden',
-      background:`radial-gradient(ellipse at 50% 50%, ${a(C.gold,'14')}, transparent 70%), ${C.base2}` }}>
-      {/* Simplified world map SVG */}
-      <svg viewBox="0 0 100 60" preserveAspectRatio="none"
-        style={{ position:'absolute', inset:0, width:'100%', height:'100%', opacity:0.18 }}>
-        {/* Coarse continent shapes for vibe; not geographic accuracy */}
-        <path fill={C.cyan} d="M10,30 Q14,22 22,24 L28,28 Q26,38 18,42 L12,40 Z" />
-        <path fill={C.cyan} d="M22,46 Q26,42 32,48 L34,58 Q28,60 22,56 Z" />
-        <path fill={C.cyan} d="M42,28 L52,26 Q58,30 56,36 L48,40 Q42,38 42,32 Z" />
-        <path fill={C.cyan} d="M52,38 Q58,42 60,52 L52,56 Q46,52 48,42 Z" />
-        <path fill={C.cyan} d="M62,28 L78,26 Q84,32 80,42 L70,46 Q60,42 62,32 Z" />
-        <path fill={C.cyan} d="M80,46 Q88,52 86,60 L78,58 Q76,52 80,46 Z" />
-      </svg>
-      {/* Connection arcs */}
-      <svg viewBox="0 0 100 60" preserveAspectRatio="none"
-        style={{ position:'absolute', inset:0, width:'100%', height:'100%' }}>
-        {[
-          ['18,42','24,38'], ['24,38','46,36'], ['46,36','50,40'], ['50,40','64,36'],
-          ['64,36','74,44'], ['74,44','82,48'], ['82,48','84,36'], ['46,36','58,52'],
-          ['24,38','32,62'], ['82,48','88,68'],
-        ].map((pair, i) => {
-          const [a1, b1] = pair[0].split(',').map(Number);
-          const [a2, b2] = pair[1].split(',').map(Number);
-          const mx = (a1+a2)/2, my = Math.min(b1,b2) - 8;
-          return <path key={i} d={`M${a1},${b1} Q${mx},${my} ${a2},${b2}`}
-            stroke={C.cyan} strokeWidth={0.2} fill="none" opacity={0.5} />;
-        })}
-      </svg>
-      {/* Dots */}
-      {ACTIVITY_DOTS.map((d, i) => (
-        <div key={i} style={{ position:'absolute', left:`${d.x}%`, top:`${d.y}%`,
-          width:10, height:10, borderRadius:'50%',
-          background:d.color, boxShadow:`0 0 14px ${d.color}, 0 0 6px ${d.color}`,
-          transform:'translate(-50%,-50%)' }} />
-      ))}
-    </div>
-  );
-}
-
 // ── MAIN ──────────────────────────────────────────────────────────────
 export function LobbyScreen({ onOpenDebate, onHost: _onHost }: {
   onOpenDebate?: (id: string) => void; onHost?: () => void;
@@ -377,7 +321,7 @@ export function LobbyScreen({ onOpenDebate, onHost: _onHost }: {
             {/* Global Activity */}
             <Card>
               <PanelTitle>GLOBAL DEBATE ACTIVITY</PanelTitle>
-              <WorldMap />
+              <GlobalActivityMap showCaption captionText="Live debate activity" />
               <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginTop:14,
                 paddingTop:14, borderTop:`1px solid ${C.hair}` }}>
                 {[
