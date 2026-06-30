@@ -4,7 +4,7 @@
 // chat message, or debate card. No layout side-effects.
 // =====================================================================
 import { useState } from 'react';
-import { C, ui, display } from '../lib/theme';
+import { C, ui, display, a } from '../lib/theme';
 import { fileReport, type ReportTargetType, type ReportReason } from '../lib/api';
 
 const REASONS: { value: ReportReason; label: string }[] = [
@@ -86,7 +86,7 @@ export function ReportModal({ targetType, targetId, label = '⚑ Report', onClos
                   {REASONS.map(r => (
                     <label key={r.value} style={{ display: 'flex', alignItems: 'center', gap: 10,
                       padding: '9px 12px', borderRadius: 8, cursor: 'pointer',
-                      background: reason === r.value ? `${C.gold}18` : C.base,
+                      background: reason === r.value ? `${a(C.gold,'18')}` : C.base,
                       border: `1px solid ${reason === r.value ? C.gold : C.hair}`,
                       transition: 'all .12s' }}>
                       <input type="radio" name="reason" value={r.value} checked={reason === r.value}

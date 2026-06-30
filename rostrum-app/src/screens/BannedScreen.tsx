@@ -4,7 +4,7 @@
 // Lets them file an appeal and check existing appeal status.
 // =====================================================================
 import { useState, useEffect } from 'react';
-import { C, ui, display } from '../lib/theme';
+import { C, ui, display, a } from '../lib/theme';
 import { fileAppeal, getMyAppeals, getMyBan, type Ban, type Appeal } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
@@ -105,7 +105,7 @@ export function BannedScreen() {
           </div>
         )}
         {submitted && (
-          <div style={{ padding:16, borderRadius:12, background:`${C.jade}18`, border:`1px solid ${C.jade}44`,
+          <div style={{ padding:16, borderRadius:12, background:`${a(C.jade,'18')}`, border:`1px solid ${a(C.jade,'44')}`,
             fontSize:13, color:C.jadeHi, marginBottom:20 }}>
             ✓ Appeal submitted — we'll review it and respond via the app.
           </div>

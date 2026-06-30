@@ -5,7 +5,7 @@
 // date ticks, gridlines, value labels, and hover tooltips.
 // =====================================================================
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { C, ui, display, mono } from '../lib/theme';
+import { C, ui, display, mono, a } from '../lib/theme';
 import { Scroll } from '../components/ui';
 import { supabase } from '../lib/supabaseClient';
 import { useNavigate } from 'react-router-dom';
@@ -285,10 +285,10 @@ export function AdminPortalScreen() {
   useEffect(() => { load(); }, [load]);
 
   const RangeChip = ({ v, label }: { v: number; label: string }) => (
-    <button onClick={() => setRange(v)} style={{ padding: '5px 14px', borderRadius: 20, border: `1px solid ${range === v ? C.gold : C.hair}`, background: range === v ? `${C.gold}18` : 'transparent', color: range === v ? C.gold : C.dim, fontFamily: ui, fontSize: 12, fontWeight: range === v ? 700 : 400, cursor: 'pointer' }}>{label}</button>
+    <button onClick={() => setRange(v)} style={{ padding: '5px 14px', borderRadius: 20, border: `1px solid ${range === v ? C.gold : C.hair}`, background: range === v ? `${a(C.gold,'18')}` : 'transparent', color: range === v ? C.gold : C.dim, fontFamily: ui, fontSize: 12, fontWeight: range === v ? 700 : 400, cursor: 'pointer' }}>{label}</button>
   );
   const TabChip = ({ t, label }: { t: typeof tab; label: string }) => (
-    <button onClick={() => setTab(t)} style={{ padding: '7px 18px', borderRadius: 20, border: `1px solid ${tab === t ? C.gold : C.hair}`, background: tab === t ? `${C.gold}18` : 'transparent', color: tab === t ? C.gold : C.dim, fontFamily: ui, fontSize: 13, fontWeight: tab === t ? 700 : 400, cursor: 'pointer' }}>{label}</button>
+    <button onClick={() => setTab(t)} style={{ padding: '7px 18px', borderRadius: 20, border: `1px solid ${tab === t ? C.gold : C.hair}`, background: tab === t ? `${a(C.gold,'18')}` : 'transparent', color: tab === t ? C.gold : C.dim, fontFamily: ui, fontSize: 13, fontWeight: tab === t ? 700 : 400, cursor: 'pointer' }}>{label}</button>
   );
 
   const growthData   = growth.map(r => ({ x: r.day, y: r.signups }));
@@ -381,7 +381,7 @@ export function AdminPortalScreen() {
                       const total = u.wins + u.losses || 1;
                       const wr = Math.round((u.wins / total) * 100);
                       return (
-                        <tr key={u.id} style={{ borderBottom: `1px solid ${C.hair}44` }}>
+                        <tr key={u.id} style={{ borderBottom: `1px solid ${a(C.hair,'44')}` }}>
                           <td style={{ padding: '9px 12px', fontFamily: mono, fontSize: 11, color: C.faint }}>{i + 1}</td>
                           <td style={{ padding: '9px 12px', fontFamily: ui, fontSize: 13, color: C.ink, fontWeight: 600, whiteSpace: 'nowrap' }}>{u.display_name}</td>
                           <td style={{ padding: '9px 12px', fontFamily: mono, fontSize: 11, color: C.dim }}>@{u.handle}</td>
@@ -432,7 +432,7 @@ export function AdminPortalScreen() {
                           <div style={{ fontFamily: ui, fontSize: 9, color: C.faint, textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
                         </div>
                       ))}
-                      <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 20, alignSelf: 'center', background: d.status === 'live' ? `${C.garnet}22` : `${C.jade}22`, color: d.status === 'live' ? C.garnet : C.jade, textTransform: 'uppercase', letterSpacing: '.07em', whiteSpace: 'nowrap' }}>{d.status}</span>
+                      <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 20, alignSelf: 'center', background: d.status === 'live' ? `${a(C.garnet,'22')}` : `${a(C.jade,'22')}`, color: d.status === 'live' ? C.garnet : C.jade, textTransform: 'uppercase', letterSpacing: '.07em', whiteSpace: 'nowrap' }}>{d.status}</span>
                     </div>
                   </div>
                 ))}

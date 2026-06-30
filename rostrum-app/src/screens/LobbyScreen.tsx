@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import { listLiveDebates, listUpcomingDebates } from '../lib/api';
 import type { Debate } from '../lib/types';
-import { C, ui, display, mono, solidGold } from '../lib/theme';
+import { C, ui, display, mono, solidGold, a } from '../lib/theme';
 
 export function LobbyScreen({ onOpenDebate, onHost }: {
   onOpenDebate?: (id: string) => void; onHost?: () => void;
@@ -105,7 +105,7 @@ function LiveTile({ d, onOpen }: { d: Debate; onOpen?: () => void }) {
 function ScheduledTile({ d, onOpen }: { d: Debate; onOpen?: () => void }) {
   return (
     <button onClick={onOpen} style={tileBtn}>
-      <div style={{ ...cover, background: d.thumbnail_url ? '#000' : `linear-gradient(150deg, ${C.gold}26, ${C.base} 75%)` }}>
+      <div style={{ ...cover, background: d.thumbnail_url ? '#000' : `linear-gradient(150deg, ${a(C.gold,'26')}, ${C.base} 75%)` }}>
         {d.thumbnail_url && <img src={d.thumbnail_url} alt="" style={coverImg} />}
         <div style={coverShade} />
         <span style={{ position:'absolute', top:12, left:12, ...chip(C.gold, true) }}>SCHEDULED</span>

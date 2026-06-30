@@ -10,7 +10,7 @@ import { uploadDeck } from '../lib/api';
 import { rasterizeToImages } from '../lib/deck';
 import { muteAudience } from '../lib/livekit';
 import type { StreamPhase } from '../lib/useYouTubeStream';
-import { C, ui } from '../lib/theme';
+import { C, ui, a } from '../lib/theme';
 
 type Role = 'host' | 'moderator' | 'debater' | 'judge' | 'audience';
 
@@ -166,7 +166,7 @@ function StreamBtn({ phase, error, onStart, onStop }: {
       />
       {phase === 'error' && error && (
         <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:10, lineHeight:1.4,
-          color:C.ember, background:`${C.ember}14`, border:`1px solid ${C.ember}40`,
+          color:C.ember, background:`${a(C.ember,'14')}`, border:`1px solid ${a(C.ember,'40')}`,
           borderRadius:6, padding:'5px 7px', maxWidth:320, wordBreak:'break-word' }}>
           {error}
         </div>

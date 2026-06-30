@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react';
 import { createDebate } from '../lib/api';
 import { createYouTubeBroadcast, getYouTubeConnection, type YouTubeConnection } from '../lib/youtube';
 import type { DebateFormat, Side, Visibility } from '../lib/types';
-import { C, ui, display, mono, solidGold, field } from '../lib/theme';
+import { C, ui, display, mono, solidGold, field, a } from '../lib/theme';
 
 type Seg = { label: string; side: Side | null; min: number };
 
@@ -162,7 +162,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
                 onChange={e => { const f = e.target.files?.[0]; if (f) { setThumb(f); setThumbPrev(URL.createObjectURL(f)); } }} />
               <div style={{ height:170, borderRadius:8, overflow:'hidden', display:'grid', placeItems:'center',
                 border:`1px ${thumb ? 'solid' : 'dashed'} ${thumb ? C.hair : C.hairHi}`,
-                background: thumb ? '#000' : `linear-gradient(150deg, ${C.jade}1f, ${C.base} 72%)` }}>
+                background: thumb ? '#000' : `linear-gradient(150deg, ${a(C.jade,'1f')}, ${C.base} 72%)` }}>
                 {thumbPrev ? <img src={thumbPrev} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
                   : <span style={{ fontFamily:ui, fontSize:13, color:C.faint }}>Upload a 16:9 cover</span>}
               </div>
@@ -246,7 +246,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
                   : (
                     <a href="/settings" style={{ fontFamily:ui, fontSize:11, fontWeight:600,
                       color:C.gold, textDecoration:'none', whiteSpace:'nowrap',
-                      padding:'5px 10px', border:`1px solid ${C.gold}44`, borderRadius:6 }}>
+                      padding:'5px 10px', border:`1px solid ${a(C.gold,'44')}`, borderRadius:6 }}>
                       Connect account
                     </a>
                   )}
@@ -277,7 +277,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
                           style={{
                             flex:1, padding:'10px 12px', borderRadius:8, cursor:'pointer', textAlign:'left',
                             border:`1px solid ${ytPrivacy===val ? C.gold : C.hair}`,
-                            background: ytPrivacy===val ? `${C.gold}1a` : 'transparent' }}>
+                            background: ytPrivacy===val ? `${a(C.gold,'1a')}` : 'transparent' }}>
                           <div style={{ fontFamily:ui, fontSize:13, fontWeight:600,
                             color: ytPrivacy===val ? C.gold : C.ink }}>{label}</div>
                           <div style={{ fontFamily:ui, fontSize:10.5, color:C.faint, marginTop:2, lineHeight:1.3 }}>{hint}</div>

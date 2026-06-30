@@ -13,7 +13,7 @@ import {
 } from '../lib/api';
 import { rasterizeToImages } from '../lib/deck';
 import { publishBcastControl } from '../lib/livekit';
-import { C, ui } from '../lib/theme';
+import { C, ui, a } from '../lib/theme';
 
 type Role = 'host' | 'moderator' | 'debater' | 'judge' | 'audience';
 
@@ -118,7 +118,7 @@ export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScr
                 onClick={() => pushLayout(l.key)}
                 style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3, padding:'5px 7px',
                   borderRadius:7, cursor:'pointer', border:`1px solid ${on ? C.gold : C.hair}`,
-                  background: on ? `${C.gold}1f` : 'transparent', opacity: dimmed ? 0.5 : 1 }}>
+                  background: on ? `${a(C.gold,'1f')}` : 'transparent', opacity: dimmed ? 0.5 : 1 }}>
                 <LayoutGlyph kind={l.key} on={on} />
                 <span style={{ fontSize:9.5, fontWeight:600, color: on ? C.gold : C.dim }}>{l.label}</span>
               </button>

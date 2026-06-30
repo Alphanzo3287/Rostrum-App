@@ -4,7 +4,7 @@
 // Only renders if profiles.is_admin = true — enforced server-side too.
 // =====================================================================
 import { useState, useEffect } from 'react';
-import { C, ui, display } from '../lib/theme';
+import { C, ui, display, a } from '../lib/theme';
 import { Scroll } from '../components/ui';
 import {
   getAllReports, reviewReport, getAllBans, liftBan, getAllAppeals, ruleAppeal,
@@ -96,7 +96,7 @@ export function ModerationScreen() {
   const Chip = ({ t, count }: { t: Tab; count: number }) => (
     <button onClick={() => { setTab(t); setSelReport(null); setSelTicket(null); }}
       style={{ padding:'7px 16px', borderRadius:20, border:`1px solid ${tab===t ? C.gold : C.hair}`,
-        background: tab===t ? `${C.gold}18`:'transparent', color: tab===t ? C.gold:C.dim,
+        background: tab===t ? `${a(C.gold,'18')}`:'transparent', color: tab===t ? C.gold:C.dim,
         fontFamily:ui, fontSize:13, fontWeight: tab===t?700:400, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
       {t.charAt(0).toUpperCase()+t.slice(1)}
       {count > 0 && <span style={{ fontSize:10, fontWeight:800, padding:'1px 6px', borderRadius:20,
@@ -309,8 +309,8 @@ export function ModerationScreen() {
           <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:18 }}>
             {ticketMsgs.map(m => (
               <div key={m.id} style={{ padding:'11px 14px', borderRadius:10,
-                background: m.is_admin ? `${C.gold}14` : C.panel,
-                border:`1px solid ${m.is_admin ? C.gold+'44' : C.hair}`,
+                background: m.is_admin ? `${a(C.gold,'14')}` : C.panel,
+                border:`1px solid ${m.is_admin ? a(C.gold,'44') : C.hair}`,
                 alignSelf: m.is_admin?'flex-start':'flex-end', maxWidth:'90%' }}>
                 <div style={{ fontFamily:ui, fontSize:11, fontWeight:700, color: m.is_admin?C.gold:C.dim, marginBottom:4 }}>
                   {m.is_admin ? 'Support (you)' : 'User'}

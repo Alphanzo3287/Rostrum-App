@@ -9,7 +9,7 @@ import {
   listTeams, createTeam, listTeamMembers, addTeamMember, setTeamRole, removeTeamMember, getProfile,
 } from '../lib/api';
 import type { Team, TeamMember, Profile, TeamRole } from '../lib/types';
-import { C, ui, display, mono, solidGold, field } from '../lib/theme';
+import { C, ui, display, mono, solidGold, field, a } from '../lib/theme';
 import { Avatar, Scroll, Empty, ghostBtn } from '../components/ui';
 
 const COLORS = ['#2E9E86', '#B23A55', '#D9B45C', '#5B7CFA', '#C0653A', '#7A4BB0'];
@@ -154,7 +154,7 @@ function Roster({ team, meId, onOpenProfile, onChanged }: {
             {canAdmin && m.role !== 'owner' && (
               <>
                 <button onClick={() => cycleRole(m)} style={{ ...miniBtn }}>{m.role === 'admin' ? 'Make member' : 'Make admin'}</button>
-                <button onClick={() => remove(m)} style={{ ...miniBtn, color:C.garnetHi, borderColor:`${C.garnet}66` }}>Remove</button>
+                <button onClick={() => remove(m)} style={{ ...miniBtn, color:C.garnetHi, borderColor:`${a(C.garnet,'66')}` }}>Remove</button>
               </>
             )}
           </div>

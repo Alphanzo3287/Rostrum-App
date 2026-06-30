@@ -9,6 +9,7 @@ import {
   BrowserRouter, Routes, Route, Outlet, Navigate, useNavigate, useParams, useSearchParams,
 } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
+import { ThemeProvider } from './lib/themeContext';
 import { NavBar } from './components/NavBar';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { WelcomeTour } from './components/WelcomeTour';
@@ -39,11 +40,13 @@ import { C, ui } from './lib/theme';
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Gate />
-      </BrowserRouter>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Gate />
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

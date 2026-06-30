@@ -23,7 +23,8 @@ import { RoleDock } from '../components/RoleDock';
 import { WinnerOverlay } from '../components/WinnerOverlay';
 import { BroadcastBar } from '../components/BroadcastBar';
 import { ShareButton } from '../components/ShareSheet';
-import { C, ui, display, mono } from '../lib/theme';
+import { C, ui, display, mono, a } from '../lib/theme';
+import { useIsTablet } from '../lib/useMediaQuery';
 
 type Layout = 'slides' | 'spotlight' | 'grid';
 
@@ -33,6 +34,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   const { user } = useAuth();
   const room = useRoom(debateId);
   const dz = useDebate(debateId);
+  const isNarrow = useIsTablet();
   const nav = useNavigate();
   const openProfile = (handle?: string | null) => { if (handle) nav(`/u/${handle}`); };
   const [tab, setTab] = useState('vote');
@@ -106,7 +108,10 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
       </div>
 
       {/* ---- main ---- */}
-      <div style={{ flex:1, display:'grid', gridTemplateColumns:'1fr 322px', minHeight:0 }}>
+      <div style={{ flex:1, display:'grid',
+        gridTemplateColumns: isNarrow ? '1fr' : '1fr 322px',
+        gridTemplateRows: isNarrow ? 'minmax(240px,42vh) 1fr' : '1fr',
+        minHeight:0, overflow: isNarrow ? 'auto' : 'hidden' }}>
         <div style={{ display:'flex', flexDirection:'column', minWidth:0, padding:'14px 16px 0' }}>
           {dz.phase === 'assembly'
             ? <Assembly members={room.members} onProfile={openProfile} />
@@ -135,7 +140,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
                   {dz.debate?.poll_open && (
                     <div style={{ position:'absolute', top:10, right:10, zIndex:20, display:'flex', alignItems:'center', gap:6,
                       padding:'5px 12px', borderRadius:20, background:'rgba(0,0,0,0.7)', backdropFilter:'blur(6px)',
-                      border:`1px solid ${C.jade}55` }}>
+                      border:`1px solid ${a(C.jade,'55')}` }}>
                       <span style={{ width:8, height:8, borderRadius:'50%', background:C.jade,
                         boxShadow:`0 0 6px ${C.jade}`, animation:'pulse 1.5s infinite' }} />
                       <span style={{ fontFamily:ui, fontSize:11, fontWeight:700, color:C.jade,

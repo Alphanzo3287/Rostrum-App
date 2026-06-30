@@ -19,7 +19,7 @@ import { SlideStage } from '../components/SlideStage';
 import { ScreenTile } from '../components/ScreenTile';
 import { SafePanel } from '../components/SafePanel';
 import { WinnerOverlay } from '../components/WinnerOverlay';
-import { C, ui, display, mono } from '../lib/theme';
+import { C, ui, display, mono, a } from '../lib/theme';
 
 /* ───────────── error boundary: never leave YouTube on a black screen ────
    Resets ONLY when resetKey changes (e.g. phase/layout/presenter shifts), so
@@ -173,7 +173,7 @@ function BroadcastInner() {
           )}
           {dz.debate?.poll_open && (
             <div style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 11px', borderRadius:999,
-              background:`${C.jade}18`, border:`1px solid ${C.jade}60` }}>
+              background:`${a(C.jade,'18')}`, border:`1px solid ${a(C.jade,'60')}` }}>
               <span style={{ width:7, height:7, borderRadius:'50%', background:C.jade,
                 boxShadow:`0 0 6px ${C.jade}`, animation:'pulse 1.5s infinite' }} />
               <span style={{ fontSize:11, fontWeight:800, color:C.jadeHi, letterSpacing:'.08em' }}>VOTING</span>

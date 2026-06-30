@@ -4,7 +4,7 @@
 // FAQ section with published items grouped by category.
 // =====================================================================
 import { useState, useEffect } from 'react';
-import { C, ui, display, mono } from '../lib/theme';
+import { C, ui, display, mono, a } from '../lib/theme';
 import { Scroll } from '../components/ui';
 import {
   submitTicket, getMyTickets, getTicketMessages, replyTicket, getFaq,
@@ -72,7 +72,7 @@ export function SupportScreen() {
 
   const Chip = ({ on, onClick, children }: any) => (
     <button onClick={onClick} style={{ padding:'7px 16px', borderRadius:20, border:`1px solid ${on ? C.gold : C.hair}`,
-      background: on ? `${C.gold}18` : 'transparent', color: on ? C.gold : C.dim,
+      background: on ? `${a(C.gold,'18')}` : 'transparent', color: on ? C.gold : C.dim,
       fontFamily:ui, fontSize:13, fontWeight: on ? 700 : 400, cursor:'pointer', transition:'all .15s' }}>
       {children}
     </button>
@@ -170,8 +170,8 @@ export function SupportScreen() {
           <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:20 }}>
             {messages.map(m => (
               <div key={m.id} style={{ padding:'11px 14px', borderRadius:10,
-                background: m.is_admin ? `${C.gold}14` : C.panel,
-                border:`1px solid ${m.is_admin ? C.gold+'44' : C.hair}`, alignSelf: m.is_admin ? 'flex-start':'flex-end', maxWidth:'90%' }}>
+                background: m.is_admin ? `${a(C.gold,'14')}` : C.panel,
+                border:`1px solid ${m.is_admin ? a(C.gold,'44') : C.hair}`, alignSelf: m.is_admin ? 'flex-start':'flex-end', maxWidth:'90%' }}>
                 <div style={{ fontFamily:ui, fontSize:11, fontWeight:700, color: m.is_admin ? C.gold : C.dim,
                   marginBottom:4 }}>{m.is_admin ? 'Support' : 'You'}</div>
                 <div style={{ fontFamily:ui, fontSize:13, color:C.ink, lineHeight:1.6 }}>{m.body}</div>
@@ -201,7 +201,7 @@ export function SupportScreen() {
       {tab === 'new' && (
         <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
           {formOk ? (
-            <div style={{ padding:20, borderRadius:12, background:`${C.jade}18`, border:`1px solid ${C.jade}44`,
+            <div style={{ padding:20, borderRadius:12, background:`${a(C.jade,'18')}`, border:`1px solid ${a(C.jade,'44')}`,
               fontFamily:ui, fontSize:14, color:C.jadeHi }}>
               ✓ Ticket submitted! We'll respond as soon as possible.{' '}
               <button onClick={() => { setTab('tickets'); setFormOk(false); }}
@@ -218,7 +218,7 @@ export function SupportScreen() {
                   {CATEGORIES.map(c => (
                     <button key={c.value} onClick={() => setCat(c.value)}
                       style={{ padding:'6px 14px', borderRadius:20, border:`1px solid ${cat===c.value ? C.gold : C.hair}`,
-                        background: cat===c.value ? `${C.gold}18`:'transparent', color: cat===c.value ? C.gold:C.dim,
+                        background: cat===c.value ? `${a(C.gold,'18')}`:'transparent', color: cat===c.value ? C.gold:C.dim,
                         fontFamily:ui, fontSize:12, fontWeight: cat===c.value?700:400, cursor:'pointer' }}>
                       {c.label}
                     </button>

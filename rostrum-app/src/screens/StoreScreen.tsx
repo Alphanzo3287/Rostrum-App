@@ -8,7 +8,7 @@ import { useAuth } from '../lib/auth';
 import { listPerks, myPerkIds, redeemPerk } from '../lib/api';
 import { getMyWallet, getGiftTiers, type Wallet, type GiftTier } from '../lib/payments';
 import type { Perk } from '../lib/types';
-import { C, ui, display, mono, solidGold } from '../lib/theme';
+import { C, ui, display, mono, solidGold, a } from '../lib/theme';
 import { Scroll, Empty } from '../components/ui';
 
 export function StoreScreen({ onBack }: { onBack?: () => void }) {
@@ -39,7 +39,7 @@ export function StoreScreen({ onBack }: { onBack?: () => void }) {
     <Scroll title="The Store" onBack={onBack}
       right={
         <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px', borderRadius:999,
-          border:`1px solid ${C.gold}55`, background:'rgba(217,180,92,0.08)' }}>
+          border:`1px solid ${a(C.gold,'55')}`, background:'rgba(217,180,92,0.08)' }}>
           <span style={{ fontFamily:ui, fontSize:11, color:C.faint, textTransform:'uppercase', letterSpacing:'.5px' }}>D-Bucks</span>
           <span style={{ fontFamily:mono, fontSize:16, fontWeight:700, color:C.gold }}>{total.toLocaleString()}</span>
         </div>
@@ -84,7 +84,7 @@ export function StoreScreen({ onBack }: { onBack?: () => void }) {
            const tooPoor = total < p.cost;
            return (
              <div key={p.id} style={{ display:'flex', flexDirection:'column', padding:'18px 18px', borderRadius:12,
-               border:`1px solid ${have ? C.jade + '66' : C.hair}`, background:C.panel }}>
+               border:`1px solid ${have ? a(C.jade,'66') : C.hair}`, background:C.panel }}>
                <div style={{ fontFamily:ui, fontSize:11, fontWeight:700, letterSpacing:'1.2px',
                  textTransform:'uppercase', color:C.gold }}>{p.icon}</div>
                <div style={{ fontFamily:display, fontSize:19, fontWeight:600, color:C.ink, marginTop:10 }}>{p.name}</div>

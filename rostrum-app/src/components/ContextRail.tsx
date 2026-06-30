@@ -13,7 +13,7 @@ import {
   type BroadcastState, type BcastLayout,
 } from '../lib/api';
 import type { Side, Question, Segment } from '../lib/types';
-import { C, ui, display, mono, solidGold, field } from '../lib/theme';
+import { C, ui, display, mono, solidGold, field, a } from '../lib/theme';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/auth';
 import { Avatar } from './ui';
@@ -313,7 +313,7 @@ function StudioPanel({ debateId, members, canControl, role, lkRoom }: {
             <button key={k} onClick={() => patch({ layout: k })} style={{
               textAlign:'left', padding:'9px 11px', borderRadius:8, cursor:'pointer',
               border:`1px solid ${bs.layout===k ? C.gold : C.hair}`,
-              background: bs.layout===k ? `${C.gold}1a` : 'transparent' }}>
+              background: bs.layout===k ? `${a(C.gold,'1a')}` : 'transparent' }}>
               <div style={{ fontSize:12.5, fontWeight:700, color: bs.layout===k ? C.gold : C.ink }}>{label}</div>
               <div style={{ fontSize:10, color:C.faint, marginTop:2, lineHeight:1.3 }}>{hint}</div>
             </button>
@@ -380,7 +380,7 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
 function Chip2({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button onClick={onClick} style={{ padding:'6px 11px', borderRadius:999, cursor:'pointer', fontSize:12, fontWeight:600,
-      border:`1px solid ${on ? C.gold : C.hair}`, background: on ? `${C.gold}1f` : 'transparent', color: on ? C.gold : C.dim }}>
+      border:`1px solid ${on ? C.gold : C.hair}`, background: on ? `${a(C.gold,'1f')}` : 'transparent', color: on ? C.gold : C.dim }}>
       {children}
     </button>
   );
@@ -604,7 +604,7 @@ function GiftPanel({ debateId }: { debateId: string }) {
                 <button key={p.user_id} onClick={() => setPicked(p.user_id)}
                   style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 10px', borderRadius:999,
                     border: `1px solid ${picked === p.user_id ? C.gold : C.hair}`,
-                    background: picked === p.user_id ? C.gold + '18' : 'transparent',
+                    background: picked === p.user_id ? a(C.gold,'18') : 'transparent',
                     color: picked === p.user_id ? C.ink : C.dim,
                     fontFamily:ui, fontSize:12, fontWeight:500, cursor:'pointer' }}>
                   {p.avatar_url && <Avatar src={p.avatar_url} size={18} />}
@@ -622,7 +622,7 @@ function GiftPanel({ debateId }: { debateId: string }) {
           return (
             <button key={t.id} onClick={() => send(t)} disabled={busy || !canAfford || !picked}
               style={{ padding:'10px 8px', borderRadius:10, border:`1px solid ${C.hair}`,
-                background: canAfford && picked ? C.panel : `${C.panel}88`,
+                background: canAfford && picked ? C.panel : `${a(C.panel,'88')}`,
                 cursor: canAfford && picked ? 'pointer' : 'default', textAlign:'center' }}>
               <div style={{ fontSize:24 }}>{t.icon}</div>
               <div style={{ fontFamily:ui, fontSize:11, fontWeight:600, color: canAfford ? C.ink : C.faint, marginTop:4 }}>{t.name}</div>

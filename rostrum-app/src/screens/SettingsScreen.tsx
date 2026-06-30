@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getYouTubeConnection, connectYouTube, disconnectYouTube, type YouTubeConnection } from '../lib/youtube';
 import { myOpenRooms, forceCloseRoom, type OpenRoom } from '../lib/api';
-import { C, ui, display, solidGold } from '../lib/theme';
+import { C, ui, display, solidGold, a } from '../lib/theme';
 import { Scroll, ghostBtn } from '../components/ui';
 
 export function SettingsScreen({ onBack }: { onBack?: () => void }) {
@@ -81,7 +81,7 @@ export function SettingsScreen({ onBack }: { onBack?: () => void }) {
     <Scroll title="Settings" onBack={onBack} maxWidth={680}>
       {banner && (
         <div style={{ padding:'12px 16px', borderRadius:8, marginBottom:20,
-          background: banner.ok ? `${C.jade}22` : `${C.garnet}22`,
+          background: banner.ok ? `${a(C.jade,'22')}` : `${a(C.garnet,'22')}`,
           border: `1px solid ${banner.ok ? C.jade : C.garnet}`,
           color: banner.ok ? C.jadeHi : C.garnetHi, fontFamily:ui, fontSize:13 }}>
           {banner.msg}
@@ -105,7 +105,7 @@ export function SettingsScreen({ onBack }: { onBack?: () => void }) {
           </div>
           {yt?.connected && (
             <div style={{ marginLeft:'auto', padding:'4px 10px', borderRadius:999,
-              background:`${C.jade}22`, border:`1px solid ${C.jade}44`,
+              background:`${a(C.jade,'22')}`, border:`1px solid ${a(C.jade,'44')}`,
               fontFamily:ui, fontSize:11, fontWeight:700, color:C.jadeHi }}>
               Connected
             </div>
@@ -141,7 +141,7 @@ export function SettingsScreen({ onBack }: { onBack?: () => void }) {
       </div>
 
       {/* ── Emergency: close a stuck room ── */}
-      <div style={{ padding:'20px 22px', borderRadius:12, border:`1px solid ${C.garnet}55`, background:C.panel }}>
+      <div style={{ padding:'20px 22px', borderRadius:12, border:`1px solid ${a(C.garnet,'55')}`, background:C.panel }}>
         <div style={{ fontFamily:display, fontSize:17, fontWeight:700, color:C.ink, marginBottom:4 }}>Open rooms</div>
         <div style={{ fontFamily:ui, fontSize:12.5, color:C.faint, marginBottom:14, lineHeight:1.5 }}>
           Any debate you’re hosting that hasn’t ended. If a room ever freezes or won’t close from inside,

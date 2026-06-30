@@ -2,7 +2,7 @@
 // The Rostrum · src/components/ui.tsx
 // Small shared pieces for Profile / Leaderboard / Teams / Store.
 // =====================================================================
-import { C, ui, display, mono } from '../lib/theme';
+import { C, ui, display, mono, a } from '../lib/theme';
 
 export function Avatar({ url, name, size = 44 }: { url?: string | null; name?: string; size?: number }) {
   const initial = (name ?? '?').trim().charAt(0).toUpperCase();
@@ -17,7 +17,7 @@ export function Avatar({ url, name, size = 44 }: { url?: string | null; name?: s
 
 export function RankBadge({ rank, level }: { rank: string; level: number }) {
   return <span style={{ fontFamily:ui, fontSize:11, fontWeight:700, letterSpacing:'.5px', color:C.gold,
-    border:`1px solid ${C.gold}55`, borderRadius:999, padding:'3px 10px', whiteSpace:'nowrap' }}>{rank} · Lv {level}</span>;
+    border:`1px solid ${a(C.gold,'55')}`, borderRadius:999, padding:'3px 10px', whiteSpace:'nowrap' }}>{rank} · Lv {level}</span>;
 }
 
 export function Stat({ label, value, color }: { label: string; value: React.ReactNode; color?: string }) {
