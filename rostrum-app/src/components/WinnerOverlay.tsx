@@ -4,7 +4,7 @@
 // Renders on top of the chamber canvas and the broadcast page.
 // =====================================================================
 import { useEffect, useState } from 'react';
-import { C, display, ui } from '../lib/theme';
+import { C, display, ui, a } from '../lib/theme';
 
 interface Props {
   winnerSide: 'prop' | 'opp' | null;
@@ -26,7 +26,7 @@ export function WinnerOverlay({ winnerSide, winMode, peoplesChoice, propScore, o
   return (
     <div style={{
       position:'absolute', inset:0, zIndex:90, display:'grid', placeItems:'center',
-      background:'rgba(10,9,14,0.92)', backdropFilter:'blur(12px)',
+      background:a(C.base,'EB'), backdropFilter:'blur(12px)',
       opacity: show ? 1 : 0, transition:'opacity .6s ease',
     }}>
       <div style={{ textAlign:'center', maxWidth:520, padding:32 }}>

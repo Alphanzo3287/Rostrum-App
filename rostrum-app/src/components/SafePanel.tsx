@@ -30,7 +30,7 @@ export class SafePanel extends Component<
           position: this.props.fill ? 'absolute' : 'relative',
           inset: this.props.fill ? 0 : undefined,
           display: 'grid', placeItems: 'center', gap: 4,
-          background: '#0E0D11', color: C.faint, fontFamily: ui, fontSize: 12.5, textAlign: 'center',
+          background: C.base, color: C.faint, fontFamily: ui, fontSize: 12.5, textAlign: 'center',
           padding: this.props.fill ? 16 : '10px 12px', borderRadius: 8 }}>
           <div>
             <div style={{ color: C.dim, fontWeight: 600 }}>{this.props.label ?? 'This panel'} hiccuped — your controls still work</div>

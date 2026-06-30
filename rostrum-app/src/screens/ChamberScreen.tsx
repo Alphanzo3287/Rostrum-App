@@ -139,7 +139,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
                   {/* Voting now indicator */}
                   {dz.debate?.poll_open && (
                     <div style={{ position:'absolute', top:10, right:10, zIndex:20, display:'flex', alignItems:'center', gap:6,
-                      padding:'5px 12px', borderRadius:20, background:'rgba(0,0,0,0.7)', backdropFilter:'blur(6px)',
+                      padding:'5px 12px', borderRadius:20, background:a(C.base,'B3'), backdropFilter:'blur(6px)',
                       border:`1px solid ${a(C.jade,'55')}` }}>
                       <span style={{ width:8, height:8, borderRadius:'50%', background:C.jade,
                         boxShadow:`0 0 6px ${C.jade}`, animation:'pulse 1.5s infinite' }} />
@@ -310,7 +310,7 @@ function SeatAvatar({ name, size = 54, ring }: { name: string; size?: number; ri
   const init = (name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
   return (
     <div style={{ width:size, height:size, borderRadius:'50%', flexShrink:0, display:'grid', placeItems:'center',
-      fontFamily:ui, fontWeight:700, fontSize:size*0.36, color:'#0C0B0D',
+      fontFamily:ui, fontWeight:700, fontSize:size*0.36, color:C.base,
       background:`linear-gradient(145deg, hsl(${h} 42% 60%), hsl(${(h+38)%360} 38% 40%))`,
       boxShadow: ring ? `0 0 0 2px ${C.base}, 0 0 0 3.5px ${ring}` : 'inset 0 -2px 6px rgba(0,0,0,.4)' }}>{init}</div>
   );

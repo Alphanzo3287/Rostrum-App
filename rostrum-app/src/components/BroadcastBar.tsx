@@ -104,7 +104,7 @@ export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScr
 
   return (
     <div style={{ borderTop:`1px solid ${C.hair}`, padding:'10px 14px', display:'flex', flexDirection:'column', gap:9,
-      fontFamily:ui, background:'rgba(12,11,13,0.6)' }}>
+      fontFamily:ui, background:a(C.base,'99') }}>
 
       {/* Layout strip (host only) */}
       {isHost && (

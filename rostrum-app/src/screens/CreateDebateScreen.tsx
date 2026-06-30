@@ -305,7 +305,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
 
       {/* footer */}
       <div style={{ position:'sticky', bottom:0, display:'flex', gap:12, padding:'14px 24px',
-        borderTop:`1px solid ${C.hair}`, background:'rgba(12,11,13,0.92)' }}>
+        borderTop:`1px solid ${C.hair}`, background:a(C.base,'EB') }}>
         <span style={{ fontFamily:ui, fontSize:12, color:C.faint, alignSelf:'center' }}>Step {step} of 3</span>
         <div style={{ marginLeft:'auto', display:'flex', gap:10 }}>
           {step > 1 && <button onClick={() => setStep(s => s - 1)} style={ghost}>Back</button>}

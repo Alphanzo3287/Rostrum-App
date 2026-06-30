@@ -198,7 +198,7 @@ function ShareSlides({ debateId, disabled }: { debateId: string; disabled: boole
 /* ---- atoms ---- */
 function Dock({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ borderTop:`1px solid ${C.hair}`, background:'rgba(12,11,13,0.9)', padding:'11px 16px',
+    <div style={{ borderTop:`1px solid ${C.hair}`, background:a(C.base,'E6'), padding:'11px 16px',
       display:'flex', alignItems:'center', gap:10 }}>{children}</div>
   );
 }

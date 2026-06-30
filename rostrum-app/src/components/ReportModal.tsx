@@ -57,7 +57,7 @@ export function ReportModal({ targetType, targetId, label = '⚑ Report', onClos
 
       {open && (
         <div style={{ position:'fixed', inset:0, zIndex:200, display:'grid', placeItems:'center',
-          background:'rgba(0,0,0,0.7)', backdropFilter:'blur(6px)' }}
+          background:a(C.base,'B3'), backdropFilter:'blur(6px)' }}
           onClick={e => { if (e.target === e.currentTarget) close(); }}>
           <div style={{ width: 420, borderRadius: 14, background: C.panel,
             border: `1px solid ${C.hair}`, padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,.5)' }}>

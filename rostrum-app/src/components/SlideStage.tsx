@@ -50,7 +50,7 @@ export function SlideStage({ debateId, canPresent, dim }: {
   const atStart = idx <= 0, atEnd = idx >= urls.length - 1;
 
   return (
-    <div style={{ position:'absolute', inset:0, background:'#0E0D11', opacity: dim ? 0.32 : 1, transition:'opacity .3s' }}>
+    <div style={{ position:'absolute', inset:0, background:C.base, opacity: dim ? 0.32 : 1, transition:'opacity .3s' }}>
       {urls.length
         ? <img src={urls[idx]} alt={`slide ${idx + 1}`}
             onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '0'; }}

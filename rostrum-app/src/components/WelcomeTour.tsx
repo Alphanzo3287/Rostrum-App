@@ -5,7 +5,7 @@
 // anytime via the "?" in the nav (window event 'rostrum:tour').
 // =====================================================================
 import { useEffect, useState } from 'react';
-import { C, ui, display, solidGold } from '../lib/theme';
+import { C, ui, display, solidGold, a } from '../lib/theme';
 
 const KEY = 'rostrum:onboarded:v1';
 
@@ -47,7 +47,7 @@ export function WelcomeTour() {
   const last = i === STEPS.length - 1;
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:1200, background:'rgba(0,0,0,0.66)',
+    <div style={{ position:'fixed', inset:0, zIndex:1200, background:a(C.base,'A8'),
       display:'grid', placeItems:'center', padding:18, backdropFilter:'blur(4px)' }}>
       <div style={{ width:'100%', maxWidth:440, background:C.panel, border:`1px solid ${C.hairHi}`,
         borderRadius:16, padding:'26px 26px 22px', boxShadow:'0 30px 80px rgba(0,0,0,0.65)' }}>
