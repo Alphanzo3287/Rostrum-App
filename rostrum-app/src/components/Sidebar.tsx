@@ -10,7 +10,7 @@ import { useAuth } from '../lib/auth';
 import { unreadTotal, subscribeInbox } from '../screens/MessagesScreen';
 import { C, ui, display, mono, solidGold, a } from '../lib/theme';
 import { Avatar } from './ui';
-import { getMyWallet } from '../lib/api';
+import { getMyWallet } from '../lib/payments';
 import { ThemeToggle } from './ThemeToggle';
 import { useIsTablet } from '../lib/useMediaQuery';
 
