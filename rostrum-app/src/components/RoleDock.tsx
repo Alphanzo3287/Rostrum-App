@@ -203,7 +203,7 @@ function Dock({ children }: { children: React.ReactNode }) {
   );
 }
 const btnBase: React.CSSProperties = {
-  display:'flex', flexDirection:'column', alignItems:'center', gap:4, padding:'7px 12px', borderRadius:6,
+  display:'flex', flexDirection:'column', alignItems:'center', gap:4, padding:'8px 13px', borderRadius:10,
   border:`1px solid ${C.hair}`, background:'transparent', color:C.dim, fontFamily:ui, fontSize:10.5,
   fontWeight:600, cursor:'pointer',
 };

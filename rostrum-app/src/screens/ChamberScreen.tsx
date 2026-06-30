@@ -77,31 +77,39 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   return (
     <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', background:C.base }}>
       {/* ---- tally bar ---- */}
-      <div style={{ display:'flex', alignItems:'center', gap:14, padding:'11px 18px', borderBottom:`1px solid ${C.hair}` }}>
+      <div style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 20px',
+        borderBottom:`1px solid ${C.hair}`, background:a(C.base,'CC'), backdropFilter:'blur(20px)' }}>
         <button onClick={onLeave} style={iconBtn}>‹</button>
-        <span style={{ padding:'4px 11px', borderRadius:3, fontFamily:ui, fontWeight:700, fontSize:11, letterSpacing:1.5,
-          color: dz.phase==='assembly' ? C.base : onAir ? '#1a0a06' : '#000',
-          background: dz.phase==='assembly' ? C.gold : onAir ? C.ember : C.faint }}>
+        <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 12px', borderRadius:999,
+          fontFamily:ui, fontWeight:800, fontSize:10.5, letterSpacing:'.12em',
+          color:'#FFFFFF',
+          background: dz.phase==='assembly'
+            ? `linear-gradient(135deg, ${C.gold}, ${C.cyan})`
+            : onAir ? C.garnet : a(C.faint,'40') }}>
+          {(dz.phase==='assembly' || onAir) && (
+            <span style={{ width:6, height:6, borderRadius:'50%', background:'#FFFFFF',
+              animation: onAir ? 'pulse 1.5s infinite' : 'none' }} />
+          )}
           {dz.phase==='assembly' ? 'ASSEMBLING' : onAir ? 'ON AIR' : 'OFF AIR'}
         </span>
-        <div style={{ fontFamily:display, fontSize:18, color:C.ink, fontWeight:600, overflow:'hidden',
-          whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{dz.debate?.motion ?? '…'}</div>
+        <div style={{ fontFamily:display, fontSize:18, color:C.ink, fontWeight:700, overflow:'hidden',
+          whiteSpace:'nowrap', textOverflow:'ellipsis', letterSpacing:'-.01em' }}>{dz.debate?.motion ?? '…'}</div>
         <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:16, fontFamily:mono, fontSize:12, color:C.dim }}>
           <ShareButton compact url={typeof window!=='undefined' ? `${window.location.origin}/debate/${debateId}` : ''}
             title={dz.debate?.motion ?? 'A debate on The Rostrum'}
             text={dz.debate?.motion ? `Watch: ${dz.debate.motion}` : 'Watch this debate on The Rostrum'} />
           <span>{Math.max(dz.debate?.viewer_count ?? 0, room.members.length).toLocaleString()} watching</span>
           <button onClick={() => nav(`/debate/${debateId}/watch`)} title="Immersive view"
-            style={{ padding:'4px 10px', borderRadius:4, border:`1px solid ${C.hair}`,
+            style={{ padding:'6px 12px', borderRadius:10, border:`1px solid ${C.hair}`,
               color:C.dim, fontSize:12, fontFamily:ui, fontWeight:600,
-              background:'transparent', cursor:'pointer' }}>
+              background:C.glass, cursor:'pointer' }}>
             ⛶ Immersive
           </button>
           <button onClick={() => role==='host' && setTab('ros')}
             title={role==='host' ? 'Edit time in Run of show' : undefined}
-            style={{ padding:'4px 10px', borderRadius:4, border:`1px solid ${low ? C.ember : C.hair}`,
-              color: low ? C.ember : C.ink, fontWeight:700, fontSize:15, fontFamily:mono,
-              background:'transparent', cursor: role==='host' ? 'pointer' : 'default' }}>
+            style={{ padding:'6px 12px', borderRadius:10, border:`1px solid ${low ? C.garnet : C.hair}`,
+              color: low ? C.garnet : C.ink, fontWeight:700, fontSize:15, fontFamily:mono,
+              background: low ? a(C.garnet,'14') : C.glass, cursor: role==='host' ? 'pointer' : 'default' }}>
             {dz.phase==='assembly' ? 'Doors open' : `${mm}:${ss}`}
           </button>
         </div>
@@ -130,7 +138,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
 
                 {/* canvas — mirrors the live broadcast composition (isolated so a
                     rendering error can never take down the host's controls) */}
-                <div style={{ flex:1, minHeight:0, position:'relative', borderRadius:7, overflow:'hidden', border:`1px solid ${C.hair}`, background:C.base2 }}>
+                <div style={{ flex:1, minHeight:0, position:'relative', borderRadius:16, overflow:'hidden', border:`1px solid ${C.hair}`, background:C.base2 }}>
                   <SafePanel resetKey={`${bs.layout}:${bs.presenterId ?? ''}:${dz.phase}`} label="Preview" fill>
                     <ChamberPreview members={room.members} bs={bs} debateId={debateId}
                       speaker={speaker} speakerSide={speakerSide} meId={me?.identity} />
@@ -266,12 +274,12 @@ function ChamberPreview({ members, bs, debateId, speaker, speakerSide, meId }: {
       return wrap(
         <div style={{ width:'100%', height:'100%', display:'flex', gap:8 }}>
           <div style={{ flex:'1 1 38%', position:'relative' }}>{cam(screenCam)}</div>
-          <div style={{ flex:'1 1 62%', position:'relative', borderRadius:6, overflow:'hidden' }}>{Content}</div>
+          <div style={{ flex:'1 1 62%', position:'relative', borderRadius:14, overflow:'hidden' }}>{Content}</div>
         </div>);
     case 'screen':
       return wrap(
         <div style={{ width:'100%', height:'100%', display:'flex', gap:8 }}>
-          <div style={{ flex:'1 1 78%', position:'relative', borderRadius:6, overflow:'hidden' }}>{Content}</div>
+          <div style={{ flex:'1 1 78%', position:'relative', borderRadius:14, overflow:'hidden' }}>{Content}</div>
           <div style={{ flex:'1 1 22%', position:'relative' }}>{cam(screenCam,false)}</div>
         </div>);
     case 'pip':
@@ -353,9 +361,9 @@ function Bench({ title, people, side, accent, tint, onProfile }: {
 }) {
   const opens = Math.max(0, 1 - people.length);
   return (
-    <div style={{ flex:1, maxWidth:280, padding:'16px 18px', borderRadius:10,
-      background:`linear-gradient(${side==='left'?'110deg':'250deg'}, ${tint}22, rgba(20,18,22,0.55) 80%)`,
-      border:`1px solid ${tint}55` }}>
+    <div style={{ flex:1, maxWidth:280, padding:'18px 20px', borderRadius:18,
+      background:`linear-gradient(${side==='left'?'110deg':'250deg'}, ${a(tint,'1F')}, ${a(C.panel,'8C')} 80%)`,
+      border:`1px solid ${a(tint,'40')}` }}>
       <div style={{ fontFamily:ui, fontSize:10.5, fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase',
         color:accent, marginBottom:14, textAlign: side==='left'?'left':'right' }}>{title}</div>
       <div style={{ display:'flex', gap:16, flexWrap:'wrap', justifyContent: side==='left'?'flex-start':'flex-end' }}>

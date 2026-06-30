@@ -38,12 +38,13 @@ export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom,
             : role === 'judge'  ? [['score','Score'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['gift','Gift']]
             :                     [['vote','Vote'],['chat','Chat'],['qa','Ask'],['poll','Poll'],['gift','Gift']];
   return (
-    <aside style={{ borderLeft:`1px solid ${C.hair}`, background:'rgba(20,18,22,0.92)', display:'flex', flexDirection:'column', minHeight:0 }}>
+    <aside style={{ borderLeft:`1px solid ${C.hair}`, background:a(C.base2,'EB'), backdropFilter:'blur(20px)', display:'flex', flexDirection:'column', minHeight:0 }}>
       <div style={{ display:'flex', padding:8, gap:5, borderBottom:`1px solid ${C.hair}` }}>
         {tabs.map(([k,l]) => (
-          <button key={k} onClick={() => setTab(k)} style={{ flex:1, padding:'8px 0', borderRadius:4, border:'none',
-            cursor:'pointer', fontFamily:ui, fontSize:11, fontWeight:600,
-            color: tab===k ? C.base : C.dim, background: tab===k ? C.gold : 'transparent' }}>{l}</button>
+          <button key={k} onClick={() => setTab(k)} style={{ flex:1, padding:'8px 0', borderRadius:9, border:'none',
+            cursor:'pointer', fontFamily:ui, fontSize:11, fontWeight:600, transition:'all .15s',
+            color: tab===k ? '#FFFFFF' : C.dim,
+            background: tab===k ? `linear-gradient(135deg, ${C.gold}, ${C.cyan})` : 'transparent' }}>{l}</button>
         ))}
       </div>
       <div style={{ flex:1, overflowY:'auto', padding:16, display:'flex', flexDirection:'column', minHeight:0 }}>
