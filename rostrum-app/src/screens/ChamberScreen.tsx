@@ -137,8 +137,14 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
                 </div>
 
                 {/* canvas — mirrors the live broadcast composition (isolated so a
-                    rendering error can never take down the host's controls) */}
-                <div style={{ flex:1, minHeight:0, position:'relative', borderRadius:16, overflow:'hidden', border:`1px solid ${C.hair}`, background:C.base2 }}>
+                    rendering error can never take down the host's controls).
+                    Constrained to 16:9 and centered, StreamYard-style, instead of
+                    stretching to fill all leftover height. */}
+                <div style={{ flex:1, minHeight:0, display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden' }}>
+                  <div style={{ width:'100%', maxWidth:'min(100%, calc((100vh - 320px) * 1.7778))',
+                    aspectRatio:'16 / 9', maxHeight:'100%', position:'relative', borderRadius:16, overflow:'hidden',
+                    border:`1px solid ${C.hair}`, background:C.base2,
+                    boxShadow:`0 20px 60px ${a('#000000','40')}` }}>
                   <SafePanel resetKey={`${bs.layout}:${bs.presenterId ?? ''}:${dz.phase}`} label="Preview" fill>
                     <ChamberPreview members={room.members} bs={bs} debateId={debateId}
                       speaker={speaker} speakerSide={speakerSide} meId={me?.identity} />
@@ -168,6 +174,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
                       oppAudience={dz.results.opp_audience}
                     />
                   )}
+                  </div>
                 </div>
 
                 {/* broadcast control bar — host layout switcher + present flow */}
