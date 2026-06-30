@@ -12,6 +12,7 @@ import { AuthProvider, useAuth } from './lib/auth';
 import { ThemeProvider } from './lib/themeContext';
 import { NavBar } from './components/NavBar';
 import { Sidebar } from './components/Sidebar';
+import { TopBar } from './components/TopBar';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { WelcomeTour } from './components/WelcomeTour';
 import { AuthScreen } from './screens/AuthScreen';
@@ -121,8 +122,11 @@ function Shell() {
   return (
     <div style={{ position:'absolute', inset:0, display:'flex', overflow:'hidden' }}>
       <Sidebar />
-      <div style={{ flex:1, position:'relative', minHeight:0, overflow:'auto' }}>
-        <ErrorBoundary><Outlet /></ErrorBoundary>
+      <div style={{ flex:1, position:'relative', minHeight:0, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+        <TopBar />
+        <div style={{ flex:1, minHeight:0, overflow:'auto' }}>
+          <ErrorBoundary><Outlet /></ErrorBoundary>
+        </div>
       </div>
       <WelcomeTour />
     </div>
