@@ -74,9 +74,11 @@ export function ResultsScreen({ debateId, onBackToLobby }: {
         )}
 
         {/* debate summary */}
-        <div style={{ marginBottom:26 }}>
-          <DebateSummaryPanel summary={summary ?? { total_time_secs:0, evidence_count:0, audience_votes:0, chat_count:0 }} />
-        </div>
+        {debate?.format !== 'legacy' && debate?.format !== 'lecture' && (
+          <div style={{ marginBottom:26 }}>
+            <DebateSummaryPanel summary={summary ?? { total_time_secs:0, evidence_count:0, audience_votes:0, chat_count:0 }} />
+          </div>
+        )}
 
         {/* recording + share */}
         <div style={{ background:C.panel, border:`1px solid ${C.hair}`, borderRadius:12, padding:'18px 20px' }}>

@@ -28,10 +28,11 @@ const LAYOUTS: { key: BcastLayout; label: string; needsScreen?: boolean }[] = [
   { key: 'cinema',    label: 'Cinema', needsScreen: true },
 ];
 
-export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScreenShare, onLocalState }: {
+export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScreenShare, onLocalState, hidePresentSlides }: {
   debateId: string; role: Role; identity: string; members: any[]; lkRoom?: any;
   setScreenShare?: (on: boolean) => Promise<boolean>;
   onLocalState?: (patch: Partial<BroadcastState>) => void;
+  hidePresentSlides?: boolean;
 }) {
   const [bs, setBs] = useState<BroadcastState>({ layout: 'solo', stageId: null, slidesOn: false, presenterId: null, presentType: null, presentRequest: null });
   const [busy, setBusy] = useState(false);
@@ -135,9 +136,11 @@ export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScr
         {/* Present button — host always; debaters only once granted */}
         {(isHost || iAmPresenter) && (
           <>
-            <Btn onClick={() => deckRef.current?.click()} disabled={busy}>
-              {busy ? 'Uploading…' : '⊞ Present slides'}
-            </Btn>
+            {!hidePresentSlides && (
+              <Btn onClick={() => deckRef.current?.click()} disabled={busy}>
+                {busy ? 'Uploading…' : '⊞ Present slides'}
+              </Btn>
+            )}
             {setScreenShare && <Btn onClick={startScreenShare}>🖵 Share screen</Btn>}
           </>
         )}
@@ -168,7 +171,7 @@ export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScr
       </div>
 
       {/* Host: grant a specific debater the floor to present */}
-      {isHost && !bs.presenterId && (
+      {!hidePresentSlides && isHost && !bs.presenterId && (
         <div style={{ display:'flex', alignItems:'center', gap:7, flexWrap:'wrap' }}>
           <span style={{ fontSize:10.5, color:C.faint }}>Let present:</span>
           {members.filter(m => ['debater','moderator'].includes(m.role)).map(m => (

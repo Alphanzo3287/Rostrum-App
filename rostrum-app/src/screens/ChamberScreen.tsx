@@ -215,6 +215,14 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
                 maxStageSeats={dz.debate?.max_stage_seats} maxModerators={dz.debate?.max_moderators}
                 onProfile={openProfile} onAskQuestion={() => setTab('qa')} isHost={isHost} onContextMenu={openCtxMenu}
               />
+            : isSpeakersCorner
+            ? <SpeakersCornerHall
+                debateId={debateId} room={room} bs={bs}
+                onLocalState={(patch) => setBs(b => ({ ...b, ...patch }))}
+                me={me} role={role} tally={tally} myVote={myVote} onVote={onVote}
+                onProfile={openProfile} narrow={isNarrow} onAskQuestion={() => setTab('qa')}
+                isHost={isHost} onContextMenu={openCtxMenu}
+              />
             : <LiveHall
                 debateId={debateId} room={room} dz={dz} bs={bs}
                 onLocalState={(patch) => setBs(b => ({ ...b, ...patch }))}
@@ -232,13 +240,21 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
             onSendInvite={(r, s) => {
               const maxSeats = dz.debate?.max_stage_seats;
               const maxMods = dz.debate?.max_moderators;
-              const seated = room.members.filter((m: any) => m.role === 'debater' || m.role === 'moderator').length;
               const mods = room.members.filter((m: any) => m.role === 'moderator').length;
               if (r === 'moderator' && maxMods != null && mods >= maxMods) {
                 alert(`This room is capped at ${maxMods} moderator${maxMods === 1 ? '' : 's'}.`); return;
               }
-              if (maxSeats != null && seated >= maxSeats) {
-                alert(`This room is capped at ${maxSeats} speaker${maxSeats === 1 ? '' : 's'} on stage.`); return;
+              if (isSpeakersCorner && r === 'debater' && s && maxSeats != null) {
+                const teamCap = maxSeats / 2;
+                const onSide = room.members.filter((m: any) => m.role === 'debater' && m.side === s).length;
+                if (onSide >= teamCap) {
+                  alert(`This side is capped at ${teamCap} speaker${teamCap === 1 ? '' : 's'}.`); return;
+                }
+              } else {
+                const seated = room.members.filter((m: any) => m.role === 'debater' || m.role === 'moderator').length;
+                if (maxSeats != null && seated >= maxSeats) {
+                  alert(`This room is capped at ${maxSeats} speaker${maxSeats === 1 ? '' : 's'} on stage.`); return;
+                }
               }
               sendStageInvite(ctxMenu.member.identity, r, s);
             }}
@@ -719,6 +735,130 @@ function ListenerTile({ member, onProfile, onContextMenu }: {
 }
 
 
+/* ---- D4 · Speakers' Corner — scaled-up Oxford: 1v1 up to 5v5, audience
+   vote only, no judges, no timer. Layout control (for the YouTube stream)
+   is retained but slide-deck presenting is not — Evidence stays. Clicking
+   a speaker expands them into the center spotlight; clicking again (or
+   the × ) reverts. This is a per-viewer local choice, not host-broadcast,
+   so everyone can focus on whoever they want independently. ---- */
+function SpeakersCornerHall({
+  debateId, room, bs, onLocalState, me, role, tally, myVote, onVote,
+  onProfile, narrow, onAskQuestion, isHost, onContextMenu,
+}: {
+  debateId: string; room: any; bs: BroadcastState; onLocalState: (patch: Partial<BroadcastState>) => void;
+  me?: M; role: string; tally: Tally; myVote: Side | null; onVote: (s: Side) => void;
+  onProfile: (h?: string | null) => void; narrow: boolean; onAskQuestion?: () => void;
+  isHost: boolean; onContextMenu: (e: React.MouseEvent, m: any) => void;
+}) {
+  const members = room.members as any[];
+  const host = members.find(m => m.role === 'host');
+  const mod = members.find(m => m.role === 'moderator');
+  const propSpeakers = members.filter(m => m.role === 'debater' && m.side === 'prop');
+  const oppSpeakers = members.filter(m => m.role === 'debater' && m.side === 'opp');
+  const audience = members.filter(m => m.role === 'audience');
+  const canControl = role === 'host' || role === 'moderator';
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const expanded = members.find(m => m.identity === expandedId);
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', minHeight:0, height:'100%',
+      overflowY:'auto', paddingBottom: narrow ? 10 : 0 }}>
+      <div style={{ flexShrink:0 }}>
+        <HostTopRow host={host} mod={mod} judgeCount={0} onProfile={onProfile} hideJudge
+          onModContextMenu={mod ? (e) => onContextMenu(e, mod) : undefined} />
+      </div>
+
+      <div style={{ display:'grid', gap:14, flexShrink:0, marginBottom:14,
+        gridTemplateColumns: narrow ? '1fr' : 'minmax(160px,1fr) minmax(0,1.4fr) minmax(160px,1fr)' }}>
+        <CornerSide side="prop" speakers={propSpeakers} expandedId={expandedId} setExpandedId={setExpandedId}
+          isHost={isHost} onContextMenu={onContextMenu} />
+        <div style={{ borderRadius:18, border:`1px solid ${C.hair}`, background:C.base2, minHeight:220,
+          display:'flex', alignItems:'center', justifyContent:'center', position:'relative', overflow:'hidden' }}>
+          {expanded ? (
+            <>
+              <div style={{ position:'absolute', inset:0 }}><VideoTile member={expanded} active size="stage" /></div>
+              <button onClick={() => setExpandedId(null)} title="Collapse"
+                style={{ position:'absolute', top:10, right:10, width:30, height:30, borderRadius:'50%',
+                  background:a(C.base,'B3'), border:`1px solid ${C.hairHi}`, color:C.ink, cursor:'pointer', fontSize:16 }}>×</button>
+              <span style={{ position:'absolute', bottom:10, left:10, padding:'4px 11px', borderRadius:999,
+                background:a(C.base,'B3'), border:`1px solid ${C.hairHi}`, fontFamily:ui, fontSize:11, fontWeight:700, color:C.ink }}>
+                {expanded.name}</span>
+            </>
+          ) : (
+            <div style={{ textAlign:'center', padding:20 }}>
+              <svg width="46" height="26" viewBox="0 0 46 26" fill="none" aria-hidden style={{ margin:'0 auto 10px' }}>
+                <path d="M23 1L44 9H2L23 1Z" fill={C.warning} opacity=".9" />
+                <rect x="7" y="10" width="5" height="14" fill={C.warning} opacity=".85" />
+                <rect x="20" y="10" width="5" height="14" fill={C.warning} opacity=".85" />
+                <rect x="33" y="10" width="5" height="14" fill={C.warning} opacity=".85" />
+                <rect x="2" y="24" width="42" height="2.4" rx="1.2" fill={C.warning} opacity=".9" />
+              </svg>
+              <div style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>Click a speaker to bring them into focus</div>
+            </div>
+          )}
+        </div>
+        <CornerSide side="opp" speakers={oppSpeakers} expandedId={expandedId} setExpandedId={setExpandedId}
+          isHost={isHost} onContextMenu={onContextMenu} />
+      </div>
+
+      <div style={{ display:'grid', gap:12, marginBottom:14, flexShrink:0,
+        gridTemplateColumns: narrow ? '1fr' : '1.2fr 1fr' }}>
+        <AudienceVoteStrip tally={tally} myVote={myVote} canVote onVote={onVote} />
+        <GalleryStrip audience={audience} onProfile={onProfile}
+          onMemberContextMenu={isHost ? (e, m) => onContextMenu(e, m) : undefined} />
+      </div>
+
+      {me && (
+        <div style={{ marginBottom:12, flexShrink:0 }}>
+          <InteractionBar room={room.room} identity={me.identity} name={me.name} onAskQuestion={onAskQuestion} />
+        </div>
+      )}
+
+      {canControl && (
+        <div style={{ flexShrink:0 }}>
+          <SafePanel resetKey="corner-bar" label="Controls">
+            <BroadcastBar debateId={debateId} role={role} identity={me?.identity ?? ''}
+              members={members} lkRoom={room.room} setScreenShare={room.setScreenShare}
+              onLocalState={onLocalState} hidePresentSlides />
+          </SafePanel>
+        </div>
+      )}
+    </div>
+  );
+}
+function CornerSide({ side, speakers, expandedId, setExpandedId, isHost, onContextMenu }: {
+  side: Side; speakers: any[]; expandedId: string | null; setExpandedId: (id: string | null) => void;
+  isHost: boolean; onContextMenu: (e: React.MouseEvent, m: any) => void;
+}) {
+  const tone = side === 'prop' ? C.jadeHi : C.garnetHi;
+  const label = side === 'prop' ? 'Proposition' : 'Opposition';
+  return (
+    <div style={{ borderRadius:18, border:`1px solid ${a(tone,'33')}`, background:a(tone,'0A'), padding:'12px 10px' }}>
+      <div style={{ fontFamily:ui, fontWeight:800, fontSize:10.5, letterSpacing:'.14em', textTransform:'uppercase',
+        color:tone, marginBottom:10, textAlign:'center' }}>{label}</div>
+      {speakers.length === 0 ? (
+        <div style={{ fontFamily:ui, fontSize:11.5, color:C.faint, textAlign:'center', padding:'14px 0' }}>Open seat</div>
+      ) : (
+        <div style={{ display:'flex', flexWrap:'wrap', gap:12, justifyContent:'center' }}>
+          {speakers.map(m => (
+            <div key={m.identity} onClick={() => setExpandedId(expandedId === m.identity ? null : m.identity)}
+              onContextMenu={isHost ? (e) => { e.preventDefault(); onContextMenu(e, m); } : undefined}
+              style={{ width:72, textAlign:'center', cursor:'pointer' }}>
+              <span style={{ display:'block', borderRadius:'50%',
+                boxShadow: expandedId === m.identity ? `0 0 0 3px ${C.base}, 0 0 0 5px ${tone}` : `0 0 0 2px ${a(tone,'44')}` }}>
+                <Initials name={m.name} url={m.avatar} size={56} />
+              </span>
+              <div style={{ fontFamily:ui, fontSize:11, fontWeight:600, color:C.ink, marginTop:5,
+                whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{m.name}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function LiveHall({
   debateId, room, dz, bs, onLocalState, me, role, speaker, speakerSide,
   floor, tally, myVote, onVote, sideProfiles, onProfile, narrow, countdown, onAskQuestion, mobile,
@@ -925,6 +1065,12 @@ function StageActionMenu({ x, y, member, debateId, isSelf, onSendInvite, onClose
         ) : format === 'legacy' ? (
           <>
             <MenuBtn label="Invite as Speaker" onClick={() => invite('debater', null, 'Speaker')} busy={busy} />
+            <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
+          </>
+        ) : format === 'speakers_corner' ? (
+          <>
+            <MenuBtn label="Invite as Proposition" onClick={() => invite('debater', 'prop', 'Proposition')} busy={busy} />
+            <MenuBtn label="Invite as Opposition" onClick={() => invite('debater', 'opp', 'Opposition')} busy={busy} />
             <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
           </>
         ) : (
