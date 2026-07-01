@@ -95,6 +95,8 @@ export interface CreateDebateInput {
   scheduledAt?: string | null;
   segments: { label: string; side: Side | null; durationSecs: number }[];
   thumbnailFile?: File | null;
+  maxStageSeats?: number | null;
+  maxModerators?: number | null;
 }
 
 export async function createDebate(input: CreateDebateInput): Promise<Debate> {
@@ -116,6 +118,8 @@ export async function createDebate(input: CreateDebateInput): Promise<Debate> {
     win_mode: input.winMode ?? 'public',
     scheduled_at: input.scheduledAt ?? null,
     status: input.scheduledAt ? 'scheduled' : 'assembly',
+    max_stage_seats: input.maxStageSeats ?? null,
+    max_moderators: input.maxModerators ?? null,
   }).select().single();
   if (error) throw error;
   const d = debate as Debate;

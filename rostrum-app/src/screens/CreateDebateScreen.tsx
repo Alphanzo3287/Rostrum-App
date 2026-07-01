@@ -32,10 +32,30 @@ const FORMATS: Record<DebateFormat, Seg[]> = {
     { label: 'Audience Q&A', side: null, min: 10 }, { label: 'Wrap-up', side: null, min: 5 },
   ],
   freestyle: [{ label: 'Open dialogue', side: null, min: 30 }],
+  lecture: [
+    { label: 'Presentation', side: null, min: 30 }, { label: 'Audience Q&A', side: null, min: 10 },
+  ],
+  legacy: [{ label: 'Open conversation', side: null, min: 60 }],
+  speakers_corner: [
+    { label: 'Proposition · Opening', side: 'prop', min: 5 }, { label: 'Opposition · Opening', side: 'opp', min: 5 },
+    { label: 'Open debate', side: null, min: 15 },
+    { label: 'Proposition · Closing', side: 'prop', min: 3 }, { label: 'Opposition · Closing', side: 'opp', min: 3 },
+  ],
 };
 const FORMAT_LABEL: Record<DebateFormat, string> = {
   oxford: 'Oxford · Formal', cross_exam: 'Cross-Examination', lincoln_douglas: 'Lincoln–Douglas',
   town_hall: 'Town Hall · Open', freestyle: 'Freestyle',
+  lecture: 'Lecture', legacy: 'Legacy', speakers_corner: "Speakers' Corner",
+};
+// Only these four are offered in the picker — the rest stay in the type/DB
+// for backward compatibility with any existing debates, but aren't new-facing.
+const VISIBLE_FORMATS: DebateFormat[] = ['oxford', 'lecture', 'legacy', 'speakers_corner'];
+const FORMAT_HINT: Record<DebateFormat, string> = {
+  oxford: 'Two sides, judges or audience decide the winner.',
+  lecture: 'One presenter, a slide deck, and an audience — on or off YouTube.',
+  legacy: 'Clubhouse/X Spaces style — open stage, freeform conversation, no formal winner.',
+  speakers_corner: 'Informal town-hall debate, 1v1 up to 5v5, audience vote only — no judges.',
+  cross_exam: '', lincoln_douglas: '', town_hall: '', freestyle: '',
 };
 const nextSide = (s: Side | null): Side | null => (s === null ? 'prop' : s === 'prop' ? 'opp' : null);
 
@@ -57,6 +77,9 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
   const [price, setPrice] = useState(5);
   const [gifts, setGifts] = useState(true);
   const [recording, setRecording] = useState(true);
+  const [teamSize, setTeamSize] = useState(1);           // speakers_corner: 1v1..5v5
+  const [maxStageSeats, setMaxStageSeats] = useState<number | ''>('');  // legacy: blank = uncapped
+  const [maxModerators, setMaxModerators] = useState<number | ''>('');  // legacy: blank = uncapped
   const [ytEnabled, setYtEnabled] = useState(false);
   const [ytTitle, setYtTitle] = useState('');
   const [ytDesc, setYtDesc] = useState('');
@@ -67,7 +90,13 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
 
   useEffect(() => { getYouTubeConnection().then(setYtConn).catch(() => {}); }, []);
 
-  const pickFormat = (f: DebateFormat) => { setFormat(f); setSegs(FORMATS[f]); };
+  const pickFormat = (f: DebateFormat) => {
+    setFormat(f); setSegs(FORMATS[f]);
+    if (f === 'legacy' || f === 'speakers_corner') setPaid(false); // entry is always free for these
+    if (f === 'lecture' || f === 'legacy') setVoters(false);
+    if (f === 'oxford') setVoters(true);
+    if (f !== 'oxford') setWinMode('public'); // no judge concept outside Oxford
+  };
   const totalMin = segs.reduce((a, b) => a + b.min, 0);
   const sideColor = (s: Side | null) => (s === 'prop' ? C.jadeHi : s === 'opp' ? C.garnetHi : C.faint);
   const sideLabel = (s: Side | null) => (s === 'prop' ? 'PROP' : s === 'opp' ? 'OPP' : 'BOTH');
@@ -87,6 +116,9 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
         scheduledAt,
         segments: segs.map(s => ({ label: s.label, side: s.side, durationSecs: s.min * 60 })),
         thumbnailFile: thumb,
+        maxStageSeats: format === 'legacy' ? (maxStageSeats === '' ? null : maxStageSeats)
+          : format === 'speakers_corner' ? teamSize * 2 : null,
+        maxModerators: format === 'legacy' ? (maxModerators === '' ? null : maxModerators) : null,
       });
       // If YouTube is connected and enabled, create the broadcast automatically.
       if (ytEnabled && ytConn?.connected) {
@@ -134,10 +166,13 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
               style={{ ...field, fontFamily:display, fontSize:20, marginBottom:22 }} />
             <Label>Format</Label>
             <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:8, marginBottom:22 }}>
-              {(Object.keys(FORMATS) as DebateFormat[]).map(f => (
+              {VISIBLE_FORMATS.map(f => (
                 <Chip key={f} on={format === f} onClick={() => pickFormat(f)}>{FORMAT_LABEL[f]}</Chip>
               ))}
             </div>
+            {FORMAT_HINT[format] && (
+              <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint, marginTop:-14, marginBottom:22 }}>{FORMAT_HINT[format]}</p>
+            )}
             <Label>Visibility</Label>
             <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:8, marginBottom:22 }}>
               <Chip on={vis === 'public'} onClick={() => setVis('public')}>Public</Chip>
@@ -199,104 +234,152 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
           </>}
 
           {step === 3 && <>
-            <Toggle label="Audience voting" sub="Let viewers vote a verdict from their seats" on={voters} set={setVoters} />
+            {format !== 'lecture' && format !== 'legacy' && (
+              <Toggle label="Audience voting" sub="Let viewers vote a verdict from their seats" on={voters} set={setVoters} />
+            )}
 
-            {/* Win mode selector */}
-            <div style={{ padding:'15px 0', borderBottom:`1px solid ${C.hair}` }}>
-              <div style={{ fontFamily:ui, fontSize:14, color:C.ink, fontWeight:600, marginBottom:2 }}>Winner decided by</div>
-              <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginBottom:10 }}>
-                {winMode === 'academic' ? 'Judges score each segment; their ballots determine the winner.'
-                  : winMode === 'hybrid' ? 'Judges pick the official winner; audience picks the People\'s Choice.'
-                  : 'The audience votes live; majority wins.'}
+            {format === 'oxford' && (
+              <div style={{ padding:'15px 0', borderBottom:`1px solid ${C.hair}` }}>
+                <div style={{ fontFamily:ui, fontSize:14, color:C.ink, fontWeight:600, marginBottom:2 }}>Winner decided by</div>
+                <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginBottom:10 }}>
+                  {winMode === 'academic' ? 'Judges score each segment; their ballots determine the winner.'
+                    : winMode === 'hybrid' ? 'Judges pick the official winner; audience picks the People\'s Choice.'
+                    : 'The audience votes live; majority wins.'}
+                </div>
+                <div style={{ display:'flex', gap:8 }}>
+                  <Chip on={winMode==='public'} onClick={() => setWinMode('public')}>Audience</Chip>
+                  <Chip on={winMode==='academic'} onClick={() => setWinMode('academic')}>Judges</Chip>
+                  <Chip on={winMode==='hybrid'} onClick={() => setWinMode('hybrid')}>Hybrid</Chip>
+                </div>
               </div>
-              <div style={{ display:'flex', gap:8 }}>
-                <Chip on={winMode==='public'} onClick={() => setWinMode('public')}>Audience</Chip>
-                <Chip on={winMode==='academic'} onClick={() => setWinMode('academic')}>Judges</Chip>
-                <Chip on={winMode==='hybrid'} onClick={() => setWinMode('hybrid')}>Hybrid</Chip>
+            )}
+
+            {format === 'legacy' && (
+              <div style={{ padding:'15px 0', borderBottom:`1px solid ${C.hair}` }}>
+                <div style={{ fontFamily:ui, fontSize:14, color:C.ink, fontWeight:600, marginBottom:2 }}>Stage capacity</div>
+                <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginBottom:12 }}>
+                  Leave blank for uncapped, Clubhouse-style. Set a number for an X Spaces-style limit.
+                </div>
+                <div style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
+                  <div>
+                    <Label>Max speakers on stage</Label>
+                    <input type="number" min={1} value={maxStageSeats}
+                      onChange={e => setMaxStageSeats(e.target.value === '' ? '' : Math.max(1, +e.target.value))}
+                      placeholder="Uncapped" style={{ ...field, width:120, marginTop:6, textAlign:'center' }} />
+                  </div>
+                  <div>
+                    <Label>Max moderators</Label>
+                    <input type="number" min={1} value={maxModerators}
+                      onChange={e => setMaxModerators(e.target.value === '' ? '' : Math.max(1, +e.target.value))}
+                      placeholder="Uncapped" style={{ ...field, width:120, marginTop:6, textAlign:'center' }} />
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
+
+            {format === 'speakers_corner' && (
+              <div style={{ padding:'15px 0', borderBottom:`1px solid ${C.hair}` }}>
+                <div style={{ fontFamily:ui, fontSize:14, color:C.ink, fontWeight:600, marginBottom:2 }}>Team size</div>
+                <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginBottom:10 }}>
+                  {teamSize}v{teamSize} — {teamSize * 2} seats on stage total.
+                </div>
+                <div style={{ display:'flex', gap:8 }}>
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <Chip key={n} on={teamSize === n} onClick={() => setTeamSize(n)}>{n}v{n}</Chip>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <Toggle label="Gifts & donations" sub="Audience can tip debaters and the host live" on={gifts} set={setGifts} />
             <Toggle label="Record & allow downloads" sub="Host and debaters get the MP4 afterward" on={recording} set={setRecording} />
-            <div style={{ display:'flex', alignItems:'center', gap:14, padding:'15px 0', borderBottom:`1px solid ${C.hair}` }}>
-              <div style={{ flex:1 }}>
-                <div style={{ fontFamily:ui, fontSize:14, color:C.ink, fontWeight:600 }}>Entry</div>
-                <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginTop:2 }}>{paid ? 'Viewers pay at the door' : 'Open to everyone'}</div>
-              </div>
-              <Chip on={!paid} onClick={() => setPaid(false)}>Free</Chip>
-              <Chip on={paid} onClick={() => setPaid(true)}>Paid</Chip>
-              {paid && <input type="number" value={price} min={1} onChange={e => setPrice(+e.target.value)}
-                style={{ ...field, width:80, textAlign:'center' }} />}
-            </div>
 
-            <div style={{ marginTop:18 }}>
+            {(format === 'oxford' || format === 'lecture') && (
               <div style={{ display:'flex', alignItems:'center', gap:14, padding:'15px 0', borderBottom:`1px solid ${C.hair}` }}>
                 <div style={{ flex:1 }}>
-                  <div style={{ fontFamily:ui, fontSize:14, color:C.ink, fontWeight:600 }}>
-                    Stream to YouTube <span style={{ fontFamily:ui, fontSize:11, fontWeight:400, color:C.faint }}>(optional)</span>
-                  </div>
-                  <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginTop:2 }}>
-                    {ytConn?.connected
-                      ? `Connected as ${ytConn.channel_title ?? 'your channel'} — broadcast created automatically`
-                      : 'Skip this or connect your YouTube account to stream automatically.'}
-                  </div>
+                  <div style={{ fontFamily:ui, fontSize:14, color:C.ink, fontWeight:600 }}>Entry</div>
+                  <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginTop:2 }}>{paid ? 'Viewers pay at the door' : 'Open to everyone'}</div>
                 </div>
-                {ytConn?.connected
-                  ? <Chip on={ytEnabled} onClick={() => setYtEnabled(e => !e)}>{ytEnabled ? 'On' : 'Off'}</Chip>
-                  : (
-                    <a href="/settings" style={{ fontFamily:ui, fontSize:11, fontWeight:600,
-                      color:C.gold, textDecoration:'none', whiteSpace:'nowrap',
-                      padding:'5px 10px', border:`1px solid ${a(C.gold,'44')}`, borderRadius:6 }}>
-                      Connect account
-                    </a>
-                  )}
+                <Chip on={!paid} onClick={() => setPaid(false)}>Free</Chip>
+                <Chip on={paid} onClick={() => setPaid(true)}>Paid</Chip>
+                {paid && <input type="number" value={price} min={1} onChange={e => setPrice(+e.target.value)}
+                  style={{ ...field, width:80, textAlign:'center' }} />}
               </div>
-              {ytEnabled && ytConn?.connected && (
-                <div style={{ paddingTop:14, display:'flex', flexDirection:'column', gap:10 }}>
-                  <div>
-                    <Label>YouTube title</Label>
-                    <input value={ytTitle} onChange={e => setYtTitle(e.target.value)}
-                      placeholder={motion || 'Debate title on YouTube'}
-                      style={{ ...field, marginTop:6 }} />
-                  </div>
-                  <div>
-                    <Label>Description <span style={{ color:C.faint, fontWeight:400 }}>(optional)</span></Label>
-                    <textarea value={ytDesc} onChange={e => setYtDesc(e.target.value)}
-                      placeholder="What this debate is about..."
-                      rows={3} style={{ ...field, marginTop:6, resize:'vertical' }} />
-                  </div>
-                  <div>
-                    <Label>YouTube privacy</Label>
-                    <div style={{ display:'flex', gap:8, marginTop:6 }}>
-                      {([
-                        ['public',   'Public',   'Anyone can find and watch'],
-                        ['unlisted', 'Unlisted', 'Only people with the link'],
-                        ['private',  'Private',  'Only you — best for testing'],
-                      ] as const).map(([val, label, hint]) => (
-                        <button key={val} type="button" onClick={() => setYtPrivacy(val)}
-                          style={{
-                            flex:1, padding:'10px 12px', borderRadius:8, cursor:'pointer', textAlign:'left',
-                            border:`1px solid ${ytPrivacy===val ? C.gold : C.hair}`,
-                            background: ytPrivacy===val ? `${a(C.gold,'1a')}` : 'transparent' }}>
-                          <div style={{ fontFamily:ui, fontSize:13, fontWeight:600,
-                            color: ytPrivacy===val ? C.gold : C.ink }}>{label}</div>
-                          <div style={{ fontFamily:ui, fontSize:10.5, color:C.faint, marginTop:2, lineHeight:1.3 }}>{hint}</div>
-                        </button>
-                      ))}
+            )}
+
+            {format !== 'legacy' && (
+              <div style={{ marginTop:18 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:14, padding:'15px 0', borderBottom:`1px solid ${C.hair}` }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontFamily:ui, fontSize:14, color:C.ink, fontWeight:600 }}>
+                      Stream to YouTube <span style={{ fontFamily:ui, fontSize:11, fontWeight:400, color:C.faint }}>(optional)</span>
+                    </div>
+                    <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginTop:2 }}>
+                      {ytConn?.connected
+                        ? `Connected as ${ytConn.channel_title ?? 'your channel'} — broadcast created automatically`
+                        : 'Skip this or connect your YouTube account to stream automatically.'}
                     </div>
                   </div>
-                  <p style={{ fontFamily:ui, fontSize:11.5, color:C.faint, margin:0 }}>
-                    The broadcast is created on your YouTube channel automatically when you create this debate.
-                    When you press go live in the studio, streaming starts instantly — no stream key needed.
-                    {ytPrivacy !== 'public' && ` Set to ${ytPrivacy} — ${ytPrivacy === 'private' ? 'only you can see it' : 'only people with the link can watch'}.`}
-                  </p>
+                  {ytConn?.connected
+                    ? <Chip on={ytEnabled} onClick={() => setYtEnabled(e => !e)}>{ytEnabled ? 'On' : 'Off'}</Chip>
+                    : (
+                      <a href="/settings" style={{ fontFamily:ui, fontSize:11, fontWeight:600,
+                        color:C.gold, textDecoration:'none', whiteSpace:'nowrap',
+                        padding:'5px 10px', border:`1px solid ${a(C.gold,'44')}`, borderRadius:6 }}>
+                        Connect account
+                      </a>
+                    )}
                 </div>
-              )}
-            </div>
+                {ytEnabled && ytConn?.connected && (
+                  <div style={{ paddingTop:14, display:'flex', flexDirection:'column', gap:10 }}>
+                    <div>
+                      <Label>YouTube title</Label>
+                      <input value={ytTitle} onChange={e => setYtTitle(e.target.value)}
+                        placeholder={motion || 'Debate title on YouTube'}
+                        style={{ ...field, marginTop:6 }} />
+                    </div>
+                    <div>
+                      <Label>Description <span style={{ color:C.faint, fontWeight:400 }}>(optional)</span></Label>
+                      <textarea value={ytDesc} onChange={e => setYtDesc(e.target.value)}
+                        placeholder="What this debate is about..."
+                        rows={3} style={{ ...field, marginTop:6, resize:'vertical' }} />
+                    </div>
+                    <div>
+                      <Label>YouTube privacy</Label>
+                      <div style={{ display:'flex', gap:8, marginTop:6 }}>
+                        {([
+                          ['public',   'Public',   'Anyone can find and watch'],
+                          ['unlisted', 'Unlisted', 'Only people with the link'],
+                          ['private',  'Private',  'Only you — best for testing'],
+                        ] as const).map(([val, label, hint]) => (
+                          <button key={val} type="button" onClick={() => setYtPrivacy(val)}
+                            style={{
+                              flex:1, padding:'10px 12px', borderRadius:8, cursor:'pointer', textAlign:'left',
+                              border:`1px solid ${ytPrivacy===val ? C.gold : C.hair}`,
+                              background: ytPrivacy===val ? `${a(C.gold,'1a')}` : 'transparent' }}>
+                            <div style={{ fontFamily:ui, fontSize:13, fontWeight:600,
+                              color: ytPrivacy===val ? C.gold : C.ink }}>{label}</div>
+                            <div style={{ fontFamily:ui, fontSize:10.5, color:C.faint, marginTop:2, lineHeight:1.3 }}>{hint}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <p style={{ fontFamily:ui, fontSize:11.5, color:C.faint, margin:0 }}>
+                      The broadcast is created on your YouTube channel automatically when you create this debate.
+                      When you press go live in the studio, streaming starts instantly — no stream key needed.
+                      {ytPrivacy !== 'public' && ` Set to ${ytPrivacy} — ${ytPrivacy === 'private' ? 'only you can see it' : 'only people with the link can watch'}.`}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             <p style={{ fontFamily:ui, fontSize:11.5, color:C.faint, marginTop:18, lineHeight:1.5 }}>
-              Slides are uploaded by the debaters themselves — each side shares its own deck from the floor
-              once they’ve taken their seat.</p>
+              {format === 'lecture' && 'You upload and present the deck yourself from the floor — a single presenter, center stage.'}
+              {format === 'legacy' && 'No slide deck or layout controls here — Legacy is an open mic. Evidence links are still available to share.'}
+              {format === 'speakers_corner' && 'No slide deck uploader here, but Evidence links and layout controls are still available.'}
+              {format === 'oxford' && "Slides are uploaded by the debaters themselves — each side shares its own deck from the floor once they've taken their seat."}
+            </p>
           </>}
         </div>
 
