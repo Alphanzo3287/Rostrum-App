@@ -52,7 +52,7 @@ export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom,
         ))}
       </div>
       <div style={{ flex:1, overflowY:'auto', padding:16, display:'flex', flexDirection:'column', minHeight:0 }}>
-        {tab==='invite' && <InvitePanel debateId={debateId} />}
+        {tab==='invite' && <InvitePanel debateId={debateId} format={format} />}
         {tab==='ros' && (ros ? <RosPanel ros={ros} /> : <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>Run of show is unavailable.</p>)}
         {tab==='chat' && <ChatPanel debateId={debateId} />}
         {(tab==='vote'||tab==='poll') && <PollPanel debateId={debateId} canVote={role==='audience'} pollOpen={pollOpen} />}
@@ -219,14 +219,17 @@ function ChatPanel({ debateId }: { debateId: string }) {
 }
 
 /* ----- invite (host) ----- */
-function InvitePanel({ debateId }: { debateId: string }) {
+function InvitePanel({ debateId, format }: { debateId: string; format?: string }) {
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const seats: { label: string; q: string; color: string }[] = [
+  const allSeats: { label: string; q: string; color: string }[] = [
     { label: 'Proposition debater', q: 'role=debater&side=prop', color: C.jadeHi },
     { label: 'Opposition debater',  q: 'role=debater&side=opp',  color: C.garnetHi },
     { label: 'Moderator',           q: 'role=moderator',          color: C.gold },
     { label: 'Judge',               q: 'role=judge',              color: C.dim },
   ];
+  // Lecture is a single presenter — no debater sides, no judges. A
+  // moderator (co-host) is still a reasonable seat to invite.
+  const seats = format === 'lecture' ? allSeats.filter(s => s.label === 'Moderator') : allSeats;
   const [copied, setCopied] = useState<string | null>(null);
   const link = (q: string) => `${origin}/debate/${debateId}/join?${q}`;
   async function copy(q: string) {
