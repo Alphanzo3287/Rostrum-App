@@ -251,23 +251,25 @@ export function FloorStage({ roundLabel, countdown, hasFloorSide, assembling, ch
 }
 
 /* =========================== HOST / MOD / JUDGE TOP ROW =========================== */
-export function HostTopRow({ host, mod, judgeCount, onProfile, right, onModContextMenu }: {
+export function HostTopRow({ host, mod, judgeCount, onProfile, right, onModContextMenu, hideJudge }: {
   host?: RoomMember; mod?: RoomMember; judgeCount: number;
   onProfile?: (handle?: string | null) => void; right?: React.ReactNode;
-  onModContextMenu?: (e: React.MouseEvent) => void;
+  onModContextMenu?: (e: React.MouseEvent) => void; hideJudge?: boolean;
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18, padding: '4px 0 12px', flexWrap: 'wrap' }}>
       <SeatPill member={host} label="Host" tone={C.warning} glow onProfile={onProfile} />
       <SeatPill member={mod} label="Moderator" tone={C.gold} onProfile={onProfile} onContextMenu={onModContextMenu} />
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 12,
-        background: C.glass, border: `1px solid ${C.hair}` }}>
-        <span style={{ width: 26, height: 26, borderRadius: '50%', display: 'grid', placeItems: 'center',
-          border: `1.5px dashed ${C.hairHi}`, color: C.faint, fontSize: 13 }}>⚖</span>
-        <span style={{ fontFamily: ui, fontSize: 11.5, color: C.dim }}>
-          {judgeCount > 0 ? `${judgeCount} ${judgeCount === 1 ? 'Judge' : 'Judges'}` : 'Open Judge'}
+      {!hideJudge && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 12,
+          background: C.glass, border: `1px solid ${C.hair}` }}>
+          <span style={{ width: 26, height: 26, borderRadius: '50%', display: 'grid', placeItems: 'center',
+            border: `1.5px dashed ${C.hairHi}`, color: C.faint, fontSize: 13 }}>⚖</span>
+          <span style={{ fontFamily: ui, fontSize: 11.5, color: C.dim }}>
+            {judgeCount > 0 ? `${judgeCount} ${judgeCount === 1 ? 'Judge' : 'Judges'}` : 'Open Judge'}
+          </span>
         </span>
-      </span>
+      )}
       {right && <div style={{ marginLeft: 6 }}>{right}</div>}
     </div>
   );
@@ -512,10 +514,10 @@ function WaitingSeatCard({ side, member, debateId, canInvite, onContextMenu }: {
   );
 }
 
-export function WaitingHall({ debateId, members, motion, viewerCount, scheduledAt, role, onProfile, onContextMenu }: {
+export function WaitingHall({ debateId, members, motion, viewerCount, scheduledAt, role, onProfile, onContextMenu, format }: {
   debateId: string; members: RoomMember[]; motion: string; viewerCount: number;
   scheduledAt: string | null | undefined; role: string; onProfile?: (h?: string | null) => void;
-  onContextMenu?: (e: React.MouseEvent, m: RoomMember) => void;
+  onContextMenu?: (e: React.MouseEvent, m: RoomMember) => void; format?: string;
 }) {
   const host = members.find(m => m.role === 'host');
   const mod = members.find(m => m.role === 'moderator');
@@ -524,6 +526,7 @@ export function WaitingHall({ debateId, members, motion, viewerCount, scheduledA
   const oppMember = members.find(m => m.role === 'debater' && m.side === 'opp');
   const audience = members.filter(m => m.role === 'audience');
   const isHost = role === 'host';
+  const isLecture = format === 'lecture';
 
   const doorsIn = useCountdown(scheduledAt);
   const clockStr = doorsIn == null ? null
@@ -562,16 +565,18 @@ export function WaitingHall({ debateId, members, motion, viewerCount, scheduledA
       </div>
 
       {/* host / mod / judges */}
-      <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile}
+      <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile} hideJudge={isLecture}
         onModContextMenu={mod && onContextMenu ? (e) => onContextMenu(e, mod) : undefined} />
 
-      {/* competitor waiting cards */}
-      <div style={{ display: 'flex', gap: 14, marginTop: 4, marginBottom: 16, flexWrap: 'wrap' }}>
-        <WaitingSeatCard side="prop" member={propMember} debateId={debateId} canInvite={isHost && !propMember}
-          onContextMenu={propMember && onContextMenu ? (e) => onContextMenu(e, propMember) : undefined} />
-        <WaitingSeatCard side="opp" member={oppMember} debateId={debateId} canInvite={isHost && !oppMember}
-          onContextMenu={oppMember && onContextMenu ? (e) => onContextMenu(e, oppMember) : undefined} />
-      </div>
+      {/* competitor waiting cards — not applicable to Lecture (single presenter, no sides) */}
+      {!isLecture && (
+        <div style={{ display: 'flex', gap: 14, marginTop: 4, marginBottom: 16, flexWrap: 'wrap' }}>
+          <WaitingSeatCard side="prop" member={propMember} debateId={debateId} canInvite={isHost && !propMember}
+            onContextMenu={propMember && onContextMenu ? (e) => onContextMenu(e, propMember) : undefined} />
+          <WaitingSeatCard side="opp" member={oppMember} debateId={debateId} canInvite={isHost && !oppMember}
+            onContextMenu={oppMember && onContextMenu ? (e) => onContextMenu(e, oppMember) : undefined} />
+        </div>
+      )}
 
       {/* gallery */}
       <div style={{ marginTop: 'auto' }}>

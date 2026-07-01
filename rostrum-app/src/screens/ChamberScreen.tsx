@@ -71,12 +71,16 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
 
   const me = room.members.find(m => m.isLocal);
   const role = (me?.role ?? 'audience') as any;
-  useEffect(() => { setTab(role === 'judge' ? 'score' : role === 'host' ? 'ros' : 'vote'); }, [role]);
+  const isHost = role === 'host';
+  const isLecture = dz.debate?.format === 'lecture';
+  useEffect(() => {
+    if (isLecture) { setTab('chat'); return; }
+    setTab(role === 'judge' ? 'score' : role === 'host' ? 'ros' : 'vote');
+  }, [role, isLecture]);
 
   // ---- C6 · Stage management (right-click promote/demote) — lives at the
   // top level so it works during assembly (before "Begin debate") as well
   // as once the debate is live, not just one phase. ----
-  const isHost = role === 'host';
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; member: RoomMember } | null>(null);
   const openCtxMenu = (e: React.MouseEvent, m: RoomMember) => {
     const isSelf = m.identity === me?.identity;
@@ -191,7 +195,16 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
             ? <WaitingHall debateId={debateId} members={room.members} motion={dz.debate?.motion ?? ''}
                 viewerCount={Math.max(dz.debate?.viewer_count ?? 0, room.members.length)}
                 scheduledAt={dz.debate?.scheduled_at} role={role} onProfile={openProfile}
-                onContextMenu={openCtxMenu} />
+                onContextMenu={openCtxMenu} format={dz.debate?.format} />
+            : isLecture
+            ? <LectureHall
+                debateId={debateId} room={room} bs={bs}
+                onLocalState={(patch) => setBs(b => ({ ...b, ...patch }))}
+                me={me} role={role} speaker={speaker}
+                onProfile={openProfile} narrow={isNarrow}
+                countdown={`${mm}:${ss}`} phaseLabel={dz.seg?.label ?? 'Presentation'}
+                onAskQuestion={() => setTab('qa')} isHost={isHost} onContextMenu={openCtxMenu}
+              />
             : <LiveHall
                 debateId={debateId} room={room} dz={dz} bs={bs}
                 onLocalState={(patch) => setBs(b => ({ ...b, ...patch }))}
@@ -215,7 +228,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         )}
 
         <ContextRail debateId={debateId} role={role} tab={tab} setTab={setTab} members={room.members} lkRoom={room.room}
-          pollOpen={!!dz.debate?.poll_open}
+          pollOpen={!!dz.debate?.poll_open} format={dz.debate?.format}
           ros={{
             segments: dz.segments, segIdx: dz.segIdx, remaining: dz.remaining,
             running: dz.running, phase: dz.phase,
@@ -249,10 +262,10 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         setTab={setTab}
         onLeave={onLeave}
         pollOpen={!!dz.debate?.poll_open}
-        onTogglePoll={dz.togglePoll}
+        onTogglePoll={isLecture ? undefined : dz.togglePoll}
         winMode={dz.debate?.win_mode}
-        onFinalize={dz.doFinalize}
-        onAnnounce={dz.doAnnounce}
+        onFinalize={isLecture ? undefined : dz.doFinalize}
+        onAnnounce={isLecture ? undefined : dz.doAnnounce}
         resultsReady={!!dz.results}
         winnerAnnounced={!!dz.debate?.winner_announced}
       />
@@ -489,6 +502,82 @@ const iconBtn: React.CSSProperties = { width:32, height:32, borderRadius:5, bord
    YouTube actually composes) without losing the hall. ChamberPreview,
    BroadcastBar, SafePanel and WinnerOverlay are reused verbatim — no live
    LiveKit / egress wiring changes. */
+/* ---- D2 · Lecture Hall — single presenter, center stage, controlled by
+   the layout bar beneath (the "old StreamYard model"). No sides, no
+   judges, no audience verdict — just the presenter, their deck, and the
+   room watching. The layout-driven ChamberPreview IS the main view here
+   (unlike Oxford, there's no separate "Monitor" toggle needed since
+   there's no competing cinematic floor view to switch away from). ---- */
+function LectureHall({
+  debateId, room, bs, onLocalState, me, role, speaker,
+  onProfile, narrow, countdown, phaseLabel, onAskQuestion, isHost, onContextMenu,
+}: {
+  debateId: string; room: any; bs: BroadcastState;
+  onLocalState: (patch: Partial<BroadcastState>) => void;
+  me?: M; role: string; speaker?: M;
+  onProfile: (h?: string | null) => void; narrow: boolean; countdown: string; phaseLabel: string;
+  onAskQuestion?: () => void; isHost: boolean; onContextMenu: (e: React.MouseEvent, m: any) => void;
+}) {
+  const members = room.members as any[];
+  const host = members.find(m => m.role === 'host');
+  const mod = members.find(m => m.role === 'moderator');
+  const canControl = role === 'host' || role === 'moderator';
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', minHeight:0, height:'100%',
+      overflowY:'auto', paddingBottom: narrow ? 10 : 0 }}>
+
+      {/* presenter identity strip */}
+      <div style={{ flexShrink:0 }}>
+        <HostTopRow host={host} mod={mod} judgeCount={0} onProfile={onProfile} hideJudge
+          onModContextMenu={mod ? (e) => onContextMenu(e, mod) : undefined} />
+      </div>
+
+      {/* main stage — layout-driven, always the ChamberPreview composition */}
+      <div style={{ flex:'1 1 auto', flexShrink:0, minHeight: narrow ? 300 : 360, display:'flex', position:'relative' }}>
+        <div style={{ position:'relative', height:'100%', width:'100%', borderRadius:18, overflow:'hidden',
+          border:`1px solid ${C.hair}`, background:C.base2, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ width:'100%', aspectRatio:'16 / 9', maxHeight:'100%', position:'relative' }}>
+            <SafePanel resetKey={`lecture:${bs.layout}:${bs.presenterId ?? ''}`} label="Stage" fill>
+              <ChamberPreview members={members} bs={bs} debateId={debateId} speaker={speaker} speakerSide={null} meId={me?.identity} />
+            </SafePanel>
+          </div>
+          <span style={{ position:'absolute', top:10, left:10, padding:'4px 11px', borderRadius:999,
+            background:a(C.base,'B3'), border:`1px solid ${C.hairHi}`, fontFamily:ui, fontSize:10.5, fontWeight:700,
+            color:C.ink, backdropFilter:'blur(6px)' }}>
+            {phaseLabel} · <span style={{ fontFamily:mono }}>{countdown}</span>
+          </span>
+        </div>
+      </div>
+
+      {me && (
+        <div style={{ marginTop:12, flexShrink:0 }}>
+          <InteractionBar room={room.room} identity={me.identity} name={me.name} onAskQuestion={onAskQuestion} />
+        </div>
+      )}
+
+      {canControl && (
+        <div style={{ marginTop:12, flexShrink:0 }}>
+          <SafePanel resetKey="lecture-bar" label="Controls">
+            <BroadcastBar debateId={debateId} role={role} identity={me?.identity ?? ''}
+              members={members} lkRoom={room.room} setScreenShare={room.setScreenShare}
+              onLocalState={onLocalState} />
+          </SafePanel>
+        </div>
+      )}
+
+      <div style={{ display:'flex', gap:9, overflowX:'auto', padding:'12px 2px 4px', flexShrink:0 }}>
+        {members.map((m: any) => (
+          <div key={m.identity} style={{ width:108, flexShrink:0 }}>
+            <VideoTile member={m} active={m.identity === speaker?.identity} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
 function LiveHall({
   debateId, room, dz, bs, onLocalState, me, role, speaker, speakerSide,
   floor, tally, myVote, onVote, sideProfiles, onProfile, narrow, countdown, onAskQuestion, mobile,

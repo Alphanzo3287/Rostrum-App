@@ -30,14 +30,17 @@ export type RosData = {
   onJump: (i: number) => void; onToggle: () => void; onNext: () => void; onSetRemaining: (s: number) => void;
 };
 
-export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom, pollOpen }: {
+export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom, pollOpen, format }: {
   debateId: string; role: Role; tab: string; setTab: (t: string) => void; ros?: RosData;
-  members?: any[]; lkRoom?: any; pollOpen?: boolean;
+  members?: any[]; lkRoom?: any; pollOpen?: boolean; format?: string;
 }) {
-  const tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']]
+  let tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']]
             : role === 'moderator' ? [['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']]
             : role === 'judge'  ? [['score','Score'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']]
             :                     [['vote','Vote'],['chat','Chat'],['qa','Ask'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']];
+  // Lecture has no sides, no audience verdict — the run-of-show list and
+  // prop/opp poll don't apply.
+  if (format === 'lecture') tabs = tabs.filter(([k]) => k !== 'ros' && k !== 'poll' && k !== 'vote' && k !== 'score');
   return (
     <aside style={{ borderLeft:`1px solid ${C.hair}`, background:a(C.base2,'EB'), backdropFilter:'blur(20px)', display:'flex', flexDirection:'column', minHeight:0 }}>
       <div style={{ display:'flex', padding:8, gap:5, borderBottom:`1px solid ${C.hair}`, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
