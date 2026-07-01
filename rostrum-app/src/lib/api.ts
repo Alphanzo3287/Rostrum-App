@@ -707,3 +707,67 @@ export async function getTopDebaters(limit = 5): Promise<TopDebater[]> {
   if (error) throw error;
   return (data ?? []) as TopDebater[];
 }
+
+/* ─────────────────── BATCH C1/C2 · LIVE DEBATE HALL ───────────────────
+   Frontend bindings for the read-RPCs shipped in Batch C1. All are
+   SECURITY DEFINER aggregate reads (no individual rows leak), so any
+   viewer can load the % bars, floor strip, and evidence feed. */
+
+export interface FloorStats {
+  prop_speaking: number;            // verified mic-live seconds, prop side
+  opp_speaking: number;             // verified mic-live seconds, opp side
+  evidence_count: number;
+  next_up: { label: string; side: Side | null } | null;
+}
+export async function getFloorStats(debateId: string): Promise<FloorStats> {
+  const { data, error } = await supabase.rpc('floor_stats', { p_debate: debateId });
+  if (error) throw error;
+  const d = (data ?? {}) as Partial<FloorStats>;
+  return {
+    prop_speaking: Number(d.prop_speaking ?? 0),
+    opp_speaking: Number(d.opp_speaking ?? 0),
+    evidence_count: Number(d.evidence_count ?? 0),
+    next_up: d.next_up ?? null,
+  };
+}
+
+export async function getAudienceTally(debateId: string): Promise<Tally> {
+  const { data, error } = await supabase.rpc('audience_tally', { p_debate: debateId });
+  if (error) throw error;
+  const d = (data ?? {}) as { prop?: number; opp?: number };
+  return { prop: Number(d.prop ?? 0), opp: Number(d.opp ?? 0) };
+}
+
+export interface ActivePoll {
+  id: string; question: string; options: string[];
+  is_open: boolean; tallies: Record<string, number>;
+}
+export async function getActivePoll(debateId: string): Promise<ActivePoll | null> {
+  const { data, error } = await supabase.rpc('active_poll', { p_debate: debateId });
+  if (error) throw error;
+  if (!data) return null;
+  const d = data as any;
+  return {
+    id: d.id, question: d.question,
+    options: Array.isArray(d.options) ? d.options : [],
+    is_open: !!d.is_open,
+    tallies: d.tallies ?? {},
+  };
+}
+export async function castPollVote(pollId: string, choice: number): Promise<void> {
+  const { error } = await supabase.rpc('cast_poll_vote', { p_poll: pollId, p_choice: choice });
+  if (error) throw error;
+}
+
+export type EvidenceKind = 'pdf' | 'video' | 'book' | 'article' | 'image' | 'link';
+export interface EvidenceItem {
+  id: string; kind: EvidenceKind; title: string; url: string | null;
+  citation: string | null; side: Side | null; created_at: string;
+  added_by: string; added_name: string | null; added_avatar: string | null;
+  comment_count: number;
+}
+export async function getEvidenceFeed(debateId: string): Promise<EvidenceItem[]> {
+  const { data, error } = await supabase.rpc('evidence_feed', { p_debate: debateId });
+  if (error) throw error;
+  return (data ?? []).map((r: any) => ({ ...r, comment_count: Number(r.comment_count ?? 0) })) as EvidenceItem[];
+}

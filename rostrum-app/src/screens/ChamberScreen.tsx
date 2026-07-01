@@ -13,7 +13,11 @@ import { useAuth } from '../lib/auth';
 import { useRoom } from '../lib/useRoom';
 import { useDebate } from '../lib/useDebate';
 import { useYouTubeStream } from '../lib/useYouTubeStream';
-import { joinDebate, getBroadcastState, subscribeBroadcastState, getResults, type BroadcastState } from '../lib/api';
+import {
+  joinDebate, getBroadcastState, subscribeBroadcastState, getResults,
+  getFloorStats, getTally, castVote, listParticipants,
+  type BroadcastState, type FloorStats,
+} from '../lib/api';
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
 import { ScreenTile } from '../components/ScreenTile';
@@ -25,6 +29,8 @@ import { BroadcastBar } from '../components/BroadcastBar';
 import { ShareButton } from '../components/ShareSheet';
 import { C, ui, display, mono, a } from '../lib/theme';
 import { useIsTablet } from '../lib/useMediaQuery';
+import { CompetitorCard, FloorStage, HostTopRow, GalleryStrip, AudienceVoteStrip, JudgesStrip, FloorStatStrip } from '../components/hall';
+import type { Profile, Side, Tally } from '../lib/types';
 
 type Layout = 'slides' | 'spotlight' | 'grid';
 
@@ -73,6 +79,41 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   const ss = String(dz.remaining % 60).padStart(2, '0');
   const low = dz.remaining <= 30 && dz.phase === 'live';
   const onAir = dz.phase === 'live';
+
+  // ---- C2 Live Hall data — interval polling (crash-safe, no new realtime channels) ----
+  const [floor, setFloor] = useState<FloorStats | null>(null);
+  const [tally, setTally] = useState<Tally>({ prop: 0, opp: 0 });
+  const [myVote, setMyVote] = useState<Side | null>(null);
+  const [sideProfiles, setSideProfiles] = useState<{ prop?: Profile; opp?: Profile }>({});
+
+  useEffect(() => {
+    if (dz.phase !== 'live') return;
+    let alive = true;
+    const pull = () => {
+      getFloorStats(debateId).then(f => { if (alive) setFloor(f); }).catch(() => {});
+      getTally(debateId).then(t => { if (alive) setTally(t); }).catch(() => {});
+    };
+    pull();
+    const iv = setInterval(pull, 4000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [debateId, dz.phase]);
+
+  // map prop/opp debaters → their profiles for the competitor-card stats
+  useEffect(() => {
+    let alive = true;
+    listParticipants(debateId).then(rows => {
+      if (!alive) return;
+      const prop = rows.find(r => r.role === 'debater' && r.side === 'prop')?.profile;
+      const opp = rows.find(r => r.role === 'debater' && r.side === 'opp')?.profile;
+      setSideProfiles({ prop, opp });
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [debateId, room.members.length]);
+
+  const onVote = async (side: Side) => {
+    setMyVote(side);
+    try { const t = await castVote(debateId, side); setTally(t); } catch { /* noop */ }
+  };
 
   return (
     <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', background:C.base }}>
@@ -123,78 +164,14 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         <div style={{ display:'flex', flexDirection:'column', minWidth:0, padding:'14px 16px 0' }}>
           {dz.phase === 'assembly'
             ? <Assembly members={room.members} onProfile={openProfile} />
-            : <>
-                {/* segment label + "what YouTube sees" hint */}
-                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
-                  <span style={{ fontFamily:ui, fontSize:10.5, fontWeight:700, letterSpacing:2.5, textTransform:'uppercase',
-                    color: speakerSide==='opp' ? C.garnetHi : speakerSide==='prop' ? C.jadeHi : C.gold }}>
-                    {dz.seg?.label ?? 'Segment'}</span>
-                  {role === 'host' && (
-                    <span style={{ marginLeft:'auto', fontFamily:ui, fontSize:10, color:C.faint, letterSpacing:'.04em' }}>
-                      Preview · {bs.layout}{bs.presenterId ? ' · presenting' : ''}
-                    </span>
-                  )}
-                </div>
-
-                {/* canvas — mirrors the live broadcast composition (isolated so a
-                    rendering error can never take down the host's controls).
-                    Constrained to 16:9 and centered, StreamYard-style, instead of
-                    stretching to fill all leftover height. */}
-                <div style={{ flex:1, minHeight:0, display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden' }}>
-                  <div style={{ width:'100%', maxWidth:'min(100%, calc((100vh - 320px) * 1.7778))',
-                    aspectRatio:'16 / 9', maxHeight:'100%', position:'relative', borderRadius:16, overflow:'hidden',
-                    border:`1px solid ${C.hair}`, background:C.base2,
-                    boxShadow:`0 20px 60px ${a('#000000','40')}` }}>
-                  <SafePanel resetKey={`${bs.layout}:${bs.presenterId ?? ''}:${dz.phase}`} label="Preview" fill>
-                    <ChamberPreview members={room.members} bs={bs} debateId={debateId}
-                      speaker={speaker} speakerSide={speakerSide} meId={me?.identity} />
-                  </SafePanel>
-
-                  {/* Voting now indicator */}
-                  {dz.debate?.poll_open && (
-                    <div style={{ position:'absolute', top:10, right:10, zIndex:20, display:'flex', alignItems:'center', gap:6,
-                      padding:'5px 12px', borderRadius:20, background:a(C.base,'B3'), backdropFilter:'blur(6px)',
-                      border:`1px solid ${a(C.jade,'55')}` }}>
-                      <span style={{ width:8, height:8, borderRadius:'50%', background:C.jade,
-                        boxShadow:`0 0 6px ${C.jade}`, animation:'pulse 1.5s infinite' }} />
-                      <span style={{ fontFamily:ui, fontSize:11, fontWeight:700, color:C.jade,
-                        textTransform:'uppercase', letterSpacing:'.08em' }}>Voting open</span>
-                    </div>
-                  )}
-
-                  {/* Winner reveal overlay */}
-                  {dz.debate?.winner_announced && dz.results && (
-                    <WinnerOverlay
-                      winnerSide={dz.results.winner_side}
-                      winMode={dz.debate.win_mode ?? 'public'}
-                      peoplesChoice={dz.results.peoples_choice_side}
-                      propScore={dz.results.prop_judge_total}
-                      oppScore={dz.results.opp_judge_total}
-                      propAudience={dz.results.prop_audience}
-                      oppAudience={dz.results.opp_audience}
-                    />
-                  )}
-                  </div>
-                </div>
-
-                {/* broadcast control bar — host layout switcher + present flow */}
-                {(role === 'host' || role === 'debater' || role === 'moderator') && (
-                  <SafePanel resetKey={`bar:${dz.phase}`} label="Controls">
-                    <BroadcastBar debateId={debateId} role={role} identity={me?.identity ?? ''}
-                      members={room.members} lkRoom={room.room} setScreenShare={room.setScreenShare}
-                      onLocalState={(patch) => setBs(b => ({ ...b, ...patch }))} />
-                  </SafePanel>
-                )}
-
-                {/* filmstrip */}
-                <div style={{ display:'flex', gap:9, overflowX:'auto', padding:'12px 2px 14px' }}>
-                  {room.members.map(m => (
-                    <div key={m.identity} style={{ width:108, flexShrink:0 }}>
-                      <VideoTile member={m} active={m.identity===speaker?.identity} />
-                    </div>
-                  ))}
-                </div>
-              </>}
+            : <LiveHall
+                debateId={debateId} room={room} dz={dz} bs={bs}
+                onLocalState={(patch) => setBs(b => ({ ...b, ...patch }))}
+                me={me} role={role} speaker={speaker} speakerSide={speakerSide}
+                floor={floor} tally={tally} myVote={myVote} onVote={onVote}
+                sideProfiles={sideProfiles} onProfile={openProfile} narrow={isNarrow}
+                countdown={`${mm}:${ss}`}
+              />}
         </div>
 
         <ContextRail debateId={debateId} role={role} tab={tab} setTab={setTab} members={room.members} lkRoom={room.room}
@@ -463,3 +440,143 @@ function Assembly({ members, onProfile }: { members: M[]; onProfile?: (h?: strin
 
 const iconBtn: React.CSSProperties = { width:32, height:32, borderRadius:5, border:`1px solid ${C.hair}`,
   background:'rgba(0,0,0,0.25)', color:C.dim, cursor:'pointer', fontSize:16, lineHeight:1 };
+
+/* ---- C2 · Live Debate Hall (concept panel 1) ----------------------------
+   Competitor cards (prop left / opp right) flank the center floor stage with
+   the amphitheater backdrop; gallery / audience-vote / judges row + the floor
+   stat strip sit beneath. The broadcast controls + filmstrip are preserved
+   underneath, and the host can flip the center to the broadcast MONITOR (what
+   YouTube actually composes) without losing the hall. ChamberPreview,
+   BroadcastBar, SafePanel and WinnerOverlay are reused verbatim — no live
+   LiveKit / egress wiring changes. */
+function LiveHall({
+  debateId, room, dz, bs, onLocalState, me, role, speaker, speakerSide,
+  floor, tally, myVote, onVote, sideProfiles, onProfile, narrow, countdown,
+}: {
+  debateId: string; room: any; dz: any; bs: BroadcastState;
+  onLocalState: (patch: Partial<BroadcastState>) => void;
+  me?: M; role: string; speaker?: M; speakerSide: Side | null;
+  floor: FloorStats | null; tally: Tally; myVote: Side | null; onVote: (s: Side) => void;
+  sideProfiles: { prop?: Profile; opp?: Profile }; onProfile: (h?: string | null) => void;
+  narrow: boolean; countdown: string;
+}) {
+  const [monitor, setMonitor] = useState(false);
+
+  const members = room.members as any[];
+  const propMember = members.find(m => m.role === 'debater' && m.side === 'prop');
+  const oppMember = members.find(m => m.role === 'debater' && m.side === 'opp');
+  const host = members.find(m => m.role === 'host');
+  const mod = members.find(m => m.role === 'moderator');
+  const judges = members.filter(m => m.role === 'judge');
+  const audience = members.filter(m => m.role === 'audience');
+
+  const segTotal = dz.segments?.[dz.segIdx]?.duration_secs ?? 0;
+  const phaseLabel = dz.seg?.label ?? 'In session';
+  const canControl = role === 'host' || role === 'debater' || role === 'moderator';
+
+  const overlays = (
+    <>
+      {dz.debate?.poll_open && (
+        <div style={{ position:'absolute', top:10, right:10, zIndex:20, display:'flex', alignItems:'center', gap:6,
+          padding:'5px 12px', borderRadius:20, background:a(C.base,'B3'), backdropFilter:'blur(6px)',
+          border:`1px solid ${a(C.jade,'55')}` }}>
+          <span style={{ width:8, height:8, borderRadius:'50%', background:C.jade, boxShadow:`0 0 6px ${C.jade}`, animation:'pulse 1.5s infinite' }} />
+          <span style={{ fontFamily:ui, fontSize:11, fontWeight:700, color:C.jade, textTransform:'uppercase', letterSpacing:'.08em' }}>Voting open</span>
+        </div>
+      )}
+      {dz.debate?.winner_announced && dz.results && (
+        <WinnerOverlay
+          winnerSide={dz.results.winner_side}
+          winMode={dz.debate.win_mode ?? 'public'}
+          peoplesChoice={dz.results.peoples_choice_side}
+          propScore={dz.results.prop_judge_total}
+          oppScore={dz.results.opp_judge_total}
+          propAudience={dz.results.prop_audience}
+          oppAudience={dz.results.opp_audience}
+        />
+      )}
+    </>
+  );
+
+  const stage = monitor
+    ? (
+      <div style={{ position:'relative', height:'100%', width:'100%', minHeight:0, display:'flex', alignItems:'center', justifyContent:'center',
+        borderRadius:18, overflow:'hidden', border:`1px solid ${C.hair}`, background:C.base2 }}>
+        <div style={{ width:'100%', aspectRatio:'16 / 9', maxHeight:'100%', position:'relative' }}>
+          <SafePanel resetKey={`mon:${bs.layout}:${bs.presenterId ?? ''}`} label="Monitor" fill>
+            <ChamberPreview members={members} bs={bs} debateId={debateId} speaker={speaker} speakerSide={speakerSide} meId={me?.identity} />
+          </SafePanel>
+        </div>
+        {overlays}
+      </div>
+    )
+    : <FloorStage roundLabel={phaseLabel} countdown={countdown} hasFloorSide={speakerSide}>{overlays}</FloorStage>;
+
+  const propCard = (
+    <CompetitorCard side="prop" member={propMember} profile={sideProfiles.prop}
+      hasFloor={speakerSide === 'prop'} speakingSecs={floor?.prop_speaking ?? 0} segTotal={segTotal} onProfile={onProfile} />
+  );
+  const oppCard = (
+    <CompetitorCard side="opp" member={oppMember} profile={sideProfiles.opp}
+      hasFloor={speakerSide === 'opp'} speakingSecs={floor?.opp_speaking ?? 0} segTotal={segTotal} onProfile={onProfile} />
+  );
+
+  const monitorToggle = canControl ? (
+    <button onClick={() => setMonitor(v => !v)} title="Toggle the broadcast monitor (what YouTube sees)"
+      style={{ padding:'6px 12px', borderRadius:10, border:`1px solid ${monitor ? a(C.gold,'66') : C.hair}`,
+        background: monitor ? a(C.gold,'1F') : C.glass, color: monitor ? C.goldHi : C.dim,
+        fontFamily:ui, fontSize:12, fontWeight:600, cursor:'pointer' }}>
+      ◉ {monitor ? 'Monitor on' : 'Monitor'}
+    </button>
+  ) : undefined;
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', minHeight:0, height:'100%',
+      overflowY: narrow ? 'auto' : 'hidden', paddingBottom: narrow ? 10 : 0 }}>
+      <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile} right={monitorToggle} />
+
+      {narrow ? (
+        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          <div style={{ height:'46vh', minHeight:260, display:'flex' }}>{stage}</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>{propCard}{oppCard}</div>
+        </div>
+      ) : (
+        <div style={{ flex:'1 1 auto', minHeight:0, display:'grid', gap:14,
+          gridTemplateColumns:'minmax(220px,300px) minmax(0,1fr) minmax(220px,300px)' }}>
+          {propCard}
+          <div style={{ display:'flex', minHeight:0 }}>{stage}</div>
+          {oppCard}
+        </div>
+      )}
+
+      <div style={{ display:'grid', gap:12, marginTop:14,
+        gridTemplateColumns: narrow ? '1fr' : '1.1fr 1.3fr 1fr' }}>
+        <GalleryStrip audience={audience} onProfile={onProfile} />
+        <AudienceVoteStrip tally={tally} myVote={myVote} canVote={!!dz.debate?.poll_open} onVote={onVote} />
+        <JudgesStrip judges={judges} onProfile={onProfile} />
+      </div>
+
+      <div style={{ marginTop:12 }}>
+        <FloorStatStrip floor={floor} hasFloorSide={speakerSide} phaseLabel={phaseLabel} segTotal={segTotal} />
+      </div>
+
+      {canControl && (
+        <div style={{ marginTop:12 }}>
+          <SafePanel resetKey={`bar:${dz.phase}`} label="Controls">
+            <BroadcastBar debateId={debateId} role={role} identity={me?.identity ?? ''}
+              members={members} lkRoom={room.room} setScreenShare={room.setScreenShare}
+              onLocalState={onLocalState} />
+          </SafePanel>
+        </div>
+      )}
+
+      <div style={{ display:'flex', gap:9, overflowX:'auto', padding:'12px 2px 4px' }}>
+        {members.map(m => (
+          <div key={m.identity} style={{ width:108, flexShrink:0 }}>
+            <VideoTile member={m} active={m.identity === speaker?.identity} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
