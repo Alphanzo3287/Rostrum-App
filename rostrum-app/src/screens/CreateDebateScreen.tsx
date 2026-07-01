@@ -35,13 +35,10 @@ const FORMATS: Record<DebateFormat, Seg[]> = {
   lecture: [
     { label: 'Presentation', side: null, min: 30 }, { label: 'Audience Q&A', side: null, min: 10 },
   ],
-  legacy: [{ label: 'Open conversation', side: null, min: 60 }],
-  speakers_corner: [
-    { label: 'Proposition · Opening', side: 'prop', min: 5 }, { label: 'Opposition · Opening', side: 'opp', min: 5 },
-    { label: 'Open debate', side: null, min: 15 },
-    { label: 'Proposition · Closing', side: 'prop', min: 3 }, { label: 'Opposition · Closing', side: 'opp', min: 3 },
-  ],
+  legacy: [],
+  speakers_corner: [],
 };
+const UNTIMED_FORMATS: DebateFormat[] = ['legacy', 'speakers_corner'];
 const FORMAT_LABEL: Record<DebateFormat, string> = {
   oxford: 'Oxford · Formal', cross_exam: 'Cross-Examination', lincoln_douglas: 'Lincoln–Douglas',
   town_hall: 'Town Hall · Open', freestyle: 'Freestyle',
@@ -205,32 +202,45 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
           </>}
 
           {step === 2 && <>
-            <Label>Run of show · set each timer and which side holds the mic</Label>
-            <div style={{ marginTop:12 }}>
-              {segs.map((s, i) => (
-                <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 0', borderBottom:`1px solid ${C.hair}` }}>
-                  <span style={{ fontFamily:mono, fontSize:11, color:C.faint, width:22 }}>{String(i + 1).padStart(2, '0')}</span>
-                  <input value={s.label} onChange={e => setSegs(x => x.map((y, j) => j === i ? { ...y, label: e.target.value } : y))}
-                    style={{ ...field, flex:1, padding:'8px 10px', fontSize:13 }} />
-                  <button onClick={() => setSegs(x => x.map((y, j) => j === i ? { ...y, side: nextSide(y.side) } : y))}
-                    style={{ width:54, fontFamily:ui, fontSize:10, fontWeight:700, color: sideColor(s.side),
-                      background:'none', border:`1px solid ${C.hair}`, borderRadius:4, padding:'6px 0', cursor:'pointer' }}>
-                    {sideLabel(s.side)}</button>
-                  <div style={{ display:'flex', alignItems:'center', gap:5 }}>
-                    <input type="number" value={s.min} min={1} max={60}
-                      onChange={e => setSegs(x => x.map((y, j) => j === i ? { ...y, min: +e.target.value } : y))}
-                      style={{ ...field, width:50, padding:'8px', fontFamily:mono, textAlign:'center' }} />
-                    <span style={{ fontFamily:ui, fontSize:11, color:C.faint }}>min</span>
+            {UNTIMED_FORMATS.includes(format) ? (
+              <div style={{ padding:'40px 20px', textAlign:'center', borderRadius:10,
+                background:C.panel2, border:`1px dashed ${C.hair}` }}>
+                <div style={{ fontSize:26, marginBottom:10 }}>🎙</div>
+                <div style={{ fontFamily:display, fontSize:18, color:C.ink, marginBottom:6 }}>This is an open floor</div>
+                <p style={{ fontFamily:ui, fontSize:13, color:C.faint, maxWidth:420, margin:'0 auto', lineHeight:1.5 }}>
+                  {format === 'legacy'
+                    ? 'Legacy rooms run as a freeform conversation — no timed segments, no fixed running order.'
+                    : "Speakers' Corner runs as an open debate — no timed segments, no fixed running order."}
+                </p>
+              </div>
+            ) : <>
+              <Label>Run of show · set each timer and which side holds the mic</Label>
+              <div style={{ marginTop:12 }}>
+                {segs.map((s, i) => (
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 0', borderBottom:`1px solid ${C.hair}` }}>
+                    <span style={{ fontFamily:mono, fontSize:11, color:C.faint, width:22 }}>{String(i + 1).padStart(2, '0')}</span>
+                    <input value={s.label} onChange={e => setSegs(x => x.map((y, j) => j === i ? { ...y, label: e.target.value } : y))}
+                      style={{ ...field, flex:1, padding:'8px 10px', fontSize:13 }} />
+                    <button onClick={() => setSegs(x => x.map((y, j) => j === i ? { ...y, side: nextSide(y.side) } : y))}
+                      style={{ width:54, fontFamily:ui, fontSize:10, fontWeight:700, color: sideColor(s.side),
+                        background:'none', border:`1px solid ${C.hair}`, borderRadius:4, padding:'6px 0', cursor:'pointer' }}>
+                      {sideLabel(s.side)}</button>
+                    <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                      <input type="number" value={s.min} min={1} max={60}
+                        onChange={e => setSegs(x => x.map((y, j) => j === i ? { ...y, min: +e.target.value } : y))}
+                        style={{ ...field, width:50, padding:'8px', fontFamily:mono, textAlign:'center' }} />
+                      <span style={{ fontFamily:ui, fontSize:11, color:C.faint }}>min</span>
+                    </div>
+                    <button onClick={() => setSegs(x => x.filter((_, j) => j !== i))} style={{ ...iconBtn, color:C.garnetHi }}>×</button>
                   </div>
-                  <button onClick={() => setSegs(x => x.filter((_, j) => j !== i))} style={{ ...iconBtn, color:C.garnetHi }}>×</button>
-                </div>
-              ))}
-            </div>
-            <div style={{ display:'flex', justifyContent:'space-between', marginTop:14 }}>
-              <button onClick={() => setSegs(x => [...x, { label: 'New segment', side: null, min: 3 }])}
-                style={{ ...ghost }}>＋ Add segment</button>
-              <span style={{ fontFamily:mono, fontSize:12.5, color:C.dim }}>Total floor time · {totalMin} min</span>
-            </div>
+                ))}
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', marginTop:14 }}>
+                <button onClick={() => setSegs(x => [...x, { label: 'New segment', side: null, min: 3 }])}
+                  style={{ ...ghost }}>＋ Add segment</button>
+                <span style={{ fontFamily:mono, fontSize:12.5, color:C.dim }}>Total floor time · {totalMin} min</span>
+              </div>
+            </>}
           </>}
 
           {step === 3 && <>
