@@ -13,6 +13,7 @@ import { ThemeProvider } from './lib/themeContext';
 import { NavBar } from './components/NavBar';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
+import { useIsTablet } from './lib/useMediaQuery';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { WelcomeTour } from './components/WelcomeTour';
 import { AuthScreen } from './screens/AuthScreen';
@@ -119,8 +120,9 @@ function Gate() {
 }
 
 function Shell() {
+  const isMobile = useIsTablet();
   return (
-    <div style={{ position:'absolute', inset:0, display:'flex', overflow:'hidden' }}>
+    <div style={{ position:'absolute', inset:0, display:'flex', flexDirection: isMobile ? 'column' : 'row', overflow:'hidden' }}>
       <Sidebar />
       <div style={{ flex:1, position:'relative', minHeight:0, display:'flex', flexDirection:'column', overflow:'hidden' }}>
         <TopBar />

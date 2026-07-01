@@ -171,14 +171,33 @@ function WaitingPodium({ tone }: { tone: { base: string; hi: string } }) {
 }
 
 /* ============================== FLOOR STAGE ============================== */
-export function FloorStage({ roundLabel, countdown, hasFloorSide, assembling, children }: {
+export function FloorStage({ roundLabel, countdown, hasFloorSide, assembling, children, presenting, presenterName }: {
   roundLabel: string;
   countdown: string;
   hasFloorSide: Side | null;
   assembling?: boolean;
   children?: React.ReactNode;   // WinnerOverlay / voting indicator overlays
+  presenting?: React.ReactNode; // slides / screen-share content — takes over the stage when present
+  presenterName?: string | null;
 }) {
   const tone = hasFloorSide ? sideTone(hasFloorSide) : null;
+
+  if (presenting) {
+    return (
+      <div style={{ position: 'relative', borderRadius: 18, overflow: 'hidden', minHeight: 0,
+        display: 'flex', border: `1px solid ${C.hair}`, background: '#000' }}>
+        <div style={{ position: 'absolute', inset: 0 }}>{presenting}</div>
+        <span style={{ position: 'absolute', top: 10, left: 10, zIndex: 2, padding: '4px 11px', borderRadius: 999,
+          background: a('#000000', 'A6'), border: `1px solid ${C.hairHi}`,
+          fontFamily: ui, fontSize: 10.5, fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.jade }} />
+          Presenting{presenterName ? ` · ${presenterName}` : ''}
+        </span>
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div style={{ position: 'relative', borderRadius: 18, overflow: 'hidden', minHeight: 0,
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',

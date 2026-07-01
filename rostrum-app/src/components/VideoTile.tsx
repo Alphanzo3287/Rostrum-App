@@ -6,6 +6,7 @@
 // =====================================================================
 import { useEffect, useRef } from 'react';
 import { Track } from 'livekit-client';
+import { C } from '../lib/theme';
 import type { RoomMember } from '../lib/useRoom';
 
 const SIDE = {
@@ -53,7 +54,7 @@ export function VideoTile({ member, active, size = 'tile' }: {
 
       {member.camOn
         ? <video ref={vref} autoPlay playsInline muted={member.isLocal}
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 20%' }} />
         : <Avatar name={member.name} avatar={member.avatar} big={size === 'stage'} />}
 
       <audio ref={aref} autoPlay />

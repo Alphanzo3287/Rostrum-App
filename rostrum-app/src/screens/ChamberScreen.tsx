@@ -163,7 +163,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         gridTemplateColumns: isNarrow ? '1fr' : '1fr 322px',
         gridTemplateRows: isNarrow ? 'minmax(240px,42vh) 1fr' : '1fr',
         minHeight:0, overflow: isNarrow ? 'auto' : 'hidden' }}>
-        <div style={{ display:'flex', flexDirection:'column', minWidth:0, padding:'14px 16px 0' }}>
+        <div style={{ display:'flex', flexDirection:'column', minWidth:0, minHeight:0, padding:'14px 16px 0' }}>
           {dz.phase === 'assembly'
             ? <WaitingHall debateId={debateId} members={room.members} motion={dz.debate?.motion ?? ''}
                 viewerCount={Math.max(dz.debate?.viewer_count ?? 0, room.members.length)}
@@ -255,7 +255,7 @@ function ChamberPreview({ members, bs, debateId, speaker, speakerSide, meId }: {
     case 'group':
       return wrap(
         <div style={{ width:'100%', height:'100%', display:'grid', gap:8,
-          gridTemplateColumns:`repeat(${cams.length<=1?1:cams.length<=4?2:3},1fr)`, alignContent:'center' }}>
+          gridTemplateColumns:`repeat(${cams.length<=1?1:cams.length<=4?2:3},1fr)`, alignContent:'center', alignItems:'center' }}>
           {cams.map(m => <div key={m.identity} style={{ position:'relative' }}><VideoTile member={m} active={m.identity===speaker?.identity} /></div>)}
         </div>);
     case 'news':
@@ -502,6 +502,18 @@ function LiveHall({
     </>
   );
 
+  // Slides/screen-share must be visible to everyone by default — not just
+  // behind the host-only Monitor toggle, which only previews the YouTube
+  // composition. This mirrors ChamberPreview's own derivation exactly.
+  const presenter = bs.presenterId ? members.find(m => m.identity === bs.presenterId) : undefined;
+  const screenTrack = (presenter as any)?.screenTrack;
+  const hasScreen = bs.presentType === 'screen' && !!screenTrack;
+  const isPresenting = !!bs.presenterId && (bs.presentType === 'slides' || hasScreen);
+  const iPresentSlides = !!me?.identity && bs.presenterId === me.identity && bs.presentType === 'slides';
+  const presentingContent = isPresenting
+    ? (hasScreen ? <ScreenTile track={screenTrack} fit="contain" /> : <SlideStage debateId={debateId} canPresent={iPresentSlides} />)
+    : null;
+
   const stage = monitor
     ? (
       <div style={{ position:'relative', height:'100%', width:'100%', minHeight:0, display:'flex', alignItems:'center', justifyContent:'center',
@@ -514,7 +526,8 @@ function LiveHall({
         {overlays}
       </div>
     )
-    : <FloorStage roundLabel={phaseLabel} countdown={countdown} hasFloorSide={speakerSide}>{overlays}</FloorStage>;
+    : <FloorStage roundLabel={phaseLabel} countdown={countdown} hasFloorSide={speakerSide}
+        presenting={presentingContent} presenterName={presenter?.name}>{overlays}</FloorStage>;
 
   const propCard = (
     <CompetitorCard side="prop" member={propMember} profile={sideProfiles.prop}
@@ -536,7 +549,7 @@ function LiveHall({
 
   return (
     <div style={{ display:'flex', flexDirection:'column', minHeight:0, height:'100%',
-      overflowY: narrow ? 'auto' : 'hidden', paddingBottom: narrow ? 10 : 0 }}>
+      overflowY:'auto', paddingBottom: narrow ? 10 : 0 }}>
       <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile} right={monitorToggle} />
 
       {narrow ? (

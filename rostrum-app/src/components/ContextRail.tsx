@@ -155,7 +155,7 @@ function ChatPanel({ debateId }: { debateId: string }) {
   const me = user?.id;
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [text, setText] = useState('');
-  const endRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let on = true;
@@ -163,7 +163,14 @@ function ChatPanel({ debateId }: { debateId: string }) {
     const off = subscribeChat(debateId, (m) => setMsgs(prev => prev.some(x => x.id === m.id) ? prev : [...prev, m]));
     return () => { on = false; off(); };
   }, [debateId]);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs.length]);
+  // Scroll only the message list itself — never the page. scrollIntoView()
+  // can bubble a scroll request up to ANY scrollable ancestor (including the
+  // document), which is what was pushing the whole Chamber layout upward
+  // and hiding the dock buttons whenever a new chat message arrived.
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [msgs.length]);
 
   async function send() {
     const body = text.trim();
@@ -175,7 +182,7 @@ function ChatPanel({ debateId }: { debateId: string }) {
   return (
     <div style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0 }}>
       <h3 style={{ fontFamily:display, fontSize:21, color:C.ink, margin:'0 0 12px' }}>Live chat</h3>
-      <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:11, marginBottom:12 }}>
+      <div ref={listRef} style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:11, marginBottom:12 }}>
         {msgs.length === 0
           ? <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>No messages yet — say something to the room.</p>
           : msgs.map(m => (
@@ -198,7 +205,6 @@ function ChatPanel({ debateId }: { debateId: string }) {
               </div>
             </div>
           ))}
-        <div ref={endRef} />
       </div>
       <div style={{ display:'flex', gap:7 }}>
         <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key==='Enter') send(); }}

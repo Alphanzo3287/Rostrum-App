@@ -252,11 +252,16 @@ export function LobbyScreen({ onOpenDebate, onHost: _onHost }: {
 
   useEffect(() => {
     let alive = true;
-    listLiveDebates().then(d => { if (alive) setLive(d); }).catch(e => { if (alive) setErr(e?.message ?? 'Could not load debates'); });
+    const pull = () => listLiveDebates().then(d => { if (alive) setLive(d); }).catch(e => { if (alive) setErr(e?.message ?? 'Could not load debates'); });
+    pull();
     listUpcomingDebates().then(d => { if (alive) setUpcoming(d); }).catch(() => {});
     getPlatformStats().then(s => { if (alive) setStats(s); }).catch(() => {});
     getTopDebaters(5).then(d => { if (alive) setDebaters(d); }).catch(() => {});
-    return () => { alive = false; };
+    // Safety-net refresh so a debate going live shows up here without a
+    // manual reload — matches the same polling-fallback pattern used
+    // throughout the debate room (useDebate, floor_stats, etc).
+    const iv = setInterval(pull, 15000);
+    return () => { alive = false; clearInterval(iv); };
   }, []);
 
   const open = (id: string) => onOpenDebate ? onOpenDebate(id) : (window.location.href = `/debate/${id}`);
