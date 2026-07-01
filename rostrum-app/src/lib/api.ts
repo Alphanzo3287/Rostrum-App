@@ -771,3 +771,24 @@ export async function getEvidenceFeed(debateId: string): Promise<EvidenceItem[]>
   if (error) throw error;
   return (data ?? []).map((r: any) => ({ ...r, comment_count: Number(r.comment_count ?? 0) })) as EvidenceItem[];
 }
+
+/* ─────────────────── BATCH C3 · POST-DEBATE RESULTS ───────────────────
+   Aggregate-only summary (no individual ballots/chat rows exposed). */
+export interface DebateSummary {
+  total_time_secs: number; evidence_count: number; audience_votes: number;
+  chat_count: number; judge_prop_wins: number; judge_opp_wins: number; judge_count: number;
+}
+export async function getDebateSummary(debateId: string): Promise<DebateSummary> {
+  const { data, error } = await supabase.rpc('debate_summary', { p_debate: debateId });
+  if (error) throw error;
+  const d = (data ?? {}) as Partial<DebateSummary>;
+  return {
+    total_time_secs: Number(d.total_time_secs ?? 0),
+    evidence_count: Number(d.evidence_count ?? 0),
+    audience_votes: Number(d.audience_votes ?? 0),
+    chat_count: Number(d.chat_count ?? 0),
+    judge_prop_wins: Number(d.judge_prop_wins ?? 0),
+    judge_opp_wins: Number(d.judge_opp_wins ?? 0),
+    judge_count: Number(d.judge_count ?? 0),
+  };
+}

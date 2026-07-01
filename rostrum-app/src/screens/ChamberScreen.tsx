@@ -29,7 +29,7 @@ import { BroadcastBar } from '../components/BroadcastBar';
 import { ShareButton } from '../components/ShareSheet';
 import { C, ui, display, mono, a } from '../lib/theme';
 import { useIsTablet } from '../lib/useMediaQuery';
-import { CompetitorCard, FloorStage, HostTopRow, GalleryStrip, AudienceVoteStrip, JudgesStrip, FloorStatStrip } from '../components/hall';
+import { CompetitorCard, FloorStage, HostTopRow, GalleryStrip, AudienceVoteStrip, JudgesStrip, FloorStatStrip, WaitingHall } from '../components/hall';
 import type { Profile, Side, Tally } from '../lib/types';
 
 type Layout = 'slides' | 'spotlight' | 'grid';
@@ -163,7 +163,9 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         minHeight:0, overflow: isNarrow ? 'auto' : 'hidden' }}>
         <div style={{ display:'flex', flexDirection:'column', minWidth:0, padding:'14px 16px 0' }}>
           {dz.phase === 'assembly'
-            ? <Assembly members={room.members} onProfile={openProfile} />
+            ? <WaitingHall debateId={debateId} members={room.members} motion={dz.debate?.motion ?? ''}
+                viewerCount={Math.max(dz.debate?.viewer_count ?? 0, room.members.length)}
+                scheduledAt={dz.debate?.scheduled_at} role={role} onProfile={openProfile} />
             : <LiveHall
                 debateId={debateId} room={room} dz={dz} bs={bs}
                 onLocalState={(patch) => setBs(b => ({ ...b, ...patch }))}

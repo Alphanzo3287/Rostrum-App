@@ -12,7 +12,7 @@
 //   audience_tally/votes-> the prop vs opp bar
 //   debate_segments     -> round label + "has the floor"
 // =====================================================================
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { C, ui, mono, display, a } from '../lib/theme';
 import { VideoTile } from './VideoTile';
 import type { RoomMember } from '../lib/useRoom';
@@ -408,6 +408,224 @@ export function FloorStatStrip({ floor, hasFloorSide, phaseLabel, segTotal }: {
       {cell('Next Up', floor?.next_up
         ? <span style={{ color: floor.next_up.side ? sideTone(floor.next_up.side).hi : C.ink }}>{floor.next_up.label}</span>
         : <span style={{ color: C.faint }}>—</span>)}
+    </div>
+  );
+}
+
+/* =====================================================================
+   Batch C3 — The Hall (waiting room, panel 2) + Post-Debate Results
+   (panel 7). Same data-only principle: every number traces to a real
+   RPC/table. The pre-debate "claim a seat" affordance reuses the app's
+   EXISTING invite mechanism (the /debate/:id/join?role=&side= route
+   already read by InviteRoute/InviteScreen) rather than inventing new
+   self-assignment logic — the host copies a real, working seat link.
+   ===================================================================== */
+
+/* ---------------------------- WAITING HALL ---------------------------- */
+function useCountdown(target: string | null | undefined) {
+  const [secs, setSecs] = useState<number | null>(null);
+  useEffect(() => {
+    if (!target) { setSecs(null); return; }
+    const tick = () => setSecs(Math.max(0, Math.round((new Date(target).getTime() - Date.now()) / 1000)));
+    tick();
+    const iv = setInterval(tick, 1000);
+    return () => clearInterval(iv);
+  }, [target]);
+  return secs;
+}
+
+function WaitingSeatCard({ side, member, debateId, canInvite }: {
+  side: Side; member?: RoomMember; debateId: string; canInvite: boolean;
+}) {
+  const t = sideTone(side);
+  const [copied, setCopied] = useState(false);
+  const invite = async () => {
+    try {
+      const url = `${window.location.origin}/debate/${debateId}/join?role=debater&side=${side}`;
+      await navigator.clipboard.writeText(url);
+      setCopied(true); setTimeout(() => setCopied(false), 1800);
+    } catch { /* clipboard blocked — non-fatal */ }
+  };
+  return (
+    <div style={{ flex: 1, minWidth: 0, borderRadius: 18, padding: '18px 16px', textAlign: 'center',
+      background: `linear-gradient(180deg, ${a(t.base, '12')}, ${a(C.panel, 'CC')})`,
+      border: `1px solid ${a(t.base, member ? '55' : '2E')}` }}>
+      <span style={{ fontFamily: ui, fontWeight: 800, fontSize: 10.5, letterSpacing: '.16em',
+        textTransform: 'uppercase', color: t.hi }}>{t.label}</span>
+
+      {member ? (
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+          <Initials name={member.name} size={52} />
+          <div style={{ fontFamily: ui, fontWeight: 700, fontSize: 15, color: C.ink }}>{member.name}</div>
+          <span style={{ fontFamily: ui, fontSize: 11, color: t.hi }}>Ready · seated</span>
+        </div>
+      ) : (
+        <div style={{ marginTop: 10 }}>
+          <WaitingPodium tone={t} />
+          <div style={{ fontFamily: ui, fontSize: 11.5, color: C.faint, marginTop: 2 }}>
+            {canInvite ? 'Get ready for a battle of ideas' : 'Awaiting an invite'}
+          </div>
+          {canInvite && (
+            <button onClick={invite} style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '7px 14px', borderRadius: 999, cursor: 'pointer',
+              background: copied ? a(C.jade, '1F') : C.glass, border: `1px solid ${copied ? a(C.jade, '66') : C.hair}`,
+              color: copied ? C.jadeHi : C.dim, fontFamily: ui, fontSize: 12, fontWeight: 600 }}>
+              {copied ? '✓ Link copied' : `+ Invite ${t.label} speaker`}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function WaitingHall({ debateId, members, motion, viewerCount, scheduledAt, role, onProfile }: {
+  debateId: string; members: RoomMember[]; motion: string; viewerCount: number;
+  scheduledAt: string | null | undefined; role: string; onProfile?: (h?: string | null) => void;
+}) {
+  const host = members.find(m => m.role === 'host');
+  const mod = members.find(m => m.role === 'moderator');
+  const judges = members.filter(m => m.role === 'judge');
+  const propMember = members.find(m => m.role === 'debater' && m.side === 'prop');
+  const oppMember = members.find(m => m.role === 'debater' && m.side === 'opp');
+  const audience = members.filter(m => m.role === 'audience');
+  const isHost = role === 'host';
+
+  const doorsIn = useCountdown(scheduledAt);
+  const clockStr = doorsIn == null ? null
+    : `${String(Math.floor(doorsIn / 60)).padStart(2, '0')}:${String(doorsIn % 60).padStart(2, '0')}`;
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', paddingBottom: 14 }}>
+      {/* eyebrow */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999,
+          background: a(C.gold, '1A'), border: `1px solid ${a(C.gold, '55')}` }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.gold }} />
+          <span style={{ fontFamily: ui, fontWeight: 700, fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: C.goldHi }}>Assembling</span>
+        </span>
+        <span style={{ fontFamily: ui, fontSize: 13, color: C.dim, whiteSpace: 'nowrap', overflow: 'hidden',
+          textOverflow: 'ellipsis', flex: '1 1 200px', minWidth: 0 }}>{motion}</span>
+        {clockStr && (
+          <span style={{ marginLeft: 'auto', fontFamily: ui, fontSize: 11.5, color: C.faint }}>
+            Doors open <span style={{ fontFamily: mono, color: C.ink }}>{clockStr}</span></span>
+        )}
+      </div>
+
+      {/* the hall — center stage */}
+      <div style={{ position: 'relative', borderRadius: 20, overflow: 'hidden', padding: '34px 20px',
+        textAlign: 'center', border: `1px solid ${C.hair}`, background: C.base2, marginBottom: 16 }}>
+        <div aria-hidden style={{ position: 'absolute', inset: 0, backgroundImage: `url(${STAGE_BACKDROP})`,
+          backgroundSize: 'cover', backgroundPosition: 'center 34%' }} />
+        <div aria-hidden style={{ position: 'absolute', inset: 0,
+          background: `radial-gradient(85% 65% at 50% 22%, ${a(C.base, '3D')}, ${a(C.base, 'E3')} 82%)` }} />
+        <div style={{ position: 'relative' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
+            <svg width="30" height="26" viewBox="0 0 30 26" fill="none" aria-hidden>
+              <path d="M15 1L28 8H2L15 1Z" fill={C.warning} opacity=".9" />
+              <rect x="5" y="9" width="4" height="12" fill={C.warning} opacity=".85" />
+              <rect x="13" y="9" width="4" height="12" fill={C.warning} opacity=".85" />
+              <rect x="21" y="9" width="4" height="12" fill={C.warning} opacity=".85" />
+              <rect x="2" y="22" width="26" height="2.4" rx="1.2" fill={C.warning} opacity=".9" />
+            </svg>
+          </div>
+          <div style={{ fontFamily: display, fontWeight: 600, fontSize: 'clamp(26px,4vw,36px)', color: C.ink,
+            letterSpacing: '.02em' }}>THE HALL</div>
+          <div style={{ fontFamily: ui, fontSize: 12.5, color: C.dim, marginTop: 4 }}>
+            {clockStr ? 'Debate begins soon' : 'Waiting for the host to open the doors'}
+          </div>
+          {clockStr && (
+            <div style={{ fontFamily: mono, fontWeight: 700, fontSize: 'clamp(28px,5vw,40px)', color: C.ink, marginTop: 10 }}>
+              {clockStr}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* host / mod / judges */}
+      <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile} />
+
+      {/* competitor waiting cards */}
+      <div style={{ display: 'flex', gap: 14, marginTop: 4, marginBottom: 16, flexWrap: 'wrap' }}>
+        <WaitingSeatCard side="prop" member={propMember} debateId={debateId} canInvite={isHost && !propMember} />
+        <WaitingSeatCard side="opp" member={oppMember} debateId={debateId} canInvite={isHost && !oppMember} />
+      </div>
+
+      {/* gallery */}
+      <div style={{ marginTop: 'auto' }}>
+        <GalleryStrip audience={audience.length ? audience : members.filter(m => m.role === 'audience')} onProfile={onProfile} />
+        {viewerCount > members.length && (
+          <div style={{ fontFamily: ui, fontSize: 11, color: C.faint, marginTop: 6 }}>
+            {fmtN(viewerCount)} total watching</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------- POST-DEBATE RESULTS ------------------------- */
+export function ResultCompetitorCard({ side, name, avatarUrl, score, isWinner }: {
+  side: Side; name: string; avatarUrl?: string | null; score: number; isWinner: boolean;
+}) {
+  const t = sideTone(side);
+  return (
+    <div style={{ position: 'relative', borderRadius: 18, padding: '20px 18px', textAlign: 'center',
+      background: isWinner ? `linear-gradient(180deg, ${a(t.base, '1F')}, ${a(C.panel, 'CC')})` : C.panel,
+      border: `1px solid ${isWinner ? a(t.base, '66') : C.hair}`,
+      boxShadow: isWinner ? `0 16px 46px ${a(t.base, '28')}` : 'none' }}>
+      <span style={{ fontFamily: ui, fontWeight: 800, fontSize: 10.5, letterSpacing: '.14em',
+        textTransform: 'uppercase', color: t.hi }}>{t.label}</span>
+      <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0 8px' }}>
+        <Initials name={name} url={avatarUrl} size={64} />
+      </div>
+      <div style={{ fontFamily: ui, fontWeight: 700, fontSize: 15, color: C.ink }}>{name}</div>
+      <div style={{ fontFamily: mono, fontWeight: 800, fontSize: 40, color: C.ink, margin: '8px 0 2px' }}>{score}</div>
+      {isWinner && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, padding: '4px 12px',
+          borderRadius: 999, background: C.warning, color: '#241A00', fontFamily: ui, fontWeight: 800, fontSize: 11 }}>
+          🏆 Winner
+        </span>
+      )}
+    </div>
+  );
+}
+
+export function JudgesDecisionCard({ propWins, oppWins, judgeCount }: { propWins: number; oppWins: number; judgeCount: number }) {
+  return (
+    <div style={{ borderRadius: 18, padding: '20px 18px', textAlign: 'center', background: C.panel, border: `1px solid ${C.hair}` }}>
+      <span style={{ fontFamily: ui, fontWeight: 700, fontSize: 10.5, letterSpacing: '.14em', textTransform: 'uppercase', color: C.faint }}>
+        Judges Decision</span>
+      <div style={{ fontFamily: mono, fontWeight: 800, fontSize: 36, margin: '10px 0 4px' }}>
+        <span style={{ color: C.jadeHi }}>{propWins}</span>
+        <span style={{ color: C.faint, fontSize: 22 }}> – </span>
+        <span style={{ color: C.garnetHi }}>{oppWins}</span>
+      </div>
+      <div style={{ fontFamily: ui, fontSize: 11.5, color: C.faint }}>
+        {judgeCount > 0 ? `${judgeCount} judge${judgeCount === 1 ? '' : 's'} scored this debate` : 'No judges scored this debate'}
+      </div>
+    </div>
+  );
+}
+
+export function DebateSummaryPanel({ summary }: { summary: { total_time_secs: number; evidence_count: number; audience_votes: number; chat_count: number } }) {
+  const totalTime = (() => {
+    const m = Math.floor(summary.total_time_secs / 60), s = summary.total_time_secs % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  })();
+  const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: `1px solid ${C.hair}` }}>
+      <span style={{ fontFamily: ui, fontSize: 12.5, color: C.dim }}>{label}</span>
+      <span style={{ fontFamily: mono, fontSize: 13, color: C.ink, fontWeight: 600 }}>{value}</span>
+    </div>
+  );
+  return (
+    <div style={{ borderRadius: 18, padding: '18px 18px 6px', background: C.panel, border: `1px solid ${C.hair}` }}>
+      <div style={{ fontFamily: ui, fontWeight: 700, fontSize: 10.5, letterSpacing: '.14em', textTransform: 'uppercase',
+        color: C.faint, marginBottom: 4 }}>Debate Summary</div>
+      <Row label="Total Time" value={totalTime} />
+      <Row label="Evidence Used" value={summary.evidence_count} />
+      <Row label="Audience Votes" value={fmtN(summary.audience_votes)} />
+      <Row label="Chat Messages" value={fmtN(summary.chat_count)} />
     </div>
   );
 }
