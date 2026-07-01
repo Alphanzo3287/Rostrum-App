@@ -20,6 +20,7 @@ import { Avatar } from './ui';
 import { ShareButton } from './ShareSheet';
 import { getMyWallet, getGiftTiers, getDebateParticipants, sendGift, type Wallet, type GiftTier, type DebateParticipant } from '../lib/payments';
 import { publishBcastControl } from '../lib/livekit';
+import { EvidencePanel } from './EvidenceViewer';
 
 type Role = 'host' | 'moderator' | 'debater' | 'judge' | 'audience';
 
@@ -33,16 +34,16 @@ export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom,
   debateId: string; role: Role; tab: string; setTab: (t: string) => void; ros?: RosData;
   members?: any[]; lkRoom?: any; pollOpen?: boolean;
 }) {
-  const tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['gift','Gift']]
-            : role === 'moderator' ? [['chat','Chat'],['qa','Q&A'],['poll','Poll'],['gift','Gift']]
-            : role === 'judge'  ? [['score','Score'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['gift','Gift']]
-            :                     [['vote','Vote'],['chat','Chat'],['qa','Ask'],['poll','Poll'],['gift','Gift']];
+  const tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']]
+            : role === 'moderator' ? [['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']]
+            : role === 'judge'  ? [['score','Score'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']]
+            :                     [['vote','Vote'],['chat','Chat'],['qa','Ask'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']];
   return (
     <aside style={{ borderLeft:`1px solid ${C.hair}`, background:a(C.base2,'EB'), backdropFilter:'blur(20px)', display:'flex', flexDirection:'column', minHeight:0 }}>
-      <div style={{ display:'flex', padding:8, gap:5, borderBottom:`1px solid ${C.hair}` }}>
+      <div style={{ display:'flex', padding:8, gap:5, borderBottom:`1px solid ${C.hair}`, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
         {tabs.map(([k,l]) => (
-          <button key={k} onClick={() => setTab(k)} style={{ flex:1, padding:'8px 0', borderRadius:9, border:'none',
-            cursor:'pointer', fontFamily:ui, fontSize:11, fontWeight:600, transition:'all .15s',
+          <button key={k} onClick={() => setTab(k)} style={{ flex:'0 0 auto', padding:'8px 14px', borderRadius:9, border:'none',
+            cursor:'pointer', fontFamily:ui, fontSize:11, fontWeight:600, whiteSpace:'nowrap', transition:'all .15s',
             color: tab===k ? '#FFFFFF' : C.dim,
             background: tab===k ? `linear-gradient(135deg, ${C.gold}, ${C.cyan})` : 'transparent' }}>{l}</button>
         ))}
@@ -54,6 +55,7 @@ export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom,
         {(tab==='vote'||tab==='poll') && <PollPanel debateId={debateId} canVote={role==='audience'} pollOpen={pollOpen} />}
         {tab==='qa' && <QAPanel debateId={debateId} canModerate={role==='host'||role==='moderator'} />}
         {tab==='score' && <ScorePanel debateId={debateId} />}
+        {tab==='evidence' && <EvidencePanel debateId={debateId} canAdd={role==='host'||role==='moderator'||role==='debater'} />}
         {tab==='gift' && <GiftPanel debateId={debateId} />}
       </div>
     </aside>

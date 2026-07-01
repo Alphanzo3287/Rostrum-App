@@ -448,7 +448,7 @@ function WaitingSeatCard({ side, member, debateId, canInvite }: {
     } catch { /* clipboard blocked — non-fatal */ }
   };
   return (
-    <div style={{ flex: 1, minWidth: 0, borderRadius: 18, padding: '18px 16px', textAlign: 'center',
+    <div style={{ flex: '1 1 240px', minWidth: 0, borderRadius: 18, padding: '18px 16px', textAlign: 'center',
       background: `linear-gradient(180deg, ${a(t.base, '12')}, ${a(C.panel, 'CC')})`,
       border: `1px solid ${a(t.base, member ? '55' : '2E')}` }}>
       <span style={{ fontFamily: ui, fontWeight: 800, fontSize: 10.5, letterSpacing: '.16em',

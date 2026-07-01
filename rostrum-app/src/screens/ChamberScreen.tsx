@@ -28,8 +28,9 @@ import { WinnerOverlay } from '../components/WinnerOverlay';
 import { BroadcastBar } from '../components/BroadcastBar';
 import { ShareButton } from '../components/ShareSheet';
 import { C, ui, display, mono, a } from '../lib/theme';
-import { useIsTablet } from '../lib/useMediaQuery';
+import { useIsTablet, useIsMobile } from '../lib/useMediaQuery';
 import { CompetitorCard, FloorStage, HostTopRow, GalleryStrip, AudienceVoteStrip, JudgesStrip, FloorStatStrip, WaitingHall } from '../components/hall';
+import { InteractionBar } from '../components/InteractionBar';
 import type { Profile, Side, Tally } from '../lib/types';
 
 type Layout = 'slides' | 'spotlight' | 'grid';
@@ -41,6 +42,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   const room = useRoom(debateId);
   const dz = useDebate(debateId);
   const isNarrow = useIsTablet();
+  const isMobile = useIsMobile();
   const nav = useNavigate();
   const openProfile = (handle?: string | null) => { if (handle) nav(`/u/${handle}`); };
   const [tab, setTab] = useState('vote');
@@ -171,8 +173,8 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
                 onLocalState={(patch) => setBs(b => ({ ...b, ...patch }))}
                 me={me} role={role} speaker={speaker} speakerSide={speakerSide}
                 floor={floor} tally={tally} myVote={myVote} onVote={onVote}
-                sideProfiles={sideProfiles} onProfile={openProfile} narrow={isNarrow}
-                countdown={`${mm}:${ss}`}
+                sideProfiles={sideProfiles} onProfile={openProfile} narrow={isNarrow} mobile={isMobile}
+                countdown={`${mm}:${ss}`} onAskQuestion={() => setTab('qa')}
               />}
         </div>
 
@@ -453,14 +455,14 @@ const iconBtn: React.CSSProperties = { width:32, height:32, borderRadius:5, bord
    LiveKit / egress wiring changes. */
 function LiveHall({
   debateId, room, dz, bs, onLocalState, me, role, speaker, speakerSide,
-  floor, tally, myVote, onVote, sideProfiles, onProfile, narrow, countdown,
+  floor, tally, myVote, onVote, sideProfiles, onProfile, narrow, countdown, onAskQuestion, mobile,
 }: {
   debateId: string; room: any; dz: any; bs: BroadcastState;
   onLocalState: (patch: Partial<BroadcastState>) => void;
   me?: M; role: string; speaker?: M; speakerSide: Side | null;
   floor: FloorStats | null; tally: Tally; myVote: Side | null; onVote: (s: Side) => void;
   sideProfiles: { prop?: Profile; opp?: Profile }; onProfile: (h?: string | null) => void;
-  narrow: boolean; countdown: string;
+  narrow: boolean; countdown: string; onAskQuestion?: () => void; mobile?: boolean;
 }) {
   const [monitor, setMonitor] = useState(false);
 
@@ -540,7 +542,7 @@ function LiveHall({
       {narrow ? (
         <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
           <div style={{ height:'46vh', minHeight:260, display:'flex' }}>{stage}</div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>{propCard}{oppCard}</div>
+          <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1fr', gap:12 }}>{propCard}{oppCard}</div>
         </div>
       ) : (
         <div style={{ flex:'1 1 auto', minHeight:0, display:'grid', gap:14,
@@ -561,6 +563,12 @@ function LiveHall({
       <div style={{ marginTop:12 }}>
         <FloorStatStrip floor={floor} hasFloorSide={speakerSide} phaseLabel={phaseLabel} segTotal={segTotal} />
       </div>
+
+      {me && (
+        <div style={{ marginTop:12 }}>
+          <InteractionBar room={room.room} identity={me.identity} name={me.name} onAskQuestion={onAskQuestion} />
+        </div>
+      )}
 
       {canControl && (
         <div style={{ marginTop:12 }}>

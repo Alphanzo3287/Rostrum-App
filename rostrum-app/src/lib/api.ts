@@ -759,7 +759,7 @@ export async function castPollVote(pollId: string, choice: number): Promise<void
   if (error) throw error;
 }
 
-export type EvidenceKind = 'pdf' | 'video' | 'book' | 'article' | 'image' | 'link';
+export type EvidenceKind = 'pdf' | 'chart' | 'video' | 'article' | 'image' | 'book' | 'link';
 export interface EvidenceItem {
   id: string; kind: EvidenceKind; title: string; url: string | null;
   citation: string | null; side: Side | null; created_at: string;
@@ -791,4 +791,39 @@ export async function getDebateSummary(debateId: string): Promise<DebateSummary>
     judge_opp_wins: Number(d.judge_opp_wins ?? 0),
     judge_count: Number(d.judge_count ?? 0),
   };
+}
+
+/* ─────────────────── BATCH C4 · EVIDENCE VIEWER ───────────────────
+   Writes go straight to the tables — RLS already restricts evidence
+   INSERT to host/moderator/debater, and comment INSERT to any
+   participant (or anyone, on a public debate). See the ev_insert /
+   evc_insert policies applied when debate_evidence was created. */
+export async function addEvidence(debateId: string, input: {
+  kind: EvidenceKind; title: string; url?: string | null; citation?: string | null; side?: Side | null;
+}): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('not signed in');
+  const { error } = await supabase.from('debate_evidence').insert({
+    debate_id: debateId, added_by: user.id, kind: input.kind, title: input.title,
+    url: input.url ?? null, citation: input.citation ?? null, side: input.side ?? null,
+  });
+  if (error) throw error;
+}
+
+export interface EvidenceComment {
+  id: string; body: string; created_at: string;
+  author: { display_name: string; avatar_url: string | null; handle: string } | null;
+}
+export async function getEvidenceComments(evidenceId: string): Promise<EvidenceComment[]> {
+  const { data, error } = await supabase.from('evidence_comments')
+    .select('id, body, created_at, author:profiles(display_name, avatar_url, handle)')
+    .eq('evidence_id', evidenceId).order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as unknown as EvidenceComment[];
+}
+export async function addEvidenceComment(evidenceId: string, body: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('not signed in');
+  const { error } = await supabase.from('evidence_comments').insert({ evidence_id: evidenceId, author_id: user.id, body });
+  if (error) throw error;
 }
