@@ -43,6 +43,9 @@ interface Props {
   resultsReady?: boolean;
   winnerAnnounced?: boolean;
   hasSegments?: boolean;
+  beginLabel?: string;
+  hideYouTube?: boolean;
+  hideCamera?: boolean;
 }
 
 export function RoleDock(p: Props) {
@@ -52,9 +55,13 @@ export function RoleDock(p: Props) {
       <Dock>
         {p.role === 'host' ? (
           <>
-            <Btn primary label="Begin debate" onClick={p.onGoLive} />
-            <Sep />
-            <StreamBtn phase={p.streamPhase} error={p.streamError} onStart={p.onStreamStart} onStop={p.onStreamStop} />
+            <Btn primary label={p.beginLabel ?? 'Begin debate'} onClick={p.onGoLive} />
+            {!p.hideYouTube && (
+              <>
+                <Sep />
+                <StreamBtn phase={p.streamPhase} error={p.streamError} onStart={p.onStreamStart} onStop={p.onStreamStop} />
+              </>
+            )}
             <Sep />
             <Btn danger label="Cancel event" onClick={() => {
               if (window.confirm('Cancel this event? This cannot be undone.')) p.onCancel();
@@ -73,7 +80,7 @@ export function RoleDock(p: Props) {
       <Dock>
         <Btn active={p.micOn} disabled={!p.canPublish}
           label={p.canPublish ? (p.micOn ? 'Mic on' : 'Mic off') : 'Mic'} onClick={p.toggleMic} accent={C.jade} />
-        <Btn active={p.camOn} disabled={!p.canPublish} label="Camera" onClick={p.toggleCam} />
+        {!p.hideCamera && <Btn active={p.camOn} disabled={!p.canPublish} label="Camera" onClick={p.toggleCam} />}
         <Sep />
         {p.hasSegments !== false && (
           <>
@@ -94,8 +101,12 @@ export function RoleDock(p: Props) {
           <Btn label="🏆 Announce winner" onClick={p.onAnnounce} accent={C.gold} />
         )}
         <Sep />
-        <StreamBtn phase={p.streamPhase} error={p.streamError} onStart={p.onStreamStart} onStop={p.onStreamStop} />
-        <Sep />
+        {!p.hideYouTube && (
+          <>
+            <StreamBtn phase={p.streamPhase} error={p.streamError} onStart={p.onStreamStart} onStop={p.onStreamStop} />
+            <Sep />
+          </>
+        )}
         <Btn danger label="End event" onClick={p.onEnd} />
       </Dock>
     );

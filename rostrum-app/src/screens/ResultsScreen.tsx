@@ -41,26 +41,37 @@ export function ResultsScreen({ debateId, onBackToLobby }: {
     <div style={{ position:'absolute', inset:0, overflowY:'auto', background:C.base }}>
       <div style={{ maxWidth:1000, margin:'0 auto', padding:'40px 24px 80px' }}>
 
-        {/* verdict banner */}
-        <div style={{ textAlign:'center', padding:'34px 20px', borderRadius:14, marginBottom:26,
-          border:`1px solid ${winColor}55`, background:`radial-gradient(90% 140% at 50% -30%, ${winColor}22, transparent 60%)` }}>
-          <div style={{ fontFamily:ui, fontSize:11, fontWeight:700, letterSpacing:2.5, textTransform:'uppercase', color:C.gold }}>
-            The house has decided</div>
-          <h1 style={{ fontFamily:display, fontSize:44, fontWeight:600, color:C.ink, margin:'10px 0 6px' }}>
-            {winner === 'prop' ? 'Proposition' : winner === 'opp' ? 'Opposition' : 'A tie'}</h1>
-          <p style={{ fontFamily:ui, fontSize:14, color:C.dim, margin:0 }}>{debate?.motion}</p>
-        </div>
+        {(debate?.format === 'legacy' || debate?.format === 'lecture') ? (
+          <div style={{ textAlign:'center', padding:'40px 20px', borderRadius:14, marginBottom:26,
+            border:`1px solid ${C.hair}`, background:C.panel }}>
+            <h1 style={{ fontFamily:display, fontSize:32, fontWeight:600, color:C.ink, margin:'0 0 8px' }}>
+              Thanks for joining our event</h1>
+            <p style={{ fontFamily:ui, fontSize:14, color:C.dim, margin:0 }}>{debate?.motion}</p>
+          </div>
+        ) : (
+          <>
+            {/* verdict banner */}
+            <div style={{ textAlign:'center', padding:'34px 20px', borderRadius:14, marginBottom:26,
+              border:`1px solid ${winColor}55`, background:`radial-gradient(90% 140% at 50% -30%, ${winColor}22, transparent 60%)` }}>
+              <div style={{ fontFamily:ui, fontSize:11, fontWeight:700, letterSpacing:2.5, textTransform:'uppercase', color:C.gold }}>
+                The house has decided</div>
+              <h1 style={{ fontFamily:display, fontSize:44, fontWeight:600, color:C.ink, margin:'10px 0 6px' }}>
+                {winner === 'prop' ? 'Proposition' : winner === 'opp' ? 'Opposition' : 'A tie'}</h1>
+              <p style={{ fontFamily:ui, fontSize:14, color:C.dim, margin:0 }}>{debate?.motion}</p>
+            </div>
 
-        {/* scorecards + judges decision */}
-        <div style={{ display:'grid', gap:14, marginBottom:18,
-          gridTemplateColumns:'1fr minmax(180px,220px) 1fr' }}>
-          <ResultCompetitorCard side="prop" name={propDebater?.profile?.display_name ?? 'Proposition'}
-            avatarUrl={propDebater?.profile?.avatar_url} score={propScore} isWinner={winner === 'prop'} />
-          <JudgesDecisionCard propWins={summary?.judge_prop_wins ?? 0} oppWins={summary?.judge_opp_wins ?? 0}
-            judgeCount={summary?.judge_count ?? 0} />
-          <ResultCompetitorCard side="opp" name={oppDebater?.profile?.display_name ?? 'Opposition'}
-            avatarUrl={oppDebater?.profile?.avatar_url} score={oppScore} isWinner={winner === 'opp'} />
-        </div>
+            {/* scorecards + judges decision */}
+            <div style={{ display:'grid', gap:14, marginBottom:18,
+              gridTemplateColumns:'1fr minmax(180px,220px) 1fr' }}>
+              <ResultCompetitorCard side="prop" name={propDebater?.profile?.display_name ?? 'Proposition'}
+                avatarUrl={propDebater?.profile?.avatar_url} score={propScore} isWinner={winner === 'prop'} />
+              <JudgesDecisionCard propWins={summary?.judge_prop_wins ?? 0} oppWins={summary?.judge_opp_wins ?? 0}
+                judgeCount={summary?.judge_count ?? 0} />
+              <ResultCompetitorCard side="opp" name={oppDebater?.profile?.display_name ?? 'Opposition'}
+                avatarUrl={oppDebater?.profile?.avatar_url} score={oppScore} isWinner={winner === 'opp'} />
+            </div>
+          </>
+        )}
 
         {/* debate summary */}
         <div style={{ marginBottom:26 }}>

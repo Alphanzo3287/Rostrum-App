@@ -284,13 +284,16 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         setTab={setTab}
         onLeave={onLeave}
         pollOpen={!!dz.debate?.poll_open}
-        onTogglePoll={isLecture ? undefined : dz.togglePoll}
+        onTogglePoll={(isLecture || isLegacy) ? undefined : dz.togglePoll}
         winMode={dz.debate?.win_mode}
-        onFinalize={isLecture ? undefined : dz.doFinalize}
-        onAnnounce={isLecture ? undefined : dz.doAnnounce}
+        onFinalize={(isLecture || isLegacy) ? undefined : dz.doFinalize}
+        onAnnounce={(isLecture || isLegacy) ? undefined : dz.doAnnounce}
         resultsReady={!!dz.results}
         winnerAnnounced={!!dz.debate?.winner_announced}
         hasSegments={dz.debate?.format !== 'legacy' && dz.debate?.format !== 'speakers_corner'}
+        beginLabel={(isLecture || isLegacy) ? 'Start room' : 'Begin debate'}
+        hideYouTube={isLegacy}
+        hideCamera={isLegacy}
       />
     </div>
   );
