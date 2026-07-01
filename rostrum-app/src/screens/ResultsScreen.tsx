@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
 import { getResults, getDebate, listParticipants, getDebateSummary, type DebateSummary } from '../lib/api';
 import type { Debate, DebateResult, Participant, Profile, Side } from '../lib/types';
 import { C, ui, display, mono, solidGold } from '../lib/theme';
-import { ResultCompetitorCard, JudgesDecisionCard, DebateSummaryPanel } from '../components/hall';
+import { ResultCompetitorCard, JudgesDecisionCard, AudienceVerdictCard, DebateSummaryPanel } from '../components/hall';
 
 type PartWithProfile = Participant & { profile: Profile };
 
@@ -65,8 +65,10 @@ export function ResultsScreen({ debateId, onBackToLobby }: {
               gridTemplateColumns:'1fr minmax(180px,220px) 1fr' }}>
               <ResultCompetitorCard side="prop" name={propDebater?.profile?.display_name ?? 'Proposition'}
                 avatarUrl={propDebater?.profile?.avatar_url} score={propScore} isWinner={winner === 'prop'} />
-              <JudgesDecisionCard propWins={summary?.judge_prop_wins ?? 0} oppWins={summary?.judge_opp_wins ?? 0}
-                judgeCount={summary?.judge_count ?? 0} />
+              {debate?.win_mode === 'academic'
+                ? <JudgesDecisionCard propWins={summary?.judge_prop_wins ?? 0} oppWins={summary?.judge_opp_wins ?? 0}
+                    judgeCount={summary?.judge_count ?? 0} />
+                : <AudienceVerdictCard propVotes={result?.prop_audience ?? 0} oppVotes={result?.opp_audience ?? 0} />}
               <ResultCompetitorCard side="opp" name={oppDebater?.profile?.display_name ?? 'Opposition'}
                 avatarUrl={oppDebater?.profile?.avatar_url} score={oppScore} isWinner={winner === 'opp'} />
             </div>

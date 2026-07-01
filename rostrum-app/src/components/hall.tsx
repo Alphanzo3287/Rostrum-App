@@ -635,6 +635,25 @@ export function JudgesDecisionCard({ propWins, oppWins, judgeCount }: { propWins
     </div>
   );
 }
+export function AudienceVerdictCard({ propVotes, oppVotes }: { propVotes: number; oppVotes: number }) {
+  const total = propVotes + oppVotes;
+  const propPct = total > 0 ? Math.round((propVotes / total) * 100) : 50;
+  const oppPct = 100 - propPct;
+  return (
+    <div style={{ borderRadius: 18, padding: '20px 18px', textAlign: 'center', background: C.panel, border: `1px solid ${C.hair}` }}>
+      <span style={{ fontFamily: ui, fontWeight: 700, fontSize: 10.5, letterSpacing: '.14em', textTransform: 'uppercase', color: C.faint }}>
+        Audience Verdict</span>
+      <div style={{ fontFamily: mono, fontWeight: 800, fontSize: 36, margin: '10px 0 4px' }}>
+        <span style={{ color: C.jadeHi }}>{propPct}%</span>
+        <span style={{ color: C.faint, fontSize: 22 }}> – </span>
+        <span style={{ color: C.garnetHi }}>{oppPct}%</span>
+      </div>
+      <div style={{ fontFamily: ui, fontSize: 11.5, color: C.faint }}>
+        {total > 0 ? `${total.toLocaleString()} audience vote${total === 1 ? '' : 's'}` : 'No audience votes cast'}
+      </div>
+    </div>
+  );
+}
 
 export function DebateSummaryPanel({ summary }: { summary: { total_time_secs: number; evidence_count: number; audience_votes: number; chat_count: number } }) {
   const totalTime = (() => {
