@@ -31,7 +31,7 @@ import { BroadcastBar } from '../components/BroadcastBar';
 import { ShareButton } from '../components/ShareSheet';
 import { C, ui, display, mono, a, ghostBtn, solidGold } from '../lib/theme';
 import { useIsTablet, useIsMobile } from '../lib/useMediaQuery';
-import { CompetitorCard, FloorStage, HostTopRow, GalleryStrip, AudienceVoteStrip, JudgesStrip, FloorStatStrip, WaitingHall } from '../components/hall';
+import { CompetitorCard, FloorStage, HostTopRow, GalleryStrip, AudienceVoteStrip, JudgesStrip, FloorStatStrip, WaitingHall, Initials } from '../components/hall';
 import { InteractionBar } from '../components/InteractionBar';
 import type { Profile, Side, Tally } from '../lib/types';
 
@@ -72,11 +72,15 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   const me = room.members.find(m => m.isLocal);
   const role = (me?.role ?? 'audience') as any;
   const isHost = role === 'host';
-  const isLecture = dz.debate?.format === 'lecture';
+  const format = dz.debate?.format;
+  const isLecture = format === 'lecture';
+  const isLegacy = format === 'legacy';
+  const isSpeakersCorner = format === 'speakers_corner';
   useEffect(() => {
-    if (isLecture) { setTab('chat'); return; }
+    if (isLecture || isLegacy) { setTab('chat'); return; }
+    if (isSpeakersCorner) { setTab(role === 'host' ? 'invite' : 'chat'); return; }
     setTab(role === 'judge' ? 'score' : role === 'host' ? 'ros' : 'vote');
-  }, [role, isLecture]);
+  }, [role, isLecture, isLegacy, isSpeakersCorner]);
 
   // ---- C6 · Stage management (right-click promote/demote) — lives at the
   // top level so it works during assembly (before "Begin debate") as well
@@ -205,6 +209,12 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
                 countdown={`${mm}:${ss}`} phaseLabel={dz.seg?.label ?? 'Presentation'}
                 onAskQuestion={() => setTab('qa')} isHost={isHost} onContextMenu={openCtxMenu}
               />
+            : isLegacy
+            ? <LegacyHall
+                debateId={debateId} room={room} me={me} role={role} motion={dz.debate?.motion ?? ''}
+                maxStageSeats={dz.debate?.max_stage_seats} maxModerators={dz.debate?.max_moderators}
+                onProfile={openProfile} onAskQuestion={() => setTab('qa')} isHost={isHost} onContextMenu={openCtxMenu}
+              />
             : <LiveHall
                 debateId={debateId} room={room} dz={dz} bs={bs}
                 onLocalState={(patch) => setBs(b => ({ ...b, ...patch }))}
@@ -217,9 +227,21 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         </div>
 
         {ctxMenu && (
-          <StageActionMenu x={ctxMenu.x} y={ctxMenu.y} member={ctxMenu.member} debateId={debateId}
+          <StageActionMenu x={ctxMenu.x} y={ctxMenu.y} member={ctxMenu.member} debateId={debateId} format={format}
             isSelf={ctxMenu.member.identity === me?.identity}
-            onSendInvite={(r, s) => sendStageInvite(ctxMenu.member.identity, r, s)}
+            onSendInvite={(r, s) => {
+              const maxSeats = dz.debate?.max_stage_seats;
+              const maxMods = dz.debate?.max_moderators;
+              const seated = room.members.filter((m: any) => m.role === 'debater' || m.role === 'moderator').length;
+              const mods = room.members.filter((m: any) => m.role === 'moderator').length;
+              if (r === 'moderator' && maxMods != null && mods >= maxMods) {
+                alert(`This room is capped at ${maxMods} moderator${maxMods === 1 ? '' : 's'}.`); return;
+              }
+              if (maxSeats != null && seated >= maxSeats) {
+                alert(`This room is capped at ${maxSeats} speaker${maxSeats === 1 ? '' : 's'} on stage.`); return;
+              }
+              sendStageInvite(ctxMenu.member.identity, r, s);
+            }}
             onClose={() => setCtxMenu(null)} />
         )}
         {incomingStageInvite && (
@@ -268,6 +290,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         onAnnounce={isLecture ? undefined : dz.doAnnounce}
         resultsReady={!!dz.results}
         winnerAnnounced={!!dz.debate?.winner_announced}
+        hasSegments={dz.debate?.format !== 'legacy' && dz.debate?.format !== 'speakers_corner'}
       />
     </div>
   );
@@ -570,6 +593,129 @@ function LectureHall({
 }
 
 
+/* ---- D3 · Legacy Hall — Clubhouse/X Spaces style. Speakers (mic-capable:
+   host, moderators, promoted speakers) up top in a scrollable grid;
+   listeners below in their own scrollable grid. No sides, no judges, no
+   timer — just an open room. Capacity (if the host set one) is enforced
+   at invite-time, shown here as a simple counter. ---- */
+function LegacyHall({
+  debateId, room, me, role, motion, maxStageSeats, maxModerators,
+  onProfile, onAskQuestion, isHost, onContextMenu,
+}: {
+  debateId: string; room: any; me?: M; role: string; motion: string;
+  maxStageSeats: number | null | undefined; maxModerators: number | null | undefined;
+  onProfile: (h?: string | null) => void; onAskQuestion?: () => void;
+  isHost: boolean; onContextMenu: (e: React.MouseEvent, m: any) => void;
+}) {
+  const members = room.members as any[];
+  const host = members.find(m => m.role === 'host');
+  const speakers = members.filter(m => m.role === 'moderator' || m.role === 'debater');
+  const listeners = members.filter(m => m.role === 'audience');
+  const modCount = members.filter(m => m.role === 'moderator').length;
+  const stageCount = speakers.length + (host ? 1 : 0);
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', minHeight:0, height:'100%', overflowY:'auto' }}>
+      <div style={{ flexShrink:0, marginBottom:8 }}>
+        <div style={{ fontFamily:display, fontSize:19, fontWeight:600, color:C.ink,
+          whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{motion}</div>
+        <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginTop:2 }}>
+          🎙 {stageCount} speaking · {listeners.length} listening
+        </div>
+      </div>
+
+      {/* speakers — host, moderators, promoted speakers */}
+      <div style={{ flexShrink:0, marginBottom:18 }}>
+        <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', marginBottom:10 }}>
+          <span style={{ fontFamily:ui, fontSize:11, fontWeight:700, letterSpacing:'.1em', textTransform:'uppercase', color:C.faint }}>
+            On stage</span>
+          {(maxStageSeats != null || maxModerators != null) && (
+            <span style={{ fontFamily:mono, fontSize:10.5, color:C.faint }}>
+              {maxStageSeats != null && `${stageCount}/${maxStageSeats} seats`}
+              {maxStageSeats != null && maxModerators != null && ' · '}
+              {maxModerators != null && `${modCount}/${maxModerators} mods`}
+            </span>
+          )}
+        </div>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:18 }}>
+          {host && <SpeakerTile member={host} tag="Host" tone={C.warning} onProfile={onProfile} />}
+          {speakers.map(m => (
+            <SpeakerTile key={m.identity} member={m} tag={m.role === 'moderator' ? 'Mod' : undefined}
+              tone={m.role === 'moderator' ? C.gold : C.jadeHi} onProfile={onProfile}
+              onContextMenu={isHost ? (e) => onContextMenu(e, m) : undefined} />
+          ))}
+        </div>
+      </div>
+
+      {/* listeners — scrollable, shows everyone in the room */}
+      <div style={{ flexShrink:0 }}>
+        <span style={{ fontFamily:ui, fontSize:11, fontWeight:700, letterSpacing:'.1em', textTransform:'uppercase',
+          color:C.faint, display:'block', marginBottom:10 }}>Listening · {listeners.length}</span>
+        {listeners.length === 0 ? (
+          <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>Empty for now.</p>
+        ) : (
+          <div style={{ display:'flex', flexWrap:'wrap', gap:14, maxHeight:260, overflowY:'auto', paddingRight:4 }}>
+            {listeners.map(m => (
+              <ListenerTile key={m.identity} member={m} onProfile={onProfile}
+                onContextMenu={isHost ? (e) => onContextMenu(e, m) : undefined} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {me && (
+        <div style={{ marginTop:'auto', paddingTop:16, flexShrink:0 }}>
+          <InteractionBar room={room.room} identity={me.identity} name={me.name} onAskQuestion={onAskQuestion} />
+        </div>
+      )}
+    </div>
+  );
+}
+function SpeakerTile({ member, tag, tone, onProfile, onContextMenu }: {
+  member: any; tag?: string; tone: string; onProfile: (h?: string | null) => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
+}) {
+  const clickable = !!member.handle;
+  return (
+    <div onClick={clickable ? () => onProfile(member.handle) : undefined}
+      onContextMenu={onContextMenu ? (e) => { e.preventDefault(); onContextMenu(e); } : undefined}
+      style={{ width:84, textAlign:'center', cursor: clickable ? 'pointer' : 'default' }}>
+      <div style={{ position:'relative', display:'inline-block' }}>
+        <span style={{ display:'block', borderRadius:'50%',
+          boxShadow: member.isSpeaking ? `0 0 0 3px ${C.base}, 0 0 0 5px ${tone}, 0 0 16px ${a(tone,'99')}` : `0 0 0 2px ${a(tone,'44')}` }}>
+          <Initials name={member.name} url={member.avatar} size={68} />
+        </span>
+        {tag && (
+          <span style={{ position:'absolute', bottom:-3, left:'50%', transform:'translateX(-50%)', padding:'1.5px 7px',
+            borderRadius:999, background:C.base, border:`1px solid ${tone}`, color:tone, fontFamily:ui, fontSize:8.5, fontWeight:800,
+            letterSpacing:'.06em', textTransform:'uppercase', whiteSpace:'nowrap' }}>{tag}</span>
+        )}
+        {!member.micOn && (
+          <span style={{ position:'absolute', top:-2, right:-2, width:20, height:20, borderRadius:'50%',
+            background:C.base, border:`1px solid ${C.hair}`, display:'grid', placeItems:'center', fontSize:10 }}>🔇</span>
+        )}
+      </div>
+      <div style={{ fontFamily:ui, fontSize:11.5, fontWeight:600, color:C.ink, marginTop:6,
+        whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{member.name}</div>
+    </div>
+  );
+}
+function ListenerTile({ member, onProfile, onContextMenu }: {
+  member: any; onProfile: (h?: string | null) => void; onContextMenu?: (e: React.MouseEvent) => void;
+}) {
+  const clickable = !!member.handle;
+  return (
+    <div onClick={clickable ? () => onProfile(member.handle) : undefined}
+      onContextMenu={onContextMenu ? (e) => { e.preventDefault(); onContextMenu(e); } : undefined}
+      style={{ width:60, textAlign:'center', cursor: clickable ? 'pointer' : 'default' }}>
+      <Initials name={member.name} url={member.avatar} size={44} />
+      <div style={{ fontFamily:ui, fontSize:10.5, color:C.dim, marginTop:5,
+        whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{member.name}</div>
+    </div>
+  );
+}
+
+
 function LiveHall({
   debateId, room, dz, bs, onLocalState, me, role, speaker, speakerSide,
   floor, tally, myVote, onVote, sideProfiles, onProfile, narrow, countdown, onAskQuestion, mobile,
@@ -732,9 +878,9 @@ function LiveHall({
 
 /* ---- C5 · Stage Action Menu (host-only: right-click a profile to
    promote them onto the stage or move them back to the audience) ---- */
-function StageActionMenu({ x, y, member, debateId, isSelf, onSendInvite, onClose }: {
+function StageActionMenu({ x, y, member, debateId, isSelf, onSendInvite, onClose, format }: {
   x: number; y: number; member: RoomMember; debateId: string; isSelf: boolean;
-  onSendInvite: (role: StageRole, side: StageSide) => void; onClose: () => void;
+  onSendInvite: (role: StageRole, side: StageSide) => void; onClose: () => void; format?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
@@ -773,6 +919,11 @@ function StageActionMenu({ x, y, member, debateId, isSelf, onSendInvite, onClose
           <MenuBtn label="Leave the stage" danger onClick={demote} busy={busy} />
         ) : onStage ? (
           <MenuBtn label="→ Move to audience" danger onClick={demote} busy={busy} />
+        ) : format === 'legacy' ? (
+          <>
+            <MenuBtn label="Invite as Speaker" onClick={() => invite('debater', null, 'Speaker')} busy={busy} />
+            <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
+          </>
         ) : (
           <>
             <MenuBtn label="Invite as Proposition" onClick={() => invite('debater', 'prop', 'Proposition')} busy={busy} />

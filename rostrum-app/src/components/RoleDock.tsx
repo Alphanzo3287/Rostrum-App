@@ -42,6 +42,7 @@ interface Props {
   onAnnounce?: () => void;
   resultsReady?: boolean;
   winnerAnnounced?: boolean;
+  hasSegments?: boolean;
 }
 
 export function RoleDock(p: Props) {
@@ -74,8 +75,12 @@ export function RoleDock(p: Props) {
           label={p.canPublish ? (p.micOn ? 'Mic on' : 'Mic off') : 'Mic'} onClick={p.toggleMic} accent={C.jade} />
         <Btn active={p.camOn} disabled={!p.canPublish} label="Camera" onClick={p.toggleCam} />
         <Sep />
-        <Btn label={p.running ? 'Pause clock' : 'Start clock'} onClick={p.onToggleTimer} />
-        <Btn label="Next segment" onClick={p.onNextSegment} />
+        {p.hasSegments !== false && (
+          <>
+            <Btn label={p.running ? 'Pause clock' : 'Start clock'} onClick={p.onToggleTimer} />
+            <Btn label="Next segment" onClick={p.onNextSegment} />
+          </>
+        )}
         <Btn label="Mute all" onClick={() => muteAudience(p.debateId)} />
         <Sep />
         {p.onTogglePoll && (

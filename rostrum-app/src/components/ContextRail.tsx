@@ -41,6 +41,10 @@ export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom,
   // Lecture has no sides, no audience verdict — the run-of-show list and
   // prop/opp poll don't apply.
   if (format === 'lecture') tabs = tabs.filter(([k]) => k !== 'ros' && k !== 'poll' && k !== 'vote' && k !== 'score');
+  // Legacy is a freeform open room — no run-of-show, no voting, no Q&A queue.
+  if (format === 'legacy') tabs = tabs.filter(([k]) => k !== 'ros' && k !== 'poll' && k !== 'vote' && k !== 'score' && k !== 'qa');
+  // Speakers' Corner keeps audience voting but drops judges/ballots/Q&A/run-of-show.
+  if (format === 'speakers_corner') tabs = tabs.filter(([k]) => k !== 'ros' && k !== 'score' && k !== 'qa');
   return (
     <aside style={{ borderLeft:`1px solid ${C.hair}`, background:a(C.base2,'EB'), backdropFilter:'blur(20px)', display:'flex', flexDirection:'column', minHeight:0 }}>
       <div style={{ display:'flex', padding:8, gap:5, borderBottom:`1px solid ${C.hair}`, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
@@ -227,9 +231,15 @@ function InvitePanel({ debateId, format }: { debateId: string; format?: string }
     { label: 'Moderator',           q: 'role=moderator',          color: C.gold },
     { label: 'Judge',               q: 'role=judge',              color: C.dim },
   ];
+  const legacySeats: { label: string; q: string; color: string }[] = [
+    { label: 'Speaker',   q: 'role=debater',   color: C.jadeHi },
+    { label: 'Moderator', q: 'role=moderator', color: C.gold },
+  ];
   // Lecture is a single presenter — no debater sides, no judges. A
   // moderator (co-host) is still a reasonable seat to invite.
-  const seats = format === 'lecture' ? allSeats.filter(s => s.label === 'Moderator') : allSeats;
+  const seats = format === 'lecture' ? allSeats.filter(s => s.label === 'Moderator')
+    : format === 'legacy' ? legacySeats
+    : allSeats;
   const [copied, setCopied] = useState<string | null>(null);
   const link = (q: string) => `${origin}/debate/${debateId}/join?${q}`;
   async function copy(q: string) {

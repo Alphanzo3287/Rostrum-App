@@ -526,7 +526,8 @@ export function WaitingHall({ debateId, members, motion, viewerCount, scheduledA
   const oppMember = members.find(m => m.role === 'debater' && m.side === 'opp');
   const audience = members.filter(m => m.role === 'audience');
   const isHost = role === 'host';
-  const isLecture = format === 'lecture';
+  const noSides = format === 'lecture' || format === 'legacy';
+  const hideJudge = noSides || format === 'speakers_corner';
 
   const doorsIn = useCountdown(scheduledAt);
   const clockStr = doorsIn == null ? null
@@ -565,11 +566,11 @@ export function WaitingHall({ debateId, members, motion, viewerCount, scheduledA
       </div>
 
       {/* host / mod / judges */}
-      <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile} hideJudge={isLecture}
+      <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile} hideJudge={hideJudge}
         onModContextMenu={mod && onContextMenu ? (e) => onContextMenu(e, mod) : undefined} />
 
       {/* competitor waiting cards — not applicable to Lecture (single presenter, no sides) */}
-      {!isLecture && (
+      {!noSides && (
         <div style={{ display: 'flex', gap: 14, marginTop: 4, marginBottom: 16, flexWrap: 'wrap' }}>
           <WaitingSeatCard side="prop" member={propMember} debateId={debateId} canInvite={isHost && !propMember}
             onContextMenu={propMember && onContextMenu ? (e) => onContextMenu(e, propMember) : undefined} />
