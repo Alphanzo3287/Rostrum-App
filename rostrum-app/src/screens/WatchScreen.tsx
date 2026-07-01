@@ -14,6 +14,7 @@ import { useDebate } from '../lib/useDebate';
 import { joinDebate, getDebate, getTally, subscribeTally } from '../lib/api';
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
+import { WinnerOverlay } from '../components/WinnerOverlay';
 import { C, ui, display, mono, a } from '../lib/theme';
 import type { Debate, Tally } from '../lib/types';
 
@@ -80,12 +81,24 @@ export function WatchScreen({ debateId, onLeave }: { debateId: string; onLeave: 
 
       {/* ── Back button — ALWAYS visible and clickable ── */}
       <button onClick={onLeave}
-        style={{ position:'absolute', top:14, left:16, zIndex:50,
+        style={{ position:'absolute', top:14, left:16, zIndex:100,
           background:'rgba(0,0,0,0.55)', border:`1px solid ${C.hair}`, color:C.ink,
           cursor:'pointer', fontFamily:ui, fontSize:18, lineHeight:1,
           padding:'7px 13px', borderRadius:6, backdropFilter:'blur(4px)' }}>
         ‹ Exit
       </button>
+
+      {dz.debate?.winner_announced && dz.results && (
+        <WinnerOverlay
+          winnerSide={dz.results.winner_side}
+          winMode={dz.debate.win_mode ?? 'public'}
+          peoplesChoice={dz.results.peoples_choice_side}
+          propScore={dz.results.prop_judge_total}
+          oppScore={dz.results.opp_judge_total}
+          propAudience={dz.results.prop_audience}
+          oppAudience={dz.results.opp_audience}
+        />
+      )}
 
       {/* ── Top chrome (fades on idle, but back button above is unaffected) ── */}
       <div style={{ position:'absolute', top:0, left:0, right:0, zIndex:20,

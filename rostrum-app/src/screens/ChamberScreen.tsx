@@ -550,15 +550,17 @@ function LiveHall({
   return (
     <div style={{ display:'flex', flexDirection:'column', minHeight:0, height:'100%',
       overflowY:'auto', paddingBottom: narrow ? 10 : 0 }}>
-      <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile} right={monitorToggle} />
+      <div style={{ flexShrink:0 }}>
+        <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile} right={monitorToggle} />
+      </div>
 
       {narrow ? (
-        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+        <div style={{ display:'flex', flexDirection:'column', gap:12, flexShrink:0 }}>
           <div style={{ height:'46vh', minHeight:260, display:'flex' }}>{stage}</div>
           <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1fr', gap:12 }}>{propCard}{oppCard}</div>
         </div>
       ) : (
-        <div style={{ flex:'1 1 auto', minHeight:0, display:'grid', gap:14,
+        <div style={{ flex:'1 1 auto', flexShrink:0, minHeight:0, display:'grid', gap:14,
           gridTemplateColumns:'minmax(220px,300px) minmax(0,1fr) minmax(220px,300px)' }}>
           {propCard}
           <div style={{ display:'flex', minHeight:0 }}>{stage}</div>
@@ -566,25 +568,25 @@ function LiveHall({
         </div>
       )}
 
-      <div style={{ display:'grid', gap:12, marginTop:14,
+      <div style={{ display:'grid', gap:12, marginTop:14, flexShrink:0,
         gridTemplateColumns: narrow ? '1fr' : '1.1fr 1.3fr 1fr' }}>
         <GalleryStrip audience={audience} onProfile={onProfile} />
         <AudienceVoteStrip tally={tally} myVote={myVote} canVote={!!dz.debate?.poll_open} onVote={onVote} />
         <JudgesStrip judges={judges} onProfile={onProfile} />
       </div>
 
-      <div style={{ marginTop:12 }}>
+      <div style={{ marginTop:12, flexShrink:0 }}>
         <FloorStatStrip floor={floor} hasFloorSide={speakerSide} phaseLabel={phaseLabel} segTotal={segTotal} />
       </div>
 
       {me && (
-        <div style={{ marginTop:12 }}>
+        <div style={{ marginTop:12, flexShrink:0 }}>
           <InteractionBar room={room.room} identity={me.identity} name={me.name} onAskQuestion={onAskQuestion} />
         </div>
       )}
 
       {canControl && (
-        <div style={{ marginTop:12 }}>
+        <div style={{ marginTop:12, flexShrink:0 }}>
           <SafePanel resetKey={`bar:${dz.phase}`} label="Controls">
             <BroadcastBar debateId={debateId} role={role} identity={me?.identity ?? ''}
               members={members} lkRoom={room.room} setScreenShare={room.setScreenShare}
@@ -593,7 +595,7 @@ function LiveHall({
         </div>
       )}
 
-      <div style={{ display:'flex', gap:9, overflowX:'auto', padding:'12px 2px 4px' }}>
+      <div style={{ display:'flex', gap:9, overflowX:'auto', padding:'12px 2px 4px', flexShrink:0 }}>
         {members.map(m => (
           <div key={m.identity} style={{ width:108, flexShrink:0 }}>
             <VideoTile member={m} active={m.identity === speaker?.identity} />
