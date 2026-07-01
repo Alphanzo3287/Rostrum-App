@@ -70,6 +70,8 @@ export const startYouTube  = (debateId: string, streamKey?: string) => control(d
 export const stopEgress    = (debateId: string, egressId: string) => control(debateId, 'egress_stop', { egressId });
 export const removePeer    = (debateId: string, identity: string) => control(debateId, 'remove', { identity });
 export const demoteFromStage = (debateId: string, identity: string) => control(debateId, 'demote_to_audience', { identity });
+export const promoteFromAudience = (debateId: string, identity: string, role: string, side: string | null) =>
+  control(debateId, 'promote_to_role', { identity, role, side });
 
 /**
  * Convenience for "Next segment": open the mics of the side now speaking,

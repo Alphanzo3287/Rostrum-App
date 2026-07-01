@@ -148,6 +148,17 @@ export const handler: Handler = async (event) => {
         return json(200, { ok: true });
       }
 
+      // host: promote an audience member into a stage role — the inverse
+      // of demote_to_audience. Pushes new metadata live and grants publish.
+      case 'promote_to_role': {
+        const list = await rooms.listParticipants(room);
+        const p = list.find(pp => pp.identity === payload.identity);
+        const md = p ? parseMeta(p.metadata) : {};
+        const nextMeta = JSON.stringify({ ...md, role: payload.role, side: payload.side ?? null });
+        await rooms.updateParticipant(room, payload.identity, nextMeta, PUBLISH(true));
+        return json(200, { ok: true });
+      }
+
       default:
         return json(400, { error: `unknown action: ${action}` });
     }

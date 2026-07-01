@@ -849,9 +849,11 @@ export async function inviteToTeam(teamId: string, userId: string): Promise<void
 }
 
 export async function listMyTeamInvites(): Promise<TeamInvite[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
   const { data, error } = await supabase.from('team_invites')
     .select('*, team:teams(id,name,tag,color), inviter:profiles!team_invites_invited_by_fkey(display_name,handle,avatar_url)')
-    .eq('status', 'pending').order('created_at', { ascending: false });
+    .eq('status', 'pending').eq('invited_user_id', user.id).order('created_at', { ascending: false });
   if (error) throw error;
   return (data ?? []) as unknown as TeamInvite[];
 }
@@ -900,6 +902,17 @@ export async function searchAll(q: string): Promise<SearchResults> {
    + pushes new metadata so it's reflected live, not just on reconnect. */
 export async function demoteToAudience(debateId: string, userId: string, identity: string): Promise<void> {
   const { error } = await supabase.from('debate_participants')
-    .update({ role: 'audience', side: null }).eq('debate_id', debateId).eq('user_id', userId);
+    .update({ role: 'audience', side: null, can_publish: false }).eq('debate_id', debateId).eq('user_id', userId);
+  if (error) throw error;
+}
+
+/** Host: promote a seated audience member into a stage role (the inverse
+ * of demoteToAudience). Persists the role + grants publish so a reconnect
+ * doesn't silently revert them, and pushes live metadata via LiveKit. */
+export async function promoteToRole(
+  debateId: string, userId: string, role: 'moderator' | 'debater' | 'judge', side: Side | null,
+): Promise<void> {
+  const { error } = await supabase.from('debate_participants')
+    .update({ role, side, can_publish: true }).eq('debate_id', debateId).eq('user_id', userId);
   if (error) throw error;
 }

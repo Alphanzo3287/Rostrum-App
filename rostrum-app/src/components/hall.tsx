@@ -56,7 +56,7 @@ export function Initials({ name, size = 30, url }: { name: string; size?: number
 }
 
 /* ============================ COMPETITOR CARD ============================ */
-export function CompetitorCard({ side, member, profile, hasFloor, speakingSecs, segTotal, onProfile }: {
+export function CompetitorCard({ side, member, profile, hasFloor, speakingSecs, segTotal, onProfile, onContextMenu }: {
   side: Side;
   member?: RoomMember;
   profile?: Profile;
@@ -64,6 +64,7 @@ export function CompetitorCard({ side, member, profile, hasFloor, speakingSecs, 
   speakingSecs: number;
   segTotal: number;
   onProfile?: (handle?: string | null) => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }) {
   const t = sideTone(side);
   const name = profile?.display_name || member?.name || t.label;
@@ -80,7 +81,8 @@ export function CompetitorCard({ side, member, profile, hasFloor, speakingSecs, 
     <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: 20, overflow: 'hidden',
       background: `linear-gradient(180deg, ${a(t.base, '14')}, ${a(C.panel, 'CC')} 42%)`,
       border: `1px solid ${a(t.base, hasFloor ? '66' : '33')}`,
-      boxShadow: hasFloor ? `0 0 0 1px ${a(t.base, '40')}, 0 18px 50px ${a(t.base, '24')}` : `0 14px 40px ${a('#000000', '40')}` }}>
+      boxShadow: hasFloor ? `0 0 0 1px ${a(t.base, '40')}, 0 18px 50px ${a(t.base, '24')}` : `0 14px 40px ${a('#000000', '40')}` }}
+      onContextMenu={member && onContextMenu ? (e) => { e.preventDefault(); onContextMenu(e); } : undefined}>
 
       {/* side eyebrow */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px 8px' }}>
@@ -249,14 +251,15 @@ export function FloorStage({ roundLabel, countdown, hasFloorSide, assembling, ch
 }
 
 /* =========================== HOST / MOD / JUDGE TOP ROW =========================== */
-export function HostTopRow({ host, mod, judgeCount, onProfile, right }: {
+export function HostTopRow({ host, mod, judgeCount, onProfile, right, onModContextMenu }: {
   host?: RoomMember; mod?: RoomMember; judgeCount: number;
   onProfile?: (handle?: string | null) => void; right?: React.ReactNode;
+  onModContextMenu?: (e: React.MouseEvent) => void;
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18, padding: '4px 0 12px', flexWrap: 'wrap' }}>
       <SeatPill member={host} label="Host" tone={C.warning} glow onProfile={onProfile} />
-      <SeatPill member={mod} label="Moderator" tone={C.gold} onProfile={onProfile} />
+      <SeatPill member={mod} label="Moderator" tone={C.gold} onProfile={onProfile} onContextMenu={onModContextMenu} />
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 12,
         background: C.glass, border: `1px solid ${C.hair}` }}>
         <span style={{ width: 26, height: 26, borderRadius: '50%', display: 'grid', placeItems: 'center',
@@ -270,12 +273,14 @@ export function HostTopRow({ host, mod, judgeCount, onProfile, right }: {
   );
 }
 
-function SeatPill({ member, label, tone, glow, onProfile }: {
+function SeatPill({ member, label, tone, glow, onProfile, onContextMenu }: {
   member?: RoomMember; label: string; tone: string; glow?: boolean; onProfile?: (h?: string | null) => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }) {
   const clickable = !!(member && onProfile && member.handle);
   return (
     <span onClick={clickable ? () => onProfile!(member!.handle) : undefined}
+      onContextMenu={member && onContextMenu ? (e) => { e.preventDefault(); onContextMenu(e); } : undefined}
       title={member ? member.name : `Open ${label}`}
       style={{ display: 'inline-flex', alignItems: 'center', gap: 9, padding: '6px 12px 6px 6px', borderRadius: 999,
         background: member ? a(tone, '14') : C.glass, border: `1px solid ${member ? a(tone, '55') : C.hair}`,
@@ -297,8 +302,9 @@ function SeatPill({ member, label, tone, glow, onProfile }: {
 }
 
 /* ============================== BOTTOM ROW ============================== */
-export function GalleryStrip({ audience, onProfile }: {
+export function GalleryStrip({ audience, onProfile, onMemberContextMenu }: {
   audience: RoomMember[]; onProfile?: (h?: string | null) => void;
+  onMemberContextMenu?: (e: React.MouseEvent, m: RoomMember) => void;
 }) {
   const GAL = 9;
   return (
@@ -310,6 +316,7 @@ export function GalleryStrip({ audience, onProfile }: {
               const clickable = !!(onProfile && m.handle);
               return (
                 <span key={m.identity} onClick={clickable ? () => onProfile!(m.handle) : undefined}
+                  onContextMenu={onMemberContextMenu ? (e) => { e.preventDefault(); onMemberContextMenu(e, m); } : undefined}
                   title={m.name} style={{ cursor: clickable ? 'pointer' : 'default' }}>
                   <Initials name={m.name} size={28} />
                 </span>
@@ -362,7 +369,10 @@ export function AudienceVoteStrip({ tally, myVote, canVote, onVote }: {
   );
 }
 
-export function JudgesStrip({ judges, onProfile }: { judges: RoomMember[]; onProfile?: (h?: string | null) => void }) {
+export function JudgesStrip({ judges, onProfile, onJudgeContextMenu }: {
+  judges: RoomMember[]; onProfile?: (h?: string | null) => void;
+  onJudgeContextMenu?: (e: React.MouseEvent, m: RoomMember) => void;
+}) {
   return (
     <Panel title={`Judges · ${judges.length}`}>
       <div style={{ display: 'flex', gap: 10 }}>
@@ -372,6 +382,7 @@ export function JudgesStrip({ judges, onProfile }: { judges: RoomMember[]; onPro
               const clickable = !!(onProfile && j.handle);
               return (
                 <div key={j.identity} onClick={clickable ? () => onProfile!(j.handle) : undefined}
+                  onContextMenu={onJudgeContextMenu ? (e) => { e.preventDefault(); onJudgeContextMenu(e, j); } : undefined}
                   title={j.name} style={{ textAlign: 'center', cursor: clickable ? 'pointer' : 'default' }}>
                   <div style={{ position: 'relative', display: 'inline-block' }}>
                     <Initials name={j.name} size={34} />

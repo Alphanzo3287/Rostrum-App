@@ -15,10 +15,10 @@ import { useDebate } from '../lib/useDebate';
 import { useYouTubeStream } from '../lib/useYouTubeStream';
 import {
   joinDebate, getBroadcastState, subscribeBroadcastState, getResults,
-  getFloorStats, getTally, castVote, listParticipants, demoteToAudience,
+  getFloorStats, getTally, castVote, listParticipants, demoteToAudience, promoteToRole,
   type BroadcastState, type FloorStats,
 } from '../lib/api';
-import { demoteFromStage } from '../lib/livekit';
+import { demoteFromStage, promoteFromAudience } from '../lib/livekit';
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
 import { ScreenTile } from '../components/ScreenTile';
@@ -530,45 +530,44 @@ function LiveHall({
     : <FloorStage roundLabel={phaseLabel} countdown={countdown} hasFloorSide={speakerSide}
         presenting={presentingContent} presenterName={presenter?.name}>{overlays}</FloorStage>;
 
+  const isHost = role === 'host';
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; member: M } | null>(null);
+  const openCtxMenu = (e: React.MouseEvent, m: M) => {
+    if (!isHost || m.identity === me?.identity) return;
+    setCtxMenu({ x: e.clientX, y: e.clientY, member: m });
+  };
+
   const propCard = (
     <CompetitorCard side="prop" member={propMember} profile={sideProfiles.prop}
-      hasFloor={speakerSide === 'prop'} speakingSecs={floor?.prop_speaking ?? 0} segTotal={segTotal} onProfile={onProfile} />
+      hasFloor={speakerSide === 'prop'} speakingSecs={floor?.prop_speaking ?? 0} segTotal={segTotal} onProfile={onProfile}
+      onContextMenu={isHost && propMember ? (e) => openCtxMenu(e, propMember) : undefined} />
   );
   const oppCard = (
     <CompetitorCard side="opp" member={oppMember} profile={sideProfiles.opp}
-      hasFloor={speakerSide === 'opp'} speakingSecs={floor?.opp_speaking ?? 0} segTotal={segTotal} onProfile={onProfile} />
+      hasFloor={speakerSide === 'opp'} speakingSecs={floor?.opp_speaking ?? 0} segTotal={segTotal} onProfile={onProfile}
+      onContextMenu={isHost && oppMember ? (e) => openCtxMenu(e, oppMember) : undefined} />
   );
 
-  const isHost = role === 'host';
-  const [manageOpen, setManageOpen] = useState(false);
-
   const monitorToggle = canControl ? (
-    <div style={{ display:'flex', gap:8 }}>
-      {isHost && (
-        <button onClick={() => setManageOpen(true)} title="Move a seated participant back to the audience"
-          style={{ padding:'6px 12px', borderRadius:10, border:`1px solid ${C.hair}`,
-            background:C.glass, color:C.dim, fontFamily:ui, fontSize:12, fontWeight:600, cursor:'pointer' }}>
-          ⚙ Manage seats
-        </button>
-      )}
-      <button onClick={() => setMonitor(v => !v)} title="Toggle the broadcast monitor (what YouTube sees)"
-        style={{ padding:'6px 12px', borderRadius:10, border:`1px solid ${monitor ? a(C.gold,'66') : C.hair}`,
-          background: monitor ? a(C.gold,'1F') : C.glass, color: monitor ? C.goldHi : C.dim,
-          fontFamily:ui, fontSize:12, fontWeight:600, cursor:'pointer' }}>
-        ◉ {monitor ? 'Monitor on' : 'Monitor'}
-      </button>
-    </div>
+    <button onClick={() => setMonitor(v => !v)} title="Toggle the broadcast monitor (what YouTube sees)"
+      style={{ padding:'6px 12px', borderRadius:10, border:`1px solid ${monitor ? a(C.gold,'66') : C.hair}`,
+        background: monitor ? a(C.gold,'1F') : C.glass, color: monitor ? C.goldHi : C.dim,
+        fontFamily:ui, fontSize:12, fontWeight:600, cursor:'pointer' }}>
+      ◉ {monitor ? 'Monitor on' : 'Monitor'}
+    </button>
   ) : undefined;
 
   return (
     <div style={{ display:'flex', flexDirection:'column', minHeight:0, height:'100%',
       overflowY:'auto', paddingBottom: narrow ? 10 : 0 }}>
       <div style={{ flexShrink:0 }}>
-        <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile} right={monitorToggle} />
+        <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile} right={monitorToggle}
+          onModContextMenu={isHost && mod ? (e) => openCtxMenu(e, mod) : undefined} />
       </div>
 
-      {manageOpen && (
-        <ManageSeatsModal debateId={debateId} members={members} onClose={() => setManageOpen(false)} />
+      {ctxMenu && (
+        <StageActionMenu x={ctxMenu.x} y={ctxMenu.y} member={ctxMenu.member} debateId={debateId}
+          onClose={() => setCtxMenu(null)} />
       )}
 
       {narrow ? (
@@ -587,9 +586,11 @@ function LiveHall({
 
       <div style={{ display:'grid', gap:12, marginTop:14, flexShrink:0,
         gridTemplateColumns: narrow ? '1fr' : '1.1fr 1.3fr 1fr' }}>
-        <GalleryStrip audience={audience} onProfile={onProfile} />
+        <GalleryStrip audience={audience} onProfile={onProfile}
+          onMemberContextMenu={isHost ? (e, m) => openCtxMenu(e, m) : undefined} />
         <AudienceVoteStrip tally={tally} myVote={myVote} canVote={!!dz.debate?.poll_open} onVote={onVote} />
-        <JudgesStrip judges={judges} onProfile={onProfile} />
+        <JudgesStrip judges={judges} onProfile={onProfile}
+          onJudgeContextMenu={isHost ? (e, m) => openCtxMenu(e, m) : undefined} />
       </div>
 
       <div style={{ marginTop:12, flexShrink:0 }}>
@@ -623,51 +624,65 @@ function LiveHall({
   );
 }
 
-/* ---- C5 · Manage Seats (host-only: return someone to the audience) ---- */
-function ManageSeatsModal({ debateId, members, onClose }: { debateId: string; members: any[]; onClose: () => void }) {
-  const [busy, setBusy] = useState<string | null>(null);
-  const seated = members.filter(m => m.role !== 'audience' && m.role !== 'host');
+/* ---- C5 · Stage Action Menu (host-only: right-click a profile to
+   promote them onto the stage or move them back to the audience) ---- */
+function StageActionMenu({ x, y, member, debateId, onClose }: {
+  x: number; y: number; member: M; debateId: string; onClose: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const onStage = member.role !== 'audience';
 
-  async function demote(m: any) {
-    setBusy(m.identity);
+  async function demote() {
+    setBusy(true);
     try {
-      await Promise.all([demoteToAudience(debateId, m.identity, m.identity), demoteFromStage(debateId, m.identity)]);
-    } catch (e: any) { alert(e?.message ?? 'Could not move to audience'); }
-    finally { setBusy(null); }
+      await Promise.all([demoteToAudience(debateId, member.identity, member.identity), demoteFromStage(debateId, member.identity)]);
+      onClose();
+    } catch (e: any) { alert(e?.message ?? 'Could not move to audience'); setBusy(false); }
+  }
+  async function promote(role: 'moderator' | 'debater' | 'judge', side: 'prop' | 'opp' | null) {
+    setBusy(true);
+    try {
+      await Promise.all([promoteToRole(debateId, member.identity, role, side), promoteFromAudience(debateId, member.identity, role, side)]);
+      onClose();
+    } catch (e: any) { alert(e?.message ?? 'Could not update role'); setBusy(false); }
   }
 
+  const menuW = 200;
+  const left = typeof window !== 'undefined' ? Math.min(x, window.innerWidth - menuW - 12) : x;
+  const top = typeof window !== 'undefined' ? Math.min(y, window.innerHeight - 220) : y;
+
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:200, display:'grid', placeItems:'center',
-      background:a(C.base,'CC'), backdropFilter:'blur(6px)', padding:20 }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ width:420, maxWidth:'100%', maxHeight:'80vh', overflowY:'auto', borderRadius:14,
-        background:C.panel, border:`1px solid ${C.hair}`, padding:24, boxShadow:'0 20px 60px rgba(0,0,0,.5)' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
-          <h3 style={{ fontFamily:display, fontSize:19, color:C.ink, margin:0 }}>Manage seats</h3>
-          <button onClick={onClose} style={{ background:'none', border:'none', color:C.faint, fontSize:20, cursor:'pointer' }}>×</button>
+    <>
+      <div onClick={onClose} onContextMenu={e => { e.preventDefault(); onClose(); }}
+        style={{ position:'fixed', inset:0, zIndex:205 }} />
+      <div style={{ position:'fixed', top, left, zIndex:210, width:menuW, borderRadius:12,
+        background:C.panel, border:`1px solid ${C.hairHi}`, boxShadow:'0 20px 50px rgba(0,0,0,.5)', padding:6 }}>
+        <div style={{ padding:'8px 10px 7px', fontFamily:ui, fontSize:11.5, fontWeight:700, color:C.ink,
+          borderBottom:`1px solid ${C.hair}`, marginBottom:4, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+          {member.name}
         </div>
-        {seated.length === 0 ? (
-          <p style={{ fontFamily:ui, fontSize:13, color:C.faint }}>No one else is seated on stage right now.</p>
+        {onStage ? (
+          <MenuBtn label="→ Move to audience" danger onClick={demote} busy={busy} />
         ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            {seated.map(m => (
-              <div key={m.identity} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 11px',
-                borderRadius:10, background:C.panel2, border:`1px solid ${C.hair}` }}>
-                <span style={{ flex:1, minWidth:0, fontFamily:ui, fontSize:13.5, color:C.ink,
-                  whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{m.name}</span>
-                <span style={{ fontFamily:ui, fontSize:10.5, fontWeight:700, letterSpacing:'.06em', textTransform:'uppercase',
-                  color:C.faint }}>{m.role}{m.side ? ` · ${m.side}` : ''}</span>
-                <button onClick={() => demote(m)} disabled={busy === m.identity}
-                  style={{ padding:'6px 11px', borderRadius:8, cursor:'pointer', fontFamily:ui, fontSize:11.5, fontWeight:600,
-                    color:C.garnetHi, background:a(C.garnet,'14'), border:`1px solid ${a(C.garnet,'44')}`,
-                    opacity: busy === m.identity ? .6 : 1 }}>
-                  {busy === m.identity ? '…' : '→ Audience'}
-                </button>
-              </div>
-            ))}
-          </div>
+          <>
+            <MenuBtn label="Make Proposition" onClick={() => promote('debater', 'prop')} busy={busy} />
+            <MenuBtn label="Make Opposition" onClick={() => promote('debater', 'opp')} busy={busy} />
+            <MenuBtn label="Make Moderator" onClick={() => promote('moderator', null)} busy={busy} />
+            <MenuBtn label="Make Judge" onClick={() => promote('judge', null)} busy={busy} />
+          </>
         )}
       </div>
-    </div>
+    </>
+  );
+}
+function MenuBtn({ label, onClick, busy, danger }: { label: string; onClick: () => void; busy: boolean; danger?: boolean }) {
+  return (
+    <button onClick={onClick} disabled={busy} style={{ display:'block', width:'100%', textAlign:'left', padding:'9px 10px',
+      borderRadius:8, border:'none', background:'transparent', cursor: busy ? 'default' : 'pointer',
+      fontFamily:ui, fontSize:13, fontWeight:500, color: danger ? C.garnetHi : C.ink, opacity: busy ? .6 : 1 }}
+      onMouseEnter={e => { if (!busy) e.currentTarget.style.background = C.panel2; }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+      {busy ? '…' : label}
+    </button>
   );
 }
