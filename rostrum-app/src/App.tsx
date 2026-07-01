@@ -209,7 +209,7 @@ function WatchRoute() {
   const { id } = useParams();
   const nav = useNavigate();
   if (!id) return <Navigate to="/" replace />;
-  return <WatchScreen debateId={id} onLeave={() => nav('/')} />;
+  return <WatchScreen debateId={id} onLeave={() => nav(`/debate/${id}`)} />;
 }
 function InviteRoute() {
   const { id } = useParams();

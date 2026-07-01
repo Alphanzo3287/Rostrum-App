@@ -57,6 +57,8 @@ export function WatchScreen({ debateId, onLeave }: { debateId: string; onLeave: 
     };
   }, [showUI]);
 
+  const isLecture = dz.debate?.format === 'lecture';
+  const host = room.members.find(m => m.role === 'host');
   const speakerSide = dz.seg?.side ?? null;
   const speaker = room.members.find(m => m.isSpeaking)
     ?? room.members.find(m => m.role === 'debater' && m.side === speakerSide)
@@ -74,6 +76,65 @@ export function WatchScreen({ debateId, onLeave }: { debateId: string; onLeave: 
   const total = tally.prop + tally.opp || 1;
   const propPct = Math.round((tally.prop / total) * 100);
   const oppPct = 100 - propPct;
+
+  if (isLecture) {
+    return (
+      <div style={{ position:'fixed', inset:0, background:'#0a0909', display:'flex', flexDirection:'column' }}
+        onMouseMove={showUI} onTouchStart={showUI}>
+        <button onClick={onLeave}
+          style={{ position:'absolute', top:14, left:16, zIndex:100,
+            background:'rgba(0,0,0,0.55)', border:`1px solid ${C.hair}`, color:C.ink,
+            cursor:'pointer', fontFamily:ui, fontSize:18, lineHeight:1,
+            padding:'7px 13px', borderRadius:6, backdropFilter:'blur(4px)' }}>
+          ‹ Exit
+        </button>
+
+        <div style={{ position:'absolute', top:0, left:0, right:0, zIndex:20,
+          background:'linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, transparent 100%)',
+          padding:'16px 20px 16px 90px', display:'flex', alignItems:'center', gap:14,
+          opacity: uiVis ? 1 : 0, transition:'opacity 0.4s', pointerEvents: uiVis ? 'auto' : 'none' }}>
+          <div style={{ flex:1, minWidth:0 }}>
+            {debate?.motion && (
+              <div style={{ fontFamily:display, fontSize:15, fontWeight:600, color:C.ink,
+                whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:500 }}>{debate.motion}</div>
+            )}
+            {dz.seg && <div style={{ fontFamily:ui, fontSize:11, color:C.faint, marginTop:2 }}>{dz.seg.label}</div>}
+          </div>
+          {onAir && (
+            <div style={{ fontFamily:mono, fontSize:20, fontWeight:700, color: low ? C.garnetHi : C.ink, letterSpacing:'0.04em' }}>
+              {mm}:{ss}
+            </div>
+          )}
+          {onAir && (
+            <div style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 10px', borderRadius:999,
+              background:'rgba(220,50,50,0.15)', border:'1px solid rgba(220,50,50,0.4)' }}>
+              <span style={{ width:7, height:7, borderRadius:'50%', background:'#e03030', animation:'pulse 1.5s ease-in-out infinite' }} />
+              <span style={{ fontFamily:ui, fontSize:11, fontWeight:700, color:'#e03030', letterSpacing:'.06em' }}>LIVE</span>
+            </div>
+          )}
+          <div style={{ fontFamily:ui, fontSize:12, color:C.faint }}>
+            {Math.max(dz.debate?.viewer_count ?? 0, room.members.length).toLocaleString()} watching
+          </div>
+        </div>
+
+        {/* the stage: presenter + deck — nothing else */}
+        <div style={{ flex:1, display:'flex', overflow:'hidden' }}>
+          <div style={{ flex:'0 0 30%', minWidth:220, maxWidth:360, position:'relative', background:'#111', borderRight:'1px solid rgba(255,255,255,0.08)' }}>
+            {host
+              ? <div style={{ position:'absolute', inset:0 }}><VideoTile member={host} active size="stage" /></div>
+              : <div style={{ position:'absolute', inset:0, display:'grid', placeItems:'center', color:C.faint, fontFamily:ui, fontSize:13 }}>
+                  Waiting for the presenter…
+                </div>}
+          </div>
+          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', background:'#000', padding:8 }}>
+            <SlideStage debateId={debateId} canPresent={false} />
+          </div>
+        </div>
+
+        <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }`}</style>
+      </div>
+    );
+  }
 
   return (
     <div style={{ position:'fixed', inset:0, background:'#0a0909', display:'flex', flexDirection:'column' }}

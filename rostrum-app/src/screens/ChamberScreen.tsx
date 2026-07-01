@@ -534,10 +534,10 @@ function LectureHall({
       </div>
 
       {/* main stage — layout-driven, always the ChamberPreview composition */}
-      <div style={{ flex:'1 1 auto', flexShrink:0, minHeight: narrow ? 300 : 360, display:'flex', position:'relative' }}>
+      <div style={{ flex:'1 1 auto', minHeight: narrow ? 220 : 260, display:'flex', position:'relative', overflow:'hidden' }}>
         <div style={{ position:'relative', height:'100%', width:'100%', borderRadius:18, overflow:'hidden',
           border:`1px solid ${C.hair}`, background:C.base2, display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <div style={{ width:'100%', aspectRatio:'16 / 9', maxHeight:'100%', position:'relative' }}>
+          <div style={{ height:'100%', maxWidth:'100%', maxHeight:'100%', aspectRatio:'16 / 9', position:'relative' }}>
             <SafePanel resetKey={`lecture:${bs.layout}:${bs.presenterId ?? ''}`} label="Stage" fill>
               <ChamberPreview members={members} bs={bs} debateId={debateId} speaker={speaker} speakerSide={null} meId={me?.identity} />
             </SafePanel>
@@ -565,14 +565,6 @@ function LectureHall({
           </SafePanel>
         </div>
       )}
-
-      <div style={{ display:'flex', gap:9, overflowX:'auto', padding:'12px 2px 4px', flexShrink:0 }}>
-        {members.map((m: any) => (
-          <div key={m.identity} style={{ width:108, flexShrink:0 }}>
-            <VideoTile member={m} active={m.identity === speaker?.identity} />
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -645,7 +637,7 @@ function LiveHall({
     ? (
       <div style={{ position:'relative', height:'100%', width:'100%', minHeight:0, display:'flex', alignItems:'center', justifyContent:'center',
         borderRadius:18, overflow:'hidden', border:`1px solid ${C.hair}`, background:C.base2 }}>
-        <div style={{ width:'100%', aspectRatio:'16 / 9', maxHeight:'100%', position:'relative' }}>
+        <div style={{ height:'100%', maxWidth:'100%', maxHeight:'100%', aspectRatio:'16 / 9', position:'relative' }}>
           <SafePanel resetKey={`mon:${bs.layout}:${bs.presenterId ?? ''}`} label="Monitor" fill>
             <ChamberPreview members={members} bs={bs} debateId={debateId} speaker={speaker} speakerSide={speakerSide} meId={me?.identity} />
           </SafePanel>
