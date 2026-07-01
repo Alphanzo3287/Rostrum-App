@@ -827,3 +827,41 @@ export async function addEvidenceComment(evidenceId: string, body: string): Prom
   const { error } = await supabase.from('evidence_comments').insert({ evidence_id: evidenceId, author_id: user.id, body });
   if (error) throw error;
 }
+
+/* ─────────────────── TEAM INVITES ───────────────────
+   Replaces the old direct-add-without-consent flow. Sending an invite is a
+   plain insert (RLS already restricts it to team admins/owners); accepting
+   goes through a SECURITY DEFINER RPC since the invited user has no direct
+   write access to team_members. */
+export interface TeamInvite {
+  id: string; team_id: string; invited_user_id: string; invited_by: string;
+  status: 'pending' | 'accepted' | 'declined'; created_at: string;
+  team?: Pick<Team, 'id' | 'name' | 'tag' | 'color'>;
+  inviter?: Pick<Profile, 'display_name' | 'handle' | 'avatar_url'>;
+}
+
+export async function inviteToTeam(teamId: string, userId: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('not signed in');
+  const { error } = await supabase.from('team_invites')
+    .insert({ team_id: teamId, invited_user_id: userId, invited_by: user.id });
+  if (error) throw error;
+}
+
+export async function listMyTeamInvites(): Promise<TeamInvite[]> {
+  const { data, error } = await supabase.from('team_invites')
+    .select('*, team:teams(id,name,tag,color), inviter:profiles!team_invites_invited_by_fkey(display_name,handle,avatar_url)')
+    .eq('status', 'pending').order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as unknown as TeamInvite[];
+}
+
+export async function acceptTeamInvite(inviteId: string): Promise<void> {
+  const { error } = await supabase.rpc('accept_team_invite', { p_invite: inviteId });
+  if (error) throw error;
+}
+
+export async function declineTeamInvite(inviteId: string): Promise<void> {
+  const { error } = await supabase.from('team_invites').update({ status: 'declined', responded_at: new Date().toISOString() }).eq('id', inviteId);
+  if (error) throw error;
+}

@@ -28,6 +28,7 @@ import { InboxScreen, ThreadScreen } from './screens/MessagesScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { LeaderboardScreen } from './screens/LeaderboardScreen';
 import { TeamsScreen } from './screens/TeamsScreen';
+import { TournamentsScreen } from './screens/TournamentsScreen';
 import { StoreScreen } from './screens/StoreScreen';
 import { EarningsScreen } from './screens/EarningsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
@@ -91,6 +92,7 @@ function Gate() {
         <Route index element={<LobbyRoute />} />
         <Route path="leaderboard" element={<LeaderboardRoute />} />
         <Route path="teams" element={<TeamsRoute />} />
+        <Route path="tournaments" element={<TournamentsScreen />} />
         <Route path="store" element={<StoreRoute />} />
         <Route path="earnings" element={<EarningsRoute />} />
         <Route path="settings" element={<SettingsRoute />} />

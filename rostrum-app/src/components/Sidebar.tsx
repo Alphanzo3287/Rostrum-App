@@ -32,6 +32,8 @@ const MessagesIcon = () => <Icon d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-
 const WalletIcon = () => <Icon d="M21 12V7H5a2 2 0 0 1 0-4h14v4M3 5v14a2 2 0 0 0 2 2h16v-5M18 12a2 2 0 0 0 0 4h4v-4z" />;
 const MenuIcon = () => <Icon d="M3 6h18M3 12h18M3 18h18" size={20} />;
 const CloseIcon = () => <Icon d="M18 6L6 18M6 6l12 12" size={20} />;
+const TeamsIcon = () => <Icon d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75M18 8l1.5 1.5L23 6" />;
+const TournamentIcon = () => <Icon d="M6 3h12M6 3v4a6 6 0 0 0 12 0V3M6 3H3v2a4 4 0 0 0 4 4M18 3h3v2a4 4 0 0 1-4 4M9 13h6M12 13v5m-4 4h8" />;
 const CrownIcon = ({ size = 24 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
     <path d="M5 16L3 7l5.5 4L12 5l3.5 6L21 7l-2 9H5zm0 2h14v2H5v-2z" />
@@ -81,6 +83,7 @@ export function Sidebar() {
     { to: '/live',         label: 'Live Arenas',   icon: LiveIcon,        badge: 'live' },
     { to: '/discover',     label: 'Discover',      icon: DiscoverIcon },
     { to: '/communities',  label: 'Communities',   icon: CommunityIcon },
+    { to: '/teams',        label: 'Teams',         icon: TeamsIcon },
     { to: '/library',      label: 'Library',       icon: LibraryIcon },
     { to: '/leaderboard',  label: 'Rankings',      icon: RankingsIcon },
     { to: '/messages',     label: 'Messages',      icon: MessagesIcon,    badge: unread || undefined },
@@ -138,14 +141,14 @@ export function Sidebar() {
             </Link>
           );
         })}
-        {/* Notifications row */}
-        <Link to="/notifications"
+        {/* Tournaments row */}
+        <Link to="/tournaments"
           style={{ display:'flex', alignItems:'center', gap:12, padding:'11px 14px', borderRadius:12,
             textDecoration:'none', fontFamily:ui, fontSize:14, fontWeight:500,
-            color: active('/notifications') ? C.ink : C.dim, background:'transparent',
+            color: active('/tournaments') ? C.ink : C.dim, background:'transparent',
             border:'1px solid transparent', transition:'all .15s ease' }}>
-          <span style={{ color: active('/notifications') ? C.gold : C.faint, display:'flex' }}><BellIcon /></span>
-          <span style={{ flex:1 }}>Notifications</span>
+          <span style={{ color: active('/tournaments') ? C.gold : C.faint, display:'flex' }}><TournamentIcon /></span>
+          <span style={{ flex:1 }}>Tournaments</span>
         </Link>
         {/* Admin links */}
         {isAdmin && (
@@ -233,6 +236,12 @@ export function Sidebar() {
           </Link>
           <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:8 }}>
             <button onClick={() => nav('/host')} style={{ ...solidGold, padding:'7px 12px', fontSize:12 }}>＋</button>
+            <Link to="/notifications" aria-label="Notifications"
+              style={{ width:38, height:38, borderRadius:10, border:`1px solid ${C.hair}`,
+                background:'transparent', color: active('/notifications') ? C.gold : C.ink,
+                display:'grid', placeItems:'center', textDecoration:'none' }}>
+              <BellIcon />
+            </Link>
             <button onClick={() => setOpen(o => !o)} aria-label="Menu"
               style={{ width:38, height:38, borderRadius:10, border:`1px solid ${C.hair}`,
                 background:'transparent', color:C.ink, cursor:'pointer', display:'grid', placeItems:'center' }}>

@@ -68,7 +68,8 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
             background:`radial-gradient(circle at 20% 50%, ${a('#FFFFFF','40')}, transparent 50%)` }} />
         </div>
         <div style={{ padding:'0 28px 24px' }}>
-          <div style={{ display:'flex', gap:20, alignItems:'flex-end', flexWrap:'wrap', marginTop:-44 }}>
+          <div style={{ display:'flex', gap:20, alignItems:'flex-end', flexWrap:'wrap', marginTop:-44,
+            position:'relative', zIndex:1 }}>
             <div style={{ borderRadius:'50%', padding:4, background:C.panel }}>
               <Avatar url={profile.avatar_url} name={profile.display_name} size={92} />
             </div>
