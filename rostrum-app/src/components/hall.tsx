@@ -98,7 +98,8 @@ export function CompetitorCard({ side, member, profile, hasFloor, speakingSecs, 
 
       {/* video / waiting podium */}
       <div style={{ position: 'relative', margin: '0 12px', borderRadius: 14, overflow: 'hidden',
-        aspectRatio: '4 / 3', background: C.base2, border: `1px solid ${C.hair}` }}>
+        aspectRatio: '4 / 3', background: C.base2, border: `1px solid ${C.hair}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {member
           ? <div style={{ position: 'absolute', inset: 0 }}><VideoTile member={member} active={hasFloor} size="stage" /></div>
           : <WaitingPodium tone={t} />}
@@ -154,7 +155,7 @@ function StatChip({ label, value }: { label: string; value: string }) {
 
 function WaitingPodium({ tone }: { tone: { base: string; hi: string } }) {
   return (
-    <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
+    <div style={{ display: 'grid', placeItems: 'center', padding: '10px 0',
       background: `radial-gradient(120% 90% at 50% 25%, ${a(tone.base, '1F')}, transparent 70%)` }}>
       <div style={{ textAlign: 'center' }}>
         <div style={{ width: 56, height: 40, margin: '0 auto', borderRadius: '6px 6px 3px 3px',
@@ -497,21 +498,6 @@ export function WaitingHall({ debateId, members, motion, viewerCount, scheduledA
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', paddingBottom: 14 }}>
-      {/* eyebrow */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999,
-          background: a(C.gold, '1A'), border: `1px solid ${a(C.gold, '55')}` }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.gold }} />
-          <span style={{ fontFamily: ui, fontWeight: 700, fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: C.goldHi }}>Assembling</span>
-        </span>
-        <span style={{ fontFamily: ui, fontSize: 13, color: C.dim, whiteSpace: 'nowrap', overflow: 'hidden',
-          textOverflow: 'ellipsis', flex: '1 1 200px', minWidth: 0 }}>{motion}</span>
-        {clockStr && (
-          <span style={{ marginLeft: 'auto', fontFamily: ui, fontSize: 11.5, color: C.faint }}>
-            Doors open <span style={{ fontFamily: mono, color: C.ink }}>{clockStr}</span></span>
-        )}
-      </div>
-
       {/* the hall — center stage */}
       <div style={{ position: 'relative', borderRadius: 20, overflow: 'hidden', padding: '34px 20px',
         textAlign: 'center', border: `1px solid ${C.hair}`, background: C.base2, marginBottom: 16 }}>
