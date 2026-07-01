@@ -10,7 +10,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { useRoom } from '../lib/useRoom';
+import { useRoom, type RoomMember } from '../lib/useRoom';
 import { useDebate } from '../lib/useDebate';
 import { useYouTubeStream } from '../lib/useYouTubeStream';
 import {
@@ -19,6 +19,7 @@ import {
   type BroadcastState, type FloorStats,
 } from '../lib/api';
 import { demoteFromStage, promoteFromAudience } from '../lib/livekit';
+import { useStageInvites, type StageRole, type StageSide } from '../lib/stageInvites';
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
 import { ScreenTile } from '../components/ScreenTile';
@@ -28,7 +29,7 @@ import { RoleDock } from '../components/RoleDock';
 import { WinnerOverlay } from '../components/WinnerOverlay';
 import { BroadcastBar } from '../components/BroadcastBar';
 import { ShareButton } from '../components/ShareSheet';
-import { C, ui, display, mono, a } from '../lib/theme';
+import { C, ui, display, mono, a, ghostBtn, solidGold } from '../lib/theme';
 import { useIsTablet, useIsMobile } from '../lib/useMediaQuery';
 import { CompetitorCard, FloorStage, HostTopRow, GalleryStrip, AudienceVoteStrip, JudgesStrip, FloorStatStrip, WaitingHall } from '../components/hall';
 import { InteractionBar } from '../components/InteractionBar';
@@ -71,6 +72,27 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   const me = room.members.find(m => m.isLocal);
   const role = (me?.role ?? 'audience') as any;
   useEffect(() => { setTab(role === 'judge' ? 'score' : role === 'host' ? 'ros' : 'vote'); }, [role]);
+
+  // ---- C6 · Stage management (right-click promote/demote) — lives at the
+  // top level so it works during assembly (before "Begin debate") as well
+  // as once the debate is live, not just one phase. ----
+  const isHost = role === 'host';
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; member: RoomMember } | null>(null);
+  const openCtxMenu = (e: React.MouseEvent, m: RoomMember) => {
+    const isSelf = m.identity === me?.identity;
+    if (!isHost && !isSelf) return;         // only the host can act on others
+    if (isSelf && m.role === 'audience') return; // nothing to do for yourself while in the audience
+    if (!isSelf && m.role === 'host') return;    // the host isn't managed through this menu
+    setCtxMenu({ x: e.clientX, y: e.clientY, member: m });
+  };
+  const { incoming: incomingStageInvite, sendInvite: sendStageInvite, respond: respondStageInvite } =
+    useStageInvites(room.room, me?.identity ?? '', me?.name ?? '', isHost,
+      (fromIdentity, _fromName, role, side) => {
+        // Fires only on the host's own client once the target accepts —
+        // only the host is authorized to actually perform the promotion.
+        promoteToRole(debateId, fromIdentity, role, side).catch(() => {});
+        promoteFromAudience(debateId, fromIdentity, role, side).catch(() => {});
+      });
 
   const speakerSide = dz.seg?.side ?? null;
   const speaker = room.members.find(m => m.isSpeaking)
@@ -168,7 +190,8 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
           {dz.phase === 'assembly'
             ? <WaitingHall debateId={debateId} members={room.members} motion={dz.debate?.motion ?? ''}
                 viewerCount={Math.max(dz.debate?.viewer_count ?? 0, room.members.length)}
-                scheduledAt={dz.debate?.scheduled_at} role={role} onProfile={openProfile} />
+                scheduledAt={dz.debate?.scheduled_at} role={role} onProfile={openProfile}
+                onContextMenu={openCtxMenu} />
             : <LiveHall
                 debateId={debateId} room={room} dz={dz} bs={bs}
                 onLocalState={(patch) => setBs(b => ({ ...b, ...patch }))}
@@ -176,8 +199,20 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
                 floor={floor} tally={tally} myVote={myVote} onVote={onVote}
                 sideProfiles={sideProfiles} onProfile={openProfile} narrow={isNarrow} mobile={isMobile}
                 countdown={`${mm}:${ss}`} onAskQuestion={() => setTab('qa')}
+                isHost={isHost} onContextMenu={openCtxMenu}
               />}
         </div>
+
+        {ctxMenu && (
+          <StageActionMenu x={ctxMenu.x} y={ctxMenu.y} member={ctxMenu.member} debateId={debateId}
+            isSelf={ctxMenu.member.identity === me?.identity}
+            onSendInvite={(r, s) => sendStageInvite(ctxMenu.member.identity, r, s)}
+            onClose={() => setCtxMenu(null)} />
+        )}
+        {incomingStageInvite && (
+          <IncomingStageInviteCard invite={incomingStageInvite}
+            onAccept={() => respondStageInvite(true)} onDecline={() => respondStageInvite(false)} />
+        )}
 
         <ContextRail debateId={debateId} role={role} tab={tab} setTab={setTab} members={room.members} lkRoom={room.room}
           pollOpen={!!dz.debate?.poll_open}
@@ -457,6 +492,7 @@ const iconBtn: React.CSSProperties = { width:32, height:32, borderRadius:5, bord
 function LiveHall({
   debateId, room, dz, bs, onLocalState, me, role, speaker, speakerSide,
   floor, tally, myVote, onVote, sideProfiles, onProfile, narrow, countdown, onAskQuestion, mobile,
+  isHost, onContextMenu,
 }: {
   debateId: string; room: any; dz: any; bs: BroadcastState;
   onLocalState: (patch: Partial<BroadcastState>) => void;
@@ -464,6 +500,7 @@ function LiveHall({
   floor: FloorStats | null; tally: Tally; myVote: Side | null; onVote: (s: Side) => void;
   sideProfiles: { prop?: Profile; opp?: Profile }; onProfile: (h?: string | null) => void;
   narrow: boolean; countdown: string; onAskQuestion?: () => void; mobile?: boolean;
+  isHost: boolean; onContextMenu: (e: React.MouseEvent, m: any) => void;
 }) {
   const [monitor, setMonitor] = useState(false);
 
@@ -530,22 +567,15 @@ function LiveHall({
     : <FloorStage roundLabel={phaseLabel} countdown={countdown} hasFloorSide={speakerSide}
         presenting={presentingContent} presenterName={presenter?.name}>{overlays}</FloorStage>;
 
-  const isHost = role === 'host';
-  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; member: M } | null>(null);
-  const openCtxMenu = (e: React.MouseEvent, m: M) => {
-    if (!isHost || m.identity === me?.identity) return;
-    setCtxMenu({ x: e.clientX, y: e.clientY, member: m });
-  };
-
   const propCard = (
     <CompetitorCard side="prop" member={propMember} profile={sideProfiles.prop}
       hasFloor={speakerSide === 'prop'} speakingSecs={floor?.prop_speaking ?? 0} segTotal={segTotal} onProfile={onProfile}
-      onContextMenu={isHost && propMember ? (e) => openCtxMenu(e, propMember) : undefined} />
+      onContextMenu={propMember ? (e) => onContextMenu(e, propMember) : undefined} />
   );
   const oppCard = (
     <CompetitorCard side="opp" member={oppMember} profile={sideProfiles.opp}
       hasFloor={speakerSide === 'opp'} speakingSecs={floor?.opp_speaking ?? 0} segTotal={segTotal} onProfile={onProfile}
-      onContextMenu={isHost && oppMember ? (e) => openCtxMenu(e, oppMember) : undefined} />
+      onContextMenu={oppMember ? (e) => onContextMenu(e, oppMember) : undefined} />
   );
 
   const monitorToggle = canControl ? (
@@ -562,13 +592,8 @@ function LiveHall({
       overflowY:'auto', paddingBottom: narrow ? 10 : 0 }}>
       <div style={{ flexShrink:0 }}>
         <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile} right={monitorToggle}
-          onModContextMenu={isHost && mod ? (e) => openCtxMenu(e, mod) : undefined} />
+          onModContextMenu={mod ? (e) => onContextMenu(e, mod) : undefined} />
       </div>
-
-      {ctxMenu && (
-        <StageActionMenu x={ctxMenu.x} y={ctxMenu.y} member={ctxMenu.member} debateId={debateId}
-          onClose={() => setCtxMenu(null)} />
-      )}
 
       {narrow ? (
         <div style={{ display:'flex', flexDirection:'column', gap:12, flexShrink:0 }}>
@@ -587,10 +612,10 @@ function LiveHall({
       <div style={{ display:'grid', gap:12, marginTop:14, flexShrink:0,
         gridTemplateColumns: narrow ? '1fr' : '1.1fr 1.3fr 1fr' }}>
         <GalleryStrip audience={audience} onProfile={onProfile}
-          onMemberContextMenu={isHost ? (e, m) => openCtxMenu(e, m) : undefined} />
+          onMemberContextMenu={(e, m) => onContextMenu(e, m)} />
         <AudienceVoteStrip tally={tally} myVote={myVote} canVote={!!dz.debate?.poll_open} onVote={onVote} />
         <JudgesStrip judges={judges} onProfile={onProfile}
-          onJudgeContextMenu={isHost ? (e, m) => openCtxMenu(e, m) : undefined} />
+          onJudgeContextMenu={(e, m) => onContextMenu(e, m)} />
       </div>
 
       <div style={{ marginTop:12, flexShrink:0 }}>
@@ -626,10 +651,12 @@ function LiveHall({
 
 /* ---- C5 · Stage Action Menu (host-only: right-click a profile to
    promote them onto the stage or move them back to the audience) ---- */
-function StageActionMenu({ x, y, member, debateId, onClose }: {
-  x: number; y: number; member: M; debateId: string; onClose: () => void;
+function StageActionMenu({ x, y, member, debateId, isSelf, onSendInvite, onClose }: {
+  x: number; y: number; member: RoomMember; debateId: string; isSelf: boolean;
+  onSendInvite: (role: StageRole, side: StageSide) => void; onClose: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState<string | null>(null);
   const onStage = member.role !== 'audience';
 
   async function demote() {
@@ -637,17 +664,15 @@ function StageActionMenu({ x, y, member, debateId, onClose }: {
     try {
       await Promise.all([demoteToAudience(debateId, member.identity, member.identity), demoteFromStage(debateId, member.identity)]);
       onClose();
-    } catch (e: any) { alert(e?.message ?? 'Could not move to audience'); setBusy(false); }
+    } catch (e: any) { alert(e?.message ?? 'Could not leave the stage'); setBusy(false); }
   }
-  async function promote(role: 'moderator' | 'debater' | 'judge', side: 'prop' | 'opp' | null) {
-    setBusy(true);
-    try {
-      await Promise.all([promoteToRole(debateId, member.identity, role, side), promoteFromAudience(debateId, member.identity, role, side)]);
-      onClose();
-    } catch (e: any) { alert(e?.message ?? 'Could not update role'); setBusy(false); }
+  function invite(role: StageRole, side: StageSide, label: string) {
+    onSendInvite(role, side);
+    setSent(label);
+    setTimeout(onClose, 900);
   }
 
-  const menuW = 200;
+  const menuW = 210;
   const left = typeof window !== 'undefined' ? Math.min(x, window.innerWidth - menuW - 12) : x;
   const top = typeof window !== 'undefined' ? Math.min(y, window.innerHeight - 220) : y;
 
@@ -659,16 +684,20 @@ function StageActionMenu({ x, y, member, debateId, onClose }: {
         background:C.panel, border:`1px solid ${C.hairHi}`, boxShadow:'0 20px 50px rgba(0,0,0,.5)', padding:6 }}>
         <div style={{ padding:'8px 10px 7px', fontFamily:ui, fontSize:11.5, fontWeight:700, color:C.ink,
           borderBottom:`1px solid ${C.hair}`, marginBottom:4, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-          {member.name}
+          {isSelf ? 'You' : member.name}
         </div>
-        {onStage ? (
+        {sent ? (
+          <div style={{ padding:'9px 10px', fontFamily:ui, fontSize:12.5, color:C.jadeHi }}>✓ Invite sent — {sent}</div>
+        ) : isSelf ? (
+          <MenuBtn label="Leave the stage" danger onClick={demote} busy={busy} />
+        ) : onStage ? (
           <MenuBtn label="→ Move to audience" danger onClick={demote} busy={busy} />
         ) : (
           <>
-            <MenuBtn label="Make Proposition" onClick={() => promote('debater', 'prop')} busy={busy} />
-            <MenuBtn label="Make Opposition" onClick={() => promote('debater', 'opp')} busy={busy} />
-            <MenuBtn label="Make Moderator" onClick={() => promote('moderator', null)} busy={busy} />
-            <MenuBtn label="Make Judge" onClick={() => promote('judge', null)} busy={busy} />
+            <MenuBtn label="Invite as Proposition" onClick={() => invite('debater', 'prop', 'Proposition')} busy={busy} />
+            <MenuBtn label="Invite as Opposition" onClick={() => invite('debater', 'opp', 'Opposition')} busy={busy} />
+            <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
+            <MenuBtn label="Invite as Judge" onClick={() => invite('judge', null, 'Judge')} busy={busy} />
           </>
         )}
       </div>
@@ -684,5 +713,28 @@ function MenuBtn({ label, onClick, busy, danger }: { label: string; onClick: () 
       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
       {busy ? '…' : label}
     </button>
+  );
+}
+
+/* ---- C6 · Incoming stage invite (shown to the invitee) ---- */
+function IncomingStageInviteCard({ invite, onAccept, onDecline }: {
+  invite: { fromName: string; role: string; side: string | null };
+  onAccept: () => void; onDecline: () => void;
+}) {
+  const roleLabel = invite.side === 'prop' ? 'Proposition' : invite.side === 'opp' ? 'Opposition'
+    : invite.role === 'moderator' ? 'Moderator' : invite.role === 'judge' ? 'Judge' : 'the stage';
+  return (
+    <div style={{ position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)', zIndex:220,
+      width:'min(380px, calc(100vw - 32px))', borderRadius:16, background:C.panel, border:`1px solid ${C.hairHi}`,
+      boxShadow:'0 24px 60px rgba(0,0,0,.55)', padding:18, textAlign:'center' }}>
+      <div style={{ fontFamily:ui, fontSize:13, color:C.dim, marginBottom:6 }}>
+        <strong style={{ color:C.ink }}>{invite.fromName}</strong> invited you to join as
+      </div>
+      <div style={{ fontFamily:display, fontSize:20, fontWeight:700, color:C.goldHi, marginBottom:16 }}>{roleLabel}</div>
+      <div style={{ display:'flex', gap:10, justifyContent:'center' }}>
+        <button onClick={onDecline} style={{ ...ghostBtn, flex:1 }}>Decline</button>
+        <button onClick={onAccept} style={{ ...solidGold, flex:1 }}>Accept</button>
+      </div>
+    </div>
   );
 }

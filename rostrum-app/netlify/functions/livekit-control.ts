@@ -46,7 +46,10 @@ export const handler: Handler = async (event) => {
   const { data: debate } = await supabaseAdmin
     .from('debates').select('id, host_id, livekit_room').eq('id', debateId).single();
   if (!debate) return json(404, { error: 'debate not found' });
-  if (debate.host_id !== user.id) return json(403, { error: 'host only' });
+
+  const isHost = debate.host_id === user.id;
+  const isSelfDemote = action === 'demote_to_audience' && payload.identity === user.id;
+  if (!isHost && !isSelfDemote) return json(403, { error: 'host only' });
 
   const room = debate.livekit_room as string;
 

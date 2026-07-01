@@ -465,8 +465,9 @@ function useCountdown(target: string | null | undefined) {
   return secs;
 }
 
-function WaitingSeatCard({ side, member, debateId, canInvite }: {
+function WaitingSeatCard({ side, member, debateId, canInvite, onContextMenu }: {
   side: Side; member?: RoomMember; debateId: string; canInvite: boolean;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }) {
   const t = sideTone(side);
   const [copied, setCopied] = useState(false);
@@ -480,7 +481,8 @@ function WaitingSeatCard({ side, member, debateId, canInvite }: {
   return (
     <div style={{ flex: '1 1 240px', minWidth: 0, borderRadius: 18, padding: '18px 16px', textAlign: 'center',
       background: `linear-gradient(180deg, ${a(t.base, '12')}, ${a(C.panel, 'CC')})`,
-      border: `1px solid ${a(t.base, member ? '55' : '2E')}` }}>
+      border: `1px solid ${a(t.base, member ? '55' : '2E')}` }}
+      onContextMenu={member && onContextMenu ? (e) => { e.preventDefault(); onContextMenu(e); } : undefined}>
       <span style={{ fontFamily: ui, fontWeight: 800, fontSize: 10.5, letterSpacing: '.16em',
         textTransform: 'uppercase', color: t.hi }}>{t.label}</span>
 
@@ -510,9 +512,10 @@ function WaitingSeatCard({ side, member, debateId, canInvite }: {
   );
 }
 
-export function WaitingHall({ debateId, members, motion, viewerCount, scheduledAt, role, onProfile }: {
+export function WaitingHall({ debateId, members, motion, viewerCount, scheduledAt, role, onProfile, onContextMenu }: {
   debateId: string; members: RoomMember[]; motion: string; viewerCount: number;
   scheduledAt: string | null | undefined; role: string; onProfile?: (h?: string | null) => void;
+  onContextMenu?: (e: React.MouseEvent, m: RoomMember) => void;
 }) {
   const host = members.find(m => m.role === 'host');
   const mod = members.find(m => m.role === 'moderator');
@@ -559,17 +562,21 @@ export function WaitingHall({ debateId, members, motion, viewerCount, scheduledA
       </div>
 
       {/* host / mod / judges */}
-      <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile} />
+      <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile}
+        onModContextMenu={mod && onContextMenu ? (e) => onContextMenu(e, mod) : undefined} />
 
       {/* competitor waiting cards */}
       <div style={{ display: 'flex', gap: 14, marginTop: 4, marginBottom: 16, flexWrap: 'wrap' }}>
-        <WaitingSeatCard side="prop" member={propMember} debateId={debateId} canInvite={isHost && !propMember} />
-        <WaitingSeatCard side="opp" member={oppMember} debateId={debateId} canInvite={isHost && !oppMember} />
+        <WaitingSeatCard side="prop" member={propMember} debateId={debateId} canInvite={isHost && !propMember}
+          onContextMenu={propMember && onContextMenu ? (e) => onContextMenu(e, propMember) : undefined} />
+        <WaitingSeatCard side="opp" member={oppMember} debateId={debateId} canInvite={isHost && !oppMember}
+          onContextMenu={oppMember && onContextMenu ? (e) => onContextMenu(e, oppMember) : undefined} />
       </div>
 
       {/* gallery */}
       <div style={{ marginTop: 'auto' }}>
-        <GalleryStrip audience={audience.length ? audience : members.filter(m => m.role === 'audience')} onProfile={onProfile} />
+        <GalleryStrip audience={audience.length ? audience : members.filter(m => m.role === 'audience')} onProfile={onProfile}
+          onMemberContextMenu={onContextMenu} />
         {viewerCount > members.length && (
           <div style={{ fontFamily: ui, fontSize: 11, color: C.faint, marginTop: 6 }}>
             {fmtN(viewerCount)} total watching</div>
