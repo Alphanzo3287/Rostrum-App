@@ -102,6 +102,7 @@ export function useRoom(debateId: string | null): UseRoom {
         .on(RoomEvent.LocalTrackPublished, resync)
         .on(RoomEvent.LocalTrackUnpublished, resync)
         .on(RoomEvent.ActiveSpeakersChanged, resync)
+        .on(RoomEvent.ParticipantMetadataChanged, resync)
         // host may flip our publish permission mid-session (segment gating)
         .on(RoomEvent.ParticipantPermissionsChanged, () => {
           if (room) setCanPublish(room.localParticipant.permissions?.canPublish ?? false);

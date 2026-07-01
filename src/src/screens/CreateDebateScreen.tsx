@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react';
 import { createDebate } from '../lib/api';
 import { createYouTubeBroadcast, getYouTubeConnection, type YouTubeConnection } from '../lib/youtube';
 import type { DebateFormat, Side, Visibility } from '../lib/types';
-import { C, ui, display, mono, solidGold, field } from '../lib/theme';
+import { C, ui, display, mono, solidGold, field, a } from '../lib/theme';
 
 type Seg = { label: string; side: Side | null; min: number };
 
@@ -51,6 +51,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
   const [thumb, setThumb] = useState<File | null>(null);
   const [thumbPrev, setThumbPrev] = useState<string | null>(null);
   const [voters, setVoters] = useState(true);
+  const [winMode, setWinMode] = useState<'academic' | 'public' | 'hybrid'>('public');
   const [segs, setSegs] = useState<Seg[]>(FORMATS.oxford);
   const [paid, setPaid] = useState(false);
   const [price, setPrice] = useState(5);
@@ -82,6 +83,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
         motion, format, visibility: vis,
         isPaid: paid, priceCents: paid ? Math.round(price * 100) : 0,
         giftsEnabled: gifts, recordingEnabled: recording, votersEnabled: voters,
+        winMode,
         scheduledAt,
         segments: segs.map(s => ({ label: s.label, side: s.side, durationSecs: s.min * 60 })),
         thumbnailFile: thumb,
@@ -160,7 +162,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
                 onChange={e => { const f = e.target.files?.[0]; if (f) { setThumb(f); setThumbPrev(URL.createObjectURL(f)); } }} />
               <div style={{ height:170, borderRadius:8, overflow:'hidden', display:'grid', placeItems:'center',
                 border:`1px ${thumb ? 'solid' : 'dashed'} ${thumb ? C.hair : C.hairHi}`,
-                background: thumb ? '#000' : `linear-gradient(150deg, ${C.jade}1f, ${C.base} 72%)` }}>
+                background: thumb ? '#000' : `linear-gradient(150deg, ${a(C.jade,'1f')}, ${C.base} 72%)` }}>
                 {thumbPrev ? <img src={thumbPrev} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
                   : <span style={{ fontFamily:ui, fontSize:13, color:C.faint }}>Upload a 16:9 cover</span>}
               </div>
@@ -198,6 +200,22 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
 
           {step === 3 && <>
             <Toggle label="Audience voting" sub="Let viewers vote a verdict from their seats" on={voters} set={setVoters} />
+
+            {/* Win mode selector */}
+            <div style={{ padding:'15px 0', borderBottom:`1px solid ${C.hair}` }}>
+              <div style={{ fontFamily:ui, fontSize:14, color:C.ink, fontWeight:600, marginBottom:2 }}>Winner decided by</div>
+              <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginBottom:10 }}>
+                {winMode === 'academic' ? 'Judges score each segment; their ballots determine the winner.'
+                  : winMode === 'hybrid' ? 'Judges pick the official winner; audience picks the People\'s Choice.'
+                  : 'The audience votes live; majority wins.'}
+              </div>
+              <div style={{ display:'flex', gap:8 }}>
+                <Chip on={winMode==='public'} onClick={() => setWinMode('public')}>Audience</Chip>
+                <Chip on={winMode==='academic'} onClick={() => setWinMode('academic')}>Judges</Chip>
+                <Chip on={winMode==='hybrid'} onClick={() => setWinMode('hybrid')}>Hybrid</Chip>
+              </div>
+            </div>
+
             <Toggle label="Gifts & donations" sub="Audience can tip debaters and the host live" on={gifts} set={setGifts} />
             <Toggle label="Record & allow downloads" sub="Host and debaters get the MP4 afterward" on={recording} set={setRecording} />
             <div style={{ display:'flex', alignItems:'center', gap:14, padding:'15px 0', borderBottom:`1px solid ${C.hair}` }}>
@@ -228,7 +246,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
                   : (
                     <a href="/settings" style={{ fontFamily:ui, fontSize:11, fontWeight:600,
                       color:C.gold, textDecoration:'none', whiteSpace:'nowrap',
-                      padding:'5px 10px', border:`1px solid ${C.gold}44`, borderRadius:6 }}>
+                      padding:'5px 10px', border:`1px solid ${a(C.gold,'44')}`, borderRadius:6 }}>
                       Connect account
                     </a>
                   )}
@@ -259,7 +277,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
                           style={{
                             flex:1, padding:'10px 12px', borderRadius:8, cursor:'pointer', textAlign:'left',
                             border:`1px solid ${ytPrivacy===val ? C.gold : C.hair}`,
-                            background: ytPrivacy===val ? `${C.gold}1a` : 'transparent' }}>
+                            background: ytPrivacy===val ? `${a(C.gold,'1a')}` : 'transparent' }}>
                           <div style={{ fontFamily:ui, fontSize:13, fontWeight:600,
                             color: ytPrivacy===val ? C.gold : C.ink }}>{label}</div>
                           <div style={{ fontFamily:ui, fontSize:10.5, color:C.faint, marginTop:2, lineHeight:1.3 }}>{hint}</div>
@@ -287,7 +305,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
 
       {/* footer */}
       <div style={{ position:'sticky', bottom:0, display:'flex', gap:12, padding:'14px 24px',
-        borderTop:`1px solid ${C.hair}`, background:'rgba(12,11,13,0.92)' }}>
+        borderTop:`1px solid ${C.hair}`, background:a(C.base,'EB') }}>
         <span style={{ fontFamily:ui, fontSize:12, color:C.faint, alignSelf:'center' }}>Step {step} of 3</span>
         <div style={{ marginLeft:'auto', display:'flex', gap:10 }}>
           {step > 1 && <button onClick={() => setStep(s => s - 1)} style={ghost}>Back</button>}

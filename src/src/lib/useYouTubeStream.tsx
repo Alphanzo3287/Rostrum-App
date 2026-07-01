@@ -43,18 +43,18 @@ export function useYouTubeStream(debateId: string, enabled: boolean) {
       if (res.egressId) egressId.current = res.egressId;
 
       // The broadcast was created with enableAutoStart, so YouTube goes live
-      // automatically once it receives the RTMP feed (~10-20s of ingestion).
-      // We still send an explicit go-live nudge a few times in case autostart
-      // is slow, but we do NOT block the UI on it — the egress is running.
+      // automatically once it receives the RTMP feed. Send go-live nudges in
+      // the background, but reflect "live" quickly so the host isn't left
+      // wondering — the YouTube-side switch still takes ~10-15s (ingestion
+      // warm-up), which is normal and unavoidable.
       (async () => {
         for (let attempt = 0; attempt < 6 && !cancelled.current; attempt++) {
-          await new Promise(r => setTimeout(r, 6000));
+          await new Promise(r => setTimeout(r, 4000));
           try { await goLiveOnYouTube(debateId); break; } catch { /* keep nudging */ }
         }
       })();
 
-      // Give ingestion a moment to spin up, then reflect "live" in the UI.
-      await new Promise(r => setTimeout(r, 6000));
+      // Reflect "live" in the UI as soon as the egress is confirmed running.
       if (!cancelled.current) setPhase('live');
     } catch (e: any) {
       if (!cancelled.current) {

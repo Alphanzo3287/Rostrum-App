@@ -29,6 +29,8 @@ import { ProfileScreen } from './screens/ProfileScreen';
 import { LeaderboardScreen } from './screens/LeaderboardScreen';
 import { TeamsScreen } from './screens/TeamsScreen';
 import { TournamentsScreen } from './screens/TournamentsScreen';
+import { DiscoverScreen } from './screens/DiscoverScreen';
+import { NotificationsScreen } from './screens/NotificationsScreen';
 import { StoreScreen } from './screens/StoreScreen';
 import { EarningsScreen } from './screens/EarningsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
@@ -98,10 +100,10 @@ function Gate() {
         <Route path="settings" element={<SettingsRoute />} />
         <Route path="support" element={<SupportRoute />} />
         <Route path="communities" element={<ComingSoonRoute title="Communities" subtitle="Find your tribe. Join debate communities by topic, school, or interest." />} />
-        <Route path="discover" element={<ComingSoonRoute title="Discover" subtitle="Explore debates by topic, format, and trending themes." />} />
+        <Route path="discover" element={<DiscoverScreen />} />
         <Route path="live" element={<ComingSoonRoute title="Live Arenas" subtitle="All live debates, all the time. Watch what's happening right now." />} />
         <Route path="library" element={<ComingSoonRoute title="Library" subtitle="Your saved debates, watched history, and personal collections." />} />
-        <Route path="notifications" element={<ComingSoonRoute title="Notifications" subtitle="Catch up on what's happening across the platform." />} />
+        <Route path="notifications" element={<NotificationsScreen />} />
         {isAdmin && <Route path="moderation" element={<ModerationRoute />} />}
         {isAdmin && <Route path="admin" element={<AdminPortalRoute />} />}
         <Route path="me" element={<ProfileRoute />} />

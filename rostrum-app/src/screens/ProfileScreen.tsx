@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
 import { getProfile, getAchievements, amFollowing, follow, unfollow } from '../lib/api';
 import { ReportModal } from '../components/ReportModal';
+import { EditProfileModal } from '../components/EditProfileModal';
 import type { Profile, Achievement } from '../lib/types';
 import { C, ui, display, mono, solidGold, a } from '../lib/theme';
 import { Avatar, RankBadge, Section, Scroll, Center, Empty, pill, ghostBtn, hrefFor } from '../components/ui';
@@ -15,7 +16,7 @@ import { getMyWallet, getMyProgress, type Wallet, type Progress } from '../lib/p
 export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
   handle?: string; onBack?: () => void; onOpenStore?: () => void; onMessage?: (handle: string) => void;
 }) {
-  const { profile: me } = useAuth();
+  const { profile: me, refreshProfile } = useAuth();
   const isSelf = !handle || handle === me?.handle;
   const [profile, setProfile] = useState<Profile | null>(isSelf ? me : null);
   const [achievements, setAch] = useState<(Achievement & { earned_at: string })[]>([]);
@@ -23,6 +24,7 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
   const [busy, setBusy] = useState(false);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     if (isSelf) setProfile(me);
@@ -57,6 +59,7 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
   const socials = Object.entries(profile.socials ?? {}).filter(([, v]) => v) as [string, string][];
 
   return (
+    <>
     <Scroll title={isSelf ? 'Your profile' : 'Profile'} onBack={onBack}>
       {/* premium header card with gradient cover */}
       <div style={{ borderRadius:24, overflow:'hidden', border:`1px solid ${C.hair}`,
@@ -89,6 +92,11 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
                   {following ? 'Following ✓' : 'Follow'}
                 </button>
                 <ReportModal targetType="user" targetId={profile.id} label="⚑ Report" />
+              </div>
+            )}
+            {isSelf && (
+              <div style={{ display:'flex', gap:9, alignItems:'center', paddingBottom:6 }}>
+                <button onClick={() => setEditing(true)} style={ghostBtn}>✎ Edit profile</button>
               </div>
             )}
           </div>
@@ -183,5 +191,10 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
             </div>}
       </Section>
     </Scroll>
+    {editing && (
+      <EditProfileModal profile={profile} onClose={() => setEditing(false)}
+        onSaved={async (updated) => { setProfile(updated); setEditing(false); await refreshProfile(); }} />
+    )}
+    </>
   );
 }

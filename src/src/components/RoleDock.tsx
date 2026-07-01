@@ -10,7 +10,7 @@ import { uploadDeck } from '../lib/api';
 import { rasterizeToImages } from '../lib/deck';
 import { muteAudience } from '../lib/livekit';
 import type { StreamPhase } from '../lib/useYouTubeStream';
-import { C, ui } from '../lib/theme';
+import { C, ui, a } from '../lib/theme';
 
 type Role = 'host' | 'moderator' | 'debater' | 'judge' | 'audience';
 
@@ -35,6 +35,13 @@ interface Props {
   onStreamStop: () => void;
   setTab: (t: string) => void;
   onLeave: () => void;
+  pollOpen?: boolean;
+  onTogglePoll?: () => void;
+  winMode?: string;
+  onFinalize?: () => void;
+  onAnnounce?: () => void;
+  resultsReady?: boolean;
+  winnerAnnounced?: boolean;
 }
 
 export function RoleDock(p: Props) {
@@ -71,6 +78,17 @@ export function RoleDock(p: Props) {
         <Btn label="Next segment" onClick={p.onNextSegment} />
         <Btn label="Mute all" onClick={() => muteAudience(p.debateId)} />
         <Sep />
+        {p.onTogglePoll && (
+          <Btn label={p.pollOpen ? '🗳 Close poll' : '🗳 Open poll'} onClick={p.onTogglePoll}
+            active={p.pollOpen} accent={p.pollOpen ? C.jade : undefined} />
+        )}
+        {p.onFinalize && !p.resultsReady && (
+          <Btn label="📊 Finalize" onClick={p.onFinalize} />
+        )}
+        {p.onAnnounce && p.resultsReady && !p.winnerAnnounced && (
+          <Btn label="🏆 Announce winner" onClick={p.onAnnounce} accent={C.gold} />
+        )}
+        <Sep />
         <StreamBtn phase={p.streamPhase} error={p.streamError} onStart={p.onStreamStart} onStop={p.onStreamStop} />
         <Sep />
         <Btn danger label="End event" onClick={p.onEnd} />
@@ -85,7 +103,6 @@ export function RoleDock(p: Props) {
           label={p.canPublish ? (p.micOn ? 'Mic on' : 'Mic off') : 'Not your turn'}
           onClick={p.toggleMic} accent={C.jade} />
         <Btn active={p.camOn} disabled={!p.canPublish} label="Camera" onClick={p.toggleCam} />
-        <ShareSlides debateId={p.debateId} disabled={false} />
         <Sep />
         <Note>
           {p.canPublish ? 'You hold the floor — opponents are muted until their segment.'
@@ -135,20 +152,26 @@ function StreamBtn({ phase, error, onStart, onStop }: {
 
   const onClick = () => {
     if (phase === 'live') onStop();
-    else if (phase !== 'connecting') {
-      if (error) alert(error);   // show why the last attempt failed, then retry
-      onStart();
-    }
+    else if (phase !== 'connecting') onStart();
   };
 
   return (
-    <Btn
-      label={label}
-      accent={phase === 'error' ? C.ember : C.garnet}
-      active={phase === 'live'}
-      onClick={onClick}
-      disabled={phase === 'connecting'}
-    />
+    <div style={{ display:'inline-flex', flexDirection:'column', alignItems:'stretch', gap:4, maxWidth:320 }}>
+      <Btn
+        label={label}
+        accent={phase === 'error' ? C.ember : C.garnet}
+        active={phase === 'live'}
+        onClick={onClick}
+        disabled={phase === 'connecting'}
+      />
+      {phase === 'error' && error && (
+        <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:10, lineHeight:1.4,
+          color:C.ember, background:`${a(C.ember,'14')}`, border:`1px solid ${a(C.ember,'40')}`,
+          borderRadius:6, padding:'5px 7px', maxWidth:320, wordBreak:'break-word' }}>
+          {error}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -175,12 +198,12 @@ function ShareSlides({ debateId, disabled }: { debateId: string; disabled: boole
 /* ---- atoms ---- */
 function Dock({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ borderTop:`1px solid ${C.hair}`, background:'rgba(12,11,13,0.9)', padding:'11px 16px',
-      display:'flex', alignItems:'center', gap:10 }}>{children}</div>
+    <div style={{ borderTop:`1px solid ${C.hair}`, background:a(C.base,'E6'), padding:'11px 16px',
+      display:'flex', alignItems:'center', gap:10, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>{children}</div>
   );
 }
 const btnBase: React.CSSProperties = {
-  display:'flex', flexDirection:'column', alignItems:'center', gap:4, padding:'7px 12px', borderRadius:6,
+  display:'flex', flexDirection:'column', alignItems:'center', gap:4, padding:'8px 13px', borderRadius:10,
   border:`1px solid ${C.hair}`, background:'transparent', color:C.dim, fontFamily:ui, fontSize:10.5,
   fontWeight:600, cursor:'pointer',
 };

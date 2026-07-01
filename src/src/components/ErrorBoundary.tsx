@@ -27,6 +27,10 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { err: Err
           <button onClick={this.reset} style={{ marginTop:16, padding:'10px 18px', borderRadius:6, border:'none',
             cursor:'pointer', fontFamily:ui, fontWeight:700, color:C.base,
             background:`linear-gradient(180deg, ${C.goldHi}, ${C.gold})` }}>Try again</button>
+          <a href="/" style={{ display:'inline-block', marginTop:16, marginLeft:10, padding:'10px 18px', borderRadius:6,
+            textDecoration:'none', fontFamily:ui, fontWeight:700, color:C.ink, border:`1px solid ${C.hair}` }}>
+            Leave &amp; go home
+          </a>
         </div>
       </div>
     );

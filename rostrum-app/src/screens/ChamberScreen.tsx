@@ -15,9 +15,10 @@ import { useDebate } from '../lib/useDebate';
 import { useYouTubeStream } from '../lib/useYouTubeStream';
 import {
   joinDebate, getBroadcastState, subscribeBroadcastState, getResults,
-  getFloorStats, getTally, castVote, listParticipants,
+  getFloorStats, getTally, castVote, listParticipants, demoteToAudience,
   type BroadcastState, type FloorStats,
 } from '../lib/api';
+import { demoteFromStage } from '../lib/livekit';
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
 import { ScreenTile } from '../components/ScreenTile';
@@ -538,13 +539,25 @@ function LiveHall({
       hasFloor={speakerSide === 'opp'} speakingSecs={floor?.opp_speaking ?? 0} segTotal={segTotal} onProfile={onProfile} />
   );
 
+  const isHost = role === 'host';
+  const [manageOpen, setManageOpen] = useState(false);
+
   const monitorToggle = canControl ? (
-    <button onClick={() => setMonitor(v => !v)} title="Toggle the broadcast monitor (what YouTube sees)"
-      style={{ padding:'6px 12px', borderRadius:10, border:`1px solid ${monitor ? a(C.gold,'66') : C.hair}`,
-        background: monitor ? a(C.gold,'1F') : C.glass, color: monitor ? C.goldHi : C.dim,
-        fontFamily:ui, fontSize:12, fontWeight:600, cursor:'pointer' }}>
-      ◉ {monitor ? 'Monitor on' : 'Monitor'}
-    </button>
+    <div style={{ display:'flex', gap:8 }}>
+      {isHost && (
+        <button onClick={() => setManageOpen(true)} title="Move a seated participant back to the audience"
+          style={{ padding:'6px 12px', borderRadius:10, border:`1px solid ${C.hair}`,
+            background:C.glass, color:C.dim, fontFamily:ui, fontSize:12, fontWeight:600, cursor:'pointer' }}>
+          ⚙ Manage seats
+        </button>
+      )}
+      <button onClick={() => setMonitor(v => !v)} title="Toggle the broadcast monitor (what YouTube sees)"
+        style={{ padding:'6px 12px', borderRadius:10, border:`1px solid ${monitor ? a(C.gold,'66') : C.hair}`,
+          background: monitor ? a(C.gold,'1F') : C.glass, color: monitor ? C.goldHi : C.dim,
+          fontFamily:ui, fontSize:12, fontWeight:600, cursor:'pointer' }}>
+        ◉ {monitor ? 'Monitor on' : 'Monitor'}
+      </button>
+    </div>
   ) : undefined;
 
   return (
@@ -553,6 +566,10 @@ function LiveHall({
       <div style={{ flexShrink:0 }}>
         <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile} right={monitorToggle} />
       </div>
+
+      {manageOpen && (
+        <ManageSeatsModal debateId={debateId} members={members} onClose={() => setManageOpen(false)} />
+      )}
 
       {narrow ? (
         <div style={{ display:'flex', flexDirection:'column', gap:12, flexShrink:0 }}>
@@ -601,6 +618,55 @@ function LiveHall({
             <VideoTile member={m} active={m.identity === speaker?.identity} />
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---- C5 · Manage Seats (host-only: return someone to the audience) ---- */
+function ManageSeatsModal({ debateId, members, onClose }: { debateId: string; members: any[]; onClose: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const seated = members.filter(m => m.role !== 'audience' && m.role !== 'host');
+
+  async function demote(m: any) {
+    setBusy(m.identity);
+    try {
+      await Promise.all([demoteToAudience(debateId, m.identity, m.identity), demoteFromStage(debateId, m.identity)]);
+    } catch (e: any) { alert(e?.message ?? 'Could not move to audience'); }
+    finally { setBusy(null); }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:200, display:'grid', placeItems:'center',
+      background:a(C.base,'CC'), backdropFilter:'blur(6px)', padding:20 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ width:420, maxWidth:'100%', maxHeight:'80vh', overflowY:'auto', borderRadius:14,
+        background:C.panel, border:`1px solid ${C.hair}`, padding:24, boxShadow:'0 20px 60px rgba(0,0,0,.5)' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+          <h3 style={{ fontFamily:display, fontSize:19, color:C.ink, margin:0 }}>Manage seats</h3>
+          <button onClick={onClose} style={{ background:'none', border:'none', color:C.faint, fontSize:20, cursor:'pointer' }}>×</button>
+        </div>
+        {seated.length === 0 ? (
+          <p style={{ fontFamily:ui, fontSize:13, color:C.faint }}>No one else is seated on stage right now.</p>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {seated.map(m => (
+              <div key={m.identity} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 11px',
+                borderRadius:10, background:C.panel2, border:`1px solid ${C.hair}` }}>
+                <span style={{ flex:1, minWidth:0, fontFamily:ui, fontSize:13.5, color:C.ink,
+                  whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{m.name}</span>
+                <span style={{ fontFamily:ui, fontSize:10.5, fontWeight:700, letterSpacing:'.06em', textTransform:'uppercase',
+                  color:C.faint }}>{m.role}{m.side ? ` · ${m.side}` : ''}</span>
+                <button onClick={() => demote(m)} disabled={busy === m.identity}
+                  style={{ padding:'6px 11px', borderRadius:8, cursor:'pointer', fontFamily:ui, fontSize:11.5, fontWeight:600,
+                    color:C.garnetHi, background:a(C.garnet,'14'), border:`1px solid ${a(C.garnet,'44')}`,
+                    opacity: busy === m.identity ? .6 : 1 }}>
+                  {busy === m.identity ? '…' : '→ Audience'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

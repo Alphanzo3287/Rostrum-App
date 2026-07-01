@@ -136,6 +136,18 @@ export const handler: Handler = async (event) => {
         await rooms.removeParticipant(room, payload.identity);
         return json(200, { ok: true });
 
+      // host: return a seated participant (host/mod/debater/judge) to
+      // audience — pushes new metadata live (so the UI updates without a
+      // reconnect) and revokes publish in the same call.
+      case 'demote_to_audience': {
+        const list = await rooms.listParticipants(room);
+        const p = list.find(pp => pp.identity === payload.identity);
+        const md = p ? parseMeta(p.metadata) : {};
+        const nextMeta = JSON.stringify({ ...md, role: 'audience', side: null });
+        await rooms.updateParticipant(room, payload.identity, nextMeta, PUBLISH(false));
+        return json(200, { ok: true });
+      }
+
       default:
         return json(400, { error: `unknown action: ${action}` });
     }

@@ -4,18 +4,23 @@
 // askQuestion/subscribeQuestions/setQuestionStatus, Score → submitBallot.
 // =====================================================================
 import { useEffect, useRef, useState } from 'react';
+import { ReportModal } from './ReportModal';
 import {
   castVote, getTally, subscribeTally,
   askQuestion, setQuestionStatus, subscribeQuestions,
   submitBallot, getChat, sendChat, subscribeChat, type ChatMsg,
+  getBroadcastState, setBroadcastState, subscribeBroadcastState, clearDeck,
+  type BroadcastState, type BcastLayout,
 } from '../lib/api';
 import type { Side, Question, Segment } from '../lib/types';
-import { C, ui, display, mono, solidGold, field } from '../lib/theme';
+import { C, ui, display, mono, solidGold, field, a } from '../lib/theme';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/auth';
 import { Avatar } from './ui';
 import { ShareButton } from './ShareSheet';
 import { getMyWallet, getGiftTiers, getDebateParticipants, sendGift, type Wallet, type GiftTier, type DebateParticipant } from '../lib/payments';
+import { publishBcastControl } from '../lib/livekit';
+import { EvidencePanel } from './EvidenceViewer';
 
 type Role = 'host' | 'moderator' | 'debater' | 'judge' | 'audience';
 
@@ -25,28 +30,32 @@ export type RosData = {
   onJump: (i: number) => void; onToggle: () => void; onNext: () => void; onSetRemaining: (s: number) => void;
 };
 
-export function ContextRail({ debateId, role, tab, setTab, ros }: {
+export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom, pollOpen }: {
   debateId: string; role: Role; tab: string; setTab: (t: string) => void; ros?: RosData;
+  members?: any[]; lkRoom?: any; pollOpen?: boolean;
 }) {
-  const tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['gift','Gift']]
-            : role === 'judge'  ? [['score','Score'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['gift','Gift']]
-            :                     [['vote','Vote'],['chat','Chat'],['qa','Ask'],['poll','Poll'],['gift','Gift']];
+  const tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']]
+            : role === 'moderator' ? [['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']]
+            : role === 'judge'  ? [['score','Score'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']]
+            :                     [['vote','Vote'],['chat','Chat'],['qa','Ask'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']];
   return (
-    <aside style={{ borderLeft:`1px solid ${C.hair}`, background:'rgba(20,18,22,0.92)', display:'flex', flexDirection:'column', minHeight:0 }}>
-      <div style={{ display:'flex', padding:8, gap:5, borderBottom:`1px solid ${C.hair}` }}>
+    <aside style={{ borderLeft:`1px solid ${C.hair}`, background:a(C.base2,'EB'), backdropFilter:'blur(20px)', display:'flex', flexDirection:'column', minHeight:0 }}>
+      <div style={{ display:'flex', padding:8, gap:5, borderBottom:`1px solid ${C.hair}`, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
         {tabs.map(([k,l]) => (
-          <button key={k} onClick={() => setTab(k)} style={{ flex:1, padding:'8px 0', borderRadius:4, border:'none',
-            cursor:'pointer', fontFamily:ui, fontSize:11, fontWeight:600,
-            color: tab===k ? C.base : C.dim, background: tab===k ? C.gold : 'transparent' }}>{l}</button>
+          <button key={k} onClick={() => setTab(k)} style={{ flex:'0 0 auto', padding:'8px 14px', borderRadius:9, border:'none',
+            cursor:'pointer', fontFamily:ui, fontSize:11, fontWeight:600, whiteSpace:'nowrap', transition:'all .15s',
+            color: tab===k ? '#FFFFFF' : C.dim,
+            background: tab===k ? `linear-gradient(135deg, ${C.gold}, ${C.cyan})` : 'transparent' }}>{l}</button>
         ))}
       </div>
       <div style={{ flex:1, overflowY:'auto', padding:16, display:'flex', flexDirection:'column', minHeight:0 }}>
         {tab==='invite' && <InvitePanel debateId={debateId} />}
         {tab==='ros' && (ros ? <RosPanel ros={ros} /> : <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>Run of show is unavailable.</p>)}
         {tab==='chat' && <ChatPanel debateId={debateId} />}
-        {(tab==='vote'||tab==='poll') && <PollPanel debateId={debateId} canVote={role==='audience'} />}
+        {(tab==='vote'||tab==='poll') && <PollPanel debateId={debateId} canVote={role==='audience'} pollOpen={pollOpen} />}
         {tab==='qa' && <QAPanel debateId={debateId} canModerate={role==='host'||role==='moderator'} />}
         {tab==='score' && <ScorePanel debateId={debateId} />}
+        {tab==='evidence' && <EvidencePanel debateId={debateId} canAdd={role==='host'||role==='moderator'||role==='debater'} />}
         {tab==='gift' && <GiftPanel debateId={debateId} />}
       </div>
     </aside>
@@ -146,7 +155,7 @@ function ChatPanel({ debateId }: { debateId: string }) {
   const me = user?.id;
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [text, setText] = useState('');
-  const endRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let on = true;
@@ -154,7 +163,14 @@ function ChatPanel({ debateId }: { debateId: string }) {
     const off = subscribeChat(debateId, (m) => setMsgs(prev => prev.some(x => x.id === m.id) ? prev : [...prev, m]));
     return () => { on = false; off(); };
   }, [debateId]);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs.length]);
+  // Scroll only the message list itself — never the page. scrollIntoView()
+  // can bubble a scroll request up to ANY scrollable ancestor (including the
+  // document), which is what was pushing the whole Chamber layout upward
+  // and hiding the dock buttons whenever a new chat message arrived.
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [msgs.length]);
 
   async function send() {
     const body = text.trim();
@@ -166,23 +182,29 @@ function ChatPanel({ debateId }: { debateId: string }) {
   return (
     <div style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0 }}>
       <h3 style={{ fontFamily:display, fontSize:21, color:C.ink, margin:'0 0 12px' }}>Live chat</h3>
-      <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:11, marginBottom:12 }}>
+      <div ref={listRef} style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:11, marginBottom:12 }}>
         {msgs.length === 0
           ? <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>No messages yet — say something to the room.</p>
           : msgs.map(m => (
-            <div key={m.id} style={{ display:'flex', gap:9, alignItems:'flex-start' }}>
+            <div key={m.id} style={{ display:'flex', gap:9, alignItems:'flex-start' }}
+              onMouseEnter={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.report-btn'); if (btn) btn.style.opacity='1'; }}
+              onMouseLeave={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.report-btn'); if (btn) btn.style.opacity='0'; }}>
               <Avatar url={m.sender_avatar} name={m.sender_name} size={28} />
-              <div style={{ minWidth:0 }}>
+              <div style={{ minWidth:0, flex:1 }}>
                 <div style={{ display:'flex', alignItems:'baseline', gap:7 }}>
                   <span style={{ fontFamily:ui, fontSize:12.5, fontWeight:700, color: m.sender_id===me ? C.goldHi : C.ink }}>
                     {m.sender_name}{m.sender_id===me ? ' · you' : ''}</span>
                   <span style={{ fontFamily:mono, fontSize:9.5, color:C.faint }}>{chatClock(m.created_at)}</span>
+                  {m.sender_id !== me && (
+                    <span className="report-btn" style={{ opacity:0, transition:'opacity .15s', marginLeft:'auto' }}>
+                      <ReportModal targetType="chat_message" targetId={m.id} label="⚑" />
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontFamily:ui, fontSize:13.5, color:C.dim, lineHeight:1.4, wordBreak:'break-word' }}>{m.body}</div>
               </div>
             </div>
           ))}
-        <div ref={endRef} />
       </div>
       <div style={{ display:'flex', gap:7 }}>
         <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key==='Enter') send(); }}
@@ -242,8 +264,149 @@ function InvitePanel({ debateId }: { debateId: string }) {
   );
 }
 
+/* ----- studio: host broadcast control room ----- */
+function StudioPanel({ debateId, members, canControl, role, lkRoom }: {
+  debateId: string; members: any[]; canControl: boolean; role: Role; lkRoom?: any;
+}) {
+  const [bs, setBs] = useState<BroadcastState>({ layout: 'camera', stageId: null, slidesOn: false });
+  const [busy, setBusy] = useState(false);
+  const deckRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getBroadcastState(debateId).then(s => { if (alive) setBs(s); }).catch(() => {});
+    const off = subscribeBroadcastState(debateId, s => { if (alive) setBs(s); });
+    return () => { alive = false; off(); };
+  }, [debateId]);
+
+  async function patch(next: Partial<BroadcastState>) {
+    if (!canControl) return;
+    setBs(b => ({ ...b, ...next }));            // optimistic (host's own panel)
+    // Instant: push to the broadcast page over the LiveKit data channel.
+    publishBcastControl(lkRoom, {
+      layout: next.layout,
+      stageId: next.stageId,
+      slidesOn: next.slidesOn,
+    });
+    // Persist: so a refreshed/late-joining broadcast picks up current state.
+    try { await setBroadcastState(debateId, next); } catch (e: any) { alert(e?.message ?? 'Could not update broadcast'); }
+  }
+
+  const featurable = members.filter(m => ['host','debater','moderator'].includes(m.role));
+
+  const layouts: [BcastLayout, string, string][] = [
+    ['camera',     'Camera',        'Speaker fills the screen'],
+    ['slides',     'Slides',        'Slides only, no camera'],
+    ['sidebyside', 'Side by side',  'Slides + speaker, clean split'],
+    ['pip',        'Picture-in-pic','Slides large, speaker in corner'],
+  ];
+
+  if (!canControl && role === 'moderator') {
+    // Moderator: limited — can see state, can't change layout (assist only).
+    return (
+      <div style={{ fontFamily:ui, fontSize:12.5, color:C.dim, lineHeight:1.6 }}>
+        <P>The host controls the broadcast layout. As moderator you assist with chat, Q&amp;A, and the poll.</P>
+        <div style={{ marginTop:10, padding:'8px 10px', borderRadius:8, background:C.panel, border:`1px solid ${C.hair}` }}>
+          Current layout: <strong style={{ color:C.ink }}>{bs.layout}</strong>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:14, fontFamily:ui }}>
+      <div>
+        <Eyebrow>Layout</Eyebrow>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:7, marginTop:7 }}>
+          {layouts.map(([k, label, hint]) => (
+            <button key={k} onClick={() => patch({ layout: k })} style={{
+              textAlign:'left', padding:'9px 11px', borderRadius:8, cursor:'pointer',
+              border:`1px solid ${bs.layout===k ? C.gold : C.hair}`,
+              background: bs.layout===k ? `${a(C.gold,'1a')}` : 'transparent' }}>
+              <div style={{ fontSize:12.5, fontWeight:700, color: bs.layout===k ? C.gold : C.ink }}>{label}</div>
+              <div style={{ fontSize:10, color:C.faint, marginTop:2, lineHeight:1.3 }}>{hint}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <Eyebrow>On stage</Eyebrow>
+        <div style={{ fontSize:11, color:C.faint, margin:'4px 0 7px' }}>
+          Who's featured. “Auto” follows the current segment’s speaker.
+        </div>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+          <Chip2 on={bs.stageId===null} onClick={() => patch({ stageId: null })}>Auto</Chip2>
+          {featurable.map(m => (
+            <Chip2 key={m.identity} on={bs.stageId===m.identity} onClick={() => patch({ stageId: m.identity })}>
+              {m.name}{m.side ? ` · ${m.side==='prop'?'P':'O'}` : ''}
+            </Chip2>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <Eyebrow>Slides</Eyebrow>
+        <div style={{ display:'flex', gap:7, marginTop:7, flexWrap:'wrap' }}>
+          <input ref={deckRef} type="file" accept="application/pdf,image/*" multiple style={{ display:'none' }}
+            onChange={async e => {
+              const files = Array.from(e.target.files ?? []); if (!files.length) return;
+              setBusy(true);
+              try {
+                const { uploadDeck } = await import('../lib/api');
+                const { rasterizeToImages } = await import('../lib/deck');
+                await uploadDeck(debateId, await rasterizeToImages(files));
+                setBs(b => ({ ...b, slidesOn: true, layout: 'sidebyside' }));
+                publishBcastControl(lkRoom, { slidesOn: true, layout: 'sidebyside', deckChanged: true });
+                await setBroadcastState(debateId, { slidesOn: true, layout: 'sidebyside' });
+              } catch (err: any) { alert(err?.message ?? 'Upload failed'); }
+              finally { setBusy(false); if (deckRef.current) deckRef.current.value=''; }
+            }} />
+          <BtnSm onClick={() => deckRef.current?.click()} disabled={busy}>{busy ? 'Uploading…' : 'Upload / replace deck'}</BtnSm>
+          <BtnSm onClick={() => patch({ slidesOn: !bs.slidesOn })}>{bs.slidesOn ? 'Hide slides' : 'Show slides'}</BtnSm>
+          <BtnSm danger onClick={async () => {
+            if (!window.confirm('Remove the current slide deck?')) return;
+            try {
+              await clearDeck(debateId);
+              setBs(b => ({ ...b, slidesOn: false, layout: 'camera' }));
+              publishBcastControl(lkRoom, { slidesOn: false, layout: 'camera', deckChanged: true });
+              await setBroadcastState(debateId, { slidesOn: false, layout: 'camera' });
+            } catch (e: any) { alert(e?.message ?? 'Could not clear deck'); }
+          }}>Remove deck</BtnSm>
+        </div>
+      </div>
+
+      <div style={{ padding:'9px 11px', borderRadius:8, background:C.panel, border:`1px solid ${C.hair}`,
+        fontSize:11, color:C.faint, lineHeight:1.5 }}>
+        These controls change what the YouTube audience sees in real time. They never appear on the broadcast.
+      </div>
+    </div>
+  );
+}
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontSize:10, fontWeight:700, letterSpacing:'.12em', textTransform:'uppercase', color:C.faint }}>{children}</div>;
+}
+function Chip2({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} style={{ padding:'6px 11px', borderRadius:999, cursor:'pointer', fontSize:12, fontWeight:600,
+      border:`1px solid ${on ? C.gold : C.hair}`, background: on ? `${a(C.gold,'1f')}` : 'transparent', color: on ? C.gold : C.dim }}>
+      {children}
+    </button>
+  );
+}
+function BtnSm({ children, onClick, disabled, danger }: { children: React.ReactNode; onClick: () => void; disabled?: boolean; danger?: boolean }) {
+  return (
+    <button onClick={onClick} disabled={disabled} style={{ padding:'8px 12px', borderRadius:7, cursor: disabled?'default':'pointer',
+      fontSize:12, fontWeight:600, border:`1px solid ${danger ? C.garnet : C.hair}`, background:'transparent',
+      color: danger ? C.garnetHi : C.dim, opacity: disabled?0.6:1 }}>{children}</button>
+  );
+}
+function P({ children }: { children: React.ReactNode }) {
+  return <p style={{ margin:'0 0 8px' }}>{children}</p>;
+}
+
 /* ----- poll ----- */
-function PollPanel({ debateId, canVote }: { debateId: string; canVote: boolean }) {
+function PollPanel({ debateId, canVote, pollOpen }: { debateId: string; canVote: boolean; pollOpen?: boolean }) {
   const [t, setT] = useState({ prop: 0, opp: 0 });
   const [voted, setVoted] = useState<Side | null>(null);
   useEffect(() => {
@@ -253,7 +416,7 @@ function PollPanel({ debateId, canVote }: { debateId: string; canVote: boolean }
   const total = t.prop + t.opp || 1;
 
   async function vote(side: Side) {
-    if (voted) return;
+    if (voted || !pollOpen) return;
     setVoted(side);
     try { setT(await castVote(debateId, side)); } catch { setVoted(null); }
   }
@@ -273,16 +436,27 @@ function PollPanel({ debateId, canVote }: { debateId: string; canVote: boolean }
 
   return (
     <>
-      <h3 style={{ fontFamily:display, fontSize:21, color:C.ink, margin:'0 0 14px' }}>Audience verdict</h3>
+      <h3 style={{ fontFamily:display, fontSize:21, color:C.ink, margin:'0 0 6px' }}>Audience verdict</h3>
+      {pollOpen ? (
+        <div style={{ fontFamily:ui, fontSize:12, fontWeight:700, color:C.jade, marginBottom:12,
+          textTransform:'uppercase', letterSpacing:'.08em' }}>🗳 Voting is open</div>
+      ) : (
+        <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginBottom:12 }}>Voting is closed</div>
+      )}
       <Bar k="prop" label="Proposition" c={C.jade} />
       <Bar k="opp" label="Opposition" c={C.garnet} />
-      {canVote && (
+      {canVote && pollOpen && (
         <div style={{ marginTop:16, paddingTop:14, borderTop:`1px solid ${C.hair}` }}>
           {!voted && <div style={{ fontFamily:ui, fontSize:11, fontWeight:700, letterSpacing:1, textTransform:'uppercase', color:C.dim, marginBottom:10 }}>Cast your vote</div>}
           <div style={{ display:'flex', gap:10 }}>
             <VoteBtn label="Proposition" side="prop" c={C.jade} hi={C.jadeHi} voted={voted} onClick={() => vote('prop')} />
             <VoteBtn label="Opposition" side="opp" c={C.garnet} hi={C.garnetHi} voted={voted} onClick={() => vote('opp')} />
           </div>
+        </div>
+      )}
+      {canVote && !pollOpen && !voted && (
+        <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginTop:10, fontStyle:'italic' }}>
+          The host will open voting when it's time.
         </div>
       )}
     </>
@@ -439,7 +613,7 @@ function GiftPanel({ debateId }: { debateId: string }) {
                 <button key={p.user_id} onClick={() => setPicked(p.user_id)}
                   style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 10px', borderRadius:999,
                     border: `1px solid ${picked === p.user_id ? C.gold : C.hair}`,
-                    background: picked === p.user_id ? C.gold + '18' : 'transparent',
+                    background: picked === p.user_id ? a(C.gold,'18') : 'transparent',
                     color: picked === p.user_id ? C.ink : C.dim,
                     fontFamily:ui, fontSize:12, fontWeight:500, cursor:'pointer' }}>
                   {p.avatar_url && <Avatar src={p.avatar_url} size={18} />}
@@ -457,7 +631,7 @@ function GiftPanel({ debateId }: { debateId: string }) {
           return (
             <button key={t.id} onClick={() => send(t)} disabled={busy || !canAfford || !picked}
               style={{ padding:'10px 8px', borderRadius:10, border:`1px solid ${C.hair}`,
-                background: canAfford && picked ? C.panel : `${C.panel}88`,
+                background: canAfford && picked ? C.panel : `${a(C.panel,'88')}`,
                 cursor: canAfford && picked ? 'pointer' : 'default', textAlign:'center' }}>
               <div style={{ fontSize:24 }}>{t.icon}</div>
               <div style={{ fontFamily:ui, fontSize:11, fontWeight:600, color: canAfford ? C.ink : C.faint, marginTop:4 }}>{t.name}</div>

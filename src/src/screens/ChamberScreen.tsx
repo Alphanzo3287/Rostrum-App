@@ -13,13 +13,26 @@ import { useAuth } from '../lib/auth';
 import { useRoom } from '../lib/useRoom';
 import { useDebate } from '../lib/useDebate';
 import { useYouTubeStream } from '../lib/useYouTubeStream';
-import { joinDebate } from '../lib/api';
+import {
+  joinDebate, getBroadcastState, subscribeBroadcastState, getResults,
+  getFloorStats, getTally, castVote, listParticipants, demoteToAudience,
+  type BroadcastState, type FloorStats,
+} from '../lib/api';
+import { demoteFromStage } from '../lib/livekit';
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
+import { ScreenTile } from '../components/ScreenTile';
+import { SafePanel } from '../components/SafePanel';
 import { ContextRail } from '../components/ContextRail';
 import { RoleDock } from '../components/RoleDock';
+import { WinnerOverlay } from '../components/WinnerOverlay';
+import { BroadcastBar } from '../components/BroadcastBar';
 import { ShareButton } from '../components/ShareSheet';
-import { C, ui, display, mono } from '../lib/theme';
+import { C, ui, display, mono, a } from '../lib/theme';
+import { useIsTablet, useIsMobile } from '../lib/useMediaQuery';
+import { CompetitorCard, FloorStage, HostTopRow, GalleryStrip, AudienceVoteStrip, JudgesStrip, FloorStatStrip, WaitingHall } from '../components/hall';
+import { InteractionBar } from '../components/InteractionBar';
+import type { Profile, Side, Tally } from '../lib/types';
 
 type Layout = 'slides' | 'spotlight' | 'grid';
 
@@ -29,10 +42,21 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   const { user } = useAuth();
   const room = useRoom(debateId);
   const dz = useDebate(debateId);
+  const isNarrow = useIsTablet();
+  const isMobile = useIsMobile();
   const nav = useNavigate();
   const openProfile = (handle?: string | null) => { if (handle) nav(`/u/${handle}`); };
-  const [layout, setLayout] = useState<Layout>('slides');
   const [tab, setTab] = useState('vote');
+
+  // Mirror the live broadcast composition so the host's preview matches what
+  // YouTube sees, and the layout strip gives immediate visual feedback.
+  const [bs, setBs] = useState<BroadcastState>({ layout: 'solo', stageId: null, slidesOn: false, presenterId: null, presentType: null, presentRequest: null });
+  useEffect(() => {
+    let alive = true;
+    getBroadcastState(debateId).then(s => { if (alive) setBs(s); }).catch(() => {});
+    const off = subscribeBroadcastState(debateId, s => { if (alive) setBs(s); });
+    return () => { alive = false; off(); };
+  }, [debateId]);
 
   // YouTube simulcast state, lifted here so it survives the dock remount
   // when the debate moves from assembly → live.
@@ -59,87 +83,104 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   const low = dz.remaining <= 30 && dz.phase === 'live';
   const onAir = dz.phase === 'live';
 
+  // ---- C2 Live Hall data — interval polling (crash-safe, no new realtime channels) ----
+  const [floor, setFloor] = useState<FloorStats | null>(null);
+  const [tally, setTally] = useState<Tally>({ prop: 0, opp: 0 });
+  const [myVote, setMyVote] = useState<Side | null>(null);
+  const [sideProfiles, setSideProfiles] = useState<{ prop?: Profile; opp?: Profile }>({});
+
+  useEffect(() => {
+    if (dz.phase !== 'live') return;
+    let alive = true;
+    const pull = () => {
+      getFloorStats(debateId).then(f => { if (alive) setFloor(f); }).catch(() => {});
+      getTally(debateId).then(t => { if (alive) setTally(t); }).catch(() => {});
+    };
+    pull();
+    const iv = setInterval(pull, 4000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [debateId, dz.phase]);
+
+  // map prop/opp debaters → their profiles for the competitor-card stats
+  useEffect(() => {
+    let alive = true;
+    listParticipants(debateId).then(rows => {
+      if (!alive) return;
+      const prop = rows.find(r => r.role === 'debater' && r.side === 'prop')?.profile;
+      const opp = rows.find(r => r.role === 'debater' && r.side === 'opp')?.profile;
+      setSideProfiles({ prop, opp });
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [debateId, room.members.length]);
+
+  const onVote = async (side: Side) => {
+    setMyVote(side);
+    try { const t = await castVote(debateId, side); setTally(t); } catch { /* noop */ }
+  };
+
   return (
     <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', background:C.base }}>
       {/* ---- tally bar ---- */}
-      <div style={{ display:'flex', alignItems:'center', gap:14, padding:'11px 18px', borderBottom:`1px solid ${C.hair}` }}>
+      <div style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 20px',
+        borderBottom:`1px solid ${C.hair}`, background:a(C.base,'CC'), backdropFilter:'blur(20px)' }}>
         <button onClick={onLeave} style={iconBtn}>‹</button>
-        <span style={{ padding:'4px 11px', borderRadius:3, fontFamily:ui, fontWeight:700, fontSize:11, letterSpacing:1.5,
-          color: dz.phase==='assembly' ? C.base : onAir ? '#1a0a06' : '#000',
-          background: dz.phase==='assembly' ? C.gold : onAir ? C.ember : C.faint }}>
+        <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 12px', borderRadius:999,
+          fontFamily:ui, fontWeight:800, fontSize:10.5, letterSpacing:'.12em',
+          color:'#FFFFFF',
+          background: dz.phase==='assembly'
+            ? `linear-gradient(135deg, ${C.gold}, ${C.cyan})`
+            : onAir ? C.garnet : a(C.faint,'40') }}>
+          {(dz.phase==='assembly' || onAir) && (
+            <span style={{ width:6, height:6, borderRadius:'50%', background:'#FFFFFF',
+              animation: onAir ? 'pulse 1.5s infinite' : 'none' }} />
+          )}
           {dz.phase==='assembly' ? 'ASSEMBLING' : onAir ? 'ON AIR' : 'OFF AIR'}
         </span>
-        <div style={{ fontFamily:display, fontSize:18, color:C.ink, fontWeight:600, overflow:'hidden',
-          whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{dz.debate?.motion ?? '…'}</div>
+        <div style={{ fontFamily:display, fontSize:18, color:C.ink, fontWeight:700, overflow:'hidden',
+          whiteSpace:'nowrap', textOverflow:'ellipsis', letterSpacing:'-.01em' }}>{dz.debate?.motion ?? '…'}</div>
         <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:16, fontFamily:mono, fontSize:12, color:C.dim }}>
           <ShareButton compact url={typeof window!=='undefined' ? `${window.location.origin}/debate/${debateId}` : ''}
             title={dz.debate?.motion ?? 'A debate on The Rostrum'}
             text={dz.debate?.motion ? `Watch: ${dz.debate.motion}` : 'Watch this debate on The Rostrum'} />
           <span>{Math.max(dz.debate?.viewer_count ?? 0, room.members.length).toLocaleString()} watching</span>
           <button onClick={() => nav(`/debate/${debateId}/watch`)} title="Immersive view"
-            style={{ padding:'4px 10px', borderRadius:4, border:`1px solid ${C.hair}`,
+            style={{ padding:'6px 12px', borderRadius:10, border:`1px solid ${C.hair}`,
               color:C.dim, fontSize:12, fontFamily:ui, fontWeight:600,
-              background:'transparent', cursor:'pointer' }}>
+              background:C.glass, cursor:'pointer' }}>
             ⛶ Immersive
           </button>
           <button onClick={() => role==='host' && setTab('ros')}
             title={role==='host' ? 'Edit time in Run of show' : undefined}
-            style={{ padding:'4px 10px', borderRadius:4, border:`1px solid ${low ? C.ember : C.hair}`,
-              color: low ? C.ember : C.ink, fontWeight:700, fontSize:15, fontFamily:mono,
-              background:'transparent', cursor: role==='host' ? 'pointer' : 'default' }}>
+            style={{ padding:'6px 12px', borderRadius:10, border:`1px solid ${low ? C.garnet : C.hair}`,
+              color: low ? C.garnet : C.ink, fontWeight:700, fontSize:15, fontFamily:mono,
+              background: low ? a(C.garnet,'14') : C.glass, cursor: role==='host' ? 'pointer' : 'default' }}>
             {dz.phase==='assembly' ? 'Doors open' : `${mm}:${ss}`}
           </button>
         </div>
       </div>
 
       {/* ---- main ---- */}
-      <div style={{ flex:1, display:'grid', gridTemplateColumns:'1fr 322px', minHeight:0 }}>
-        <div style={{ display:'flex', flexDirection:'column', minWidth:0, padding:'14px 16px 0' }}>
+      <div style={{ flex:1, display:'grid',
+        gridTemplateColumns: isNarrow ? '1fr' : '1fr 322px',
+        gridTemplateRows: isNarrow ? 'minmax(240px,42vh) 1fr' : '1fr',
+        minHeight:0, overflow: isNarrow ? 'auto' : 'hidden' }}>
+        <div style={{ display:'flex', flexDirection:'column', minWidth:0, minHeight:0, padding:'14px 16px 0' }}>
           {dz.phase === 'assembly'
-            ? <Assembly members={room.members} onProfile={openProfile} />
-            : <>
-                {/* segment + layout switch */}
-                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
-                  <span style={{ fontFamily:ui, fontSize:10.5, fontWeight:700, letterSpacing:2.5, textTransform:'uppercase',
-                    color: speakerSide==='opp' ? C.garnetHi : speakerSide==='prop' ? C.jadeHi : C.gold }}>
-                    {dz.seg?.label ?? 'Segment'}</span>
-                  <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
-                    {(['slides','spotlight','grid'] as Layout[]).map(k => (
-                      <button key={k} onClick={() => setLayout(k)} style={{ ...iconBtn,
-                        borderColor: layout===k ? C.gold : C.hair, color: layout===k ? C.gold : C.dim, fontSize:11 }}>{k[0].toUpperCase()}</button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* canvas */}
-                <div style={{ flex:1, minHeight:0, position:'relative', borderRadius:7, overflow:'hidden', border:`1px solid ${C.hair}`, background:C.base2 }}>
-                  {layout === 'grid'
-                    ? <div style={{ position:'absolute', inset:0, padding:12, display:'grid', gap:10,
-                        gridTemplateColumns:'repeat(3,1fr)', alignContent:'center' }}>
-                        {room.members.map(m => <VideoTile key={m.identity} member={m} active={m.identity===speaker?.identity} />)}
-                      </div>
-                    : <>
-                        <SlideStage debateId={debateId} canPresent={room.canPublish && role !== 'host'} dim={layout==='spotlight'} />
-                        {speaker && (
-                          <div style={{ position:'absolute', right:'3%', bottom:'7%', width: layout==='spotlight' ? '46%' : '31%', aspectRatio:'4 / 3' }}>
-                            <VideoTile member={speaker} active size={layout==='spotlight' ? 'stage' : 'tile'} />
-                          </div>
-                        )}
-                      </>}
-                </div>
-
-                {/* filmstrip */}
-                <div style={{ display:'flex', gap:9, overflowX:'auto', padding:'12px 2px 14px' }}>
-                  {room.members.map(m => (
-                    <div key={m.identity} style={{ width:108, flexShrink:0 }}>
-                      <VideoTile member={m} active={m.identity===speaker?.identity} />
-                    </div>
-                  ))}
-                </div>
-              </>}
+            ? <WaitingHall debateId={debateId} members={room.members} motion={dz.debate?.motion ?? ''}
+                viewerCount={Math.max(dz.debate?.viewer_count ?? 0, room.members.length)}
+                scheduledAt={dz.debate?.scheduled_at} role={role} onProfile={openProfile} />
+            : <LiveHall
+                debateId={debateId} room={room} dz={dz} bs={bs}
+                onLocalState={(patch) => setBs(b => ({ ...b, ...patch }))}
+                me={me} role={role} speaker={speaker} speakerSide={speakerSide}
+                floor={floor} tally={tally} myVote={myVote} onVote={onVote}
+                sideProfiles={sideProfiles} onProfile={openProfile} narrow={isNarrow} mobile={isMobile}
+                countdown={`${mm}:${ss}`} onAskQuestion={() => setTab('qa')}
+              />}
         </div>
 
-        <ContextRail debateId={debateId} role={role} tab={tab} setTab={setTab}
+        <ContextRail debateId={debateId} role={role} tab={tab} setTab={setTab} members={room.members} lkRoom={room.room}
+          pollOpen={!!dz.debate?.poll_open}
           ros={{
             segments: dz.segments, segIdx: dz.segIdx, remaining: dz.remaining,
             running: dz.running, phase: dz.phase,
@@ -172,9 +213,86 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         onStreamStop={yt.stop}
         setTab={setTab}
         onLeave={onLeave}
+        pollOpen={!!dz.debate?.poll_open}
+        onTogglePoll={dz.togglePoll}
+        winMode={dz.debate?.win_mode}
+        onFinalize={dz.doFinalize}
+        onAnnounce={dz.doAnnounce}
+        resultsReady={!!dz.results}
+        winnerAnnounced={!!dz.debate?.winner_announced}
       />
     </div>
   );
+}
+
+/* ---- chamber preview: mirrors the live broadcast composition ---- */
+function ChamberPreview({ members, bs, debateId, speaker, speakerSide, meId }: {
+  members: M[]; bs: BroadcastState; debateId: string; speaker?: M; speakerSide: string | null; meId?: string;
+}) {
+  const presenter = bs.presenterId ? members.find(m => m.identity === bs.presenterId) : undefined;
+  const screenTrack = (presenter as any)?.screenTrack;
+  const hasScreen = bs.presentType === 'screen' && !!screenTrack;
+  const iPresent = !!meId && bs.presenterId === meId && bs.presentType === 'slides';
+  const featured = (bs.stageId ? members.find(m => m.identity === bs.stageId) : undefined)
+    ?? presenter ?? speaker
+    ?? members.find(m => m.role === 'debater' && m.side === speakerSide)
+    ?? members.find(m => m.role === 'host')
+    ?? members[0];
+  const cams = members.filter(m => ['host','debater','moderator'].includes(m.role));
+  const screenCam = presenter ?? featured;
+
+  const Content = hasScreen
+    ? <ScreenTile track={screenTrack} fit="contain" />
+    : <SlideStage debateId={debateId} canPresent={iPresent} />;
+
+  const cam = (m?: M, big = true) => m
+    ? <div style={{ position:'absolute', inset:0 }}><VideoTile member={m} active size={big ? 'stage' : 'tile'} /></div>
+    : <div style={{ position:'absolute', inset:0, display:'grid', placeItems:'center', color:C.faint, fontSize:13 }}>Waiting…</div>;
+
+  const wrap = (children: React.ReactNode) =>
+    <div style={{ position:'absolute', inset:0, padding:8 }}>{children}</div>;
+
+  switch (bs.layout) {
+    case 'group':
+      return wrap(
+        <div style={{ width:'100%', height:'100%', display:'grid', gap:8,
+          gridTemplateColumns:`repeat(${cams.length<=1?1:cams.length<=4?2:3},1fr)`, alignContent:'center', alignItems:'center' }}>
+          {cams.map(m => <div key={m.identity} style={{ position:'relative' }}><VideoTile member={m} active={m.identity===speaker?.identity} /></div>)}
+        </div>);
+    case 'news':
+      return wrap(
+        <div style={{ width:'100%', height:'100%', display:'flex', gap:8 }}>
+          <div style={{ flex:'1 1 38%', position:'relative' }}>{cam(screenCam)}</div>
+          <div style={{ flex:'1 1 62%', position:'relative', borderRadius:14, overflow:'hidden' }}>{Content}</div>
+        </div>);
+    case 'screen':
+      return wrap(
+        <div style={{ width:'100%', height:'100%', display:'flex', gap:8 }}>
+          <div style={{ flex:'1 1 78%', position:'relative', borderRadius:14, overflow:'hidden' }}>{Content}</div>
+          <div style={{ flex:'1 1 22%', position:'relative' }}>{cam(screenCam,false)}</div>
+        </div>);
+    case 'pip':
+      return (
+        <>
+          <div style={{ position:'absolute', inset:0 }}>{Content}</div>
+          <div style={{ position:'absolute', right:'3%', bottom:'6%', width:'20%', aspectRatio:'16/9' }}>{cam(screenCam,false)}</div>
+        </>);
+    case 'cinema':
+      return <div style={{ position:'absolute', inset:0 }}>{Content}</div>;
+    case 'spotlight': {
+      const others = cams.filter(m => m.identity !== featured?.identity).slice(0,5);
+      return wrap(
+        <div style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', gap:8 }}>
+          <div style={{ flex:1, position:'relative' }}>{cam(featured)}</div>
+          {others.length>0 && <div style={{ flex:'0 0 22%', display:'flex', gap:8 }}>
+            {others.map(m => <div key={m.identity} style={{ flex:1, position:'relative' }}>{cam(m,false)}</div>)}
+          </div>}
+        </div>);
+    }
+    case 'solo':
+    default:
+      return cam(featured);
+  }
 }
 
 /* ---- assembly: the seated chamber before the gavel (real members) ---- */
@@ -189,7 +307,7 @@ function SeatAvatar({ name, size = 54, ring }: { name: string; size?: number; ri
   const init = (name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
   return (
     <div style={{ width:size, height:size, borderRadius:'50%', flexShrink:0, display:'grid', placeItems:'center',
-      fontFamily:ui, fontWeight:700, fontSize:size*0.36, color:'#0C0B0D',
+      fontFamily:ui, fontWeight:700, fontSize:size*0.36, color:C.base,
       background:`linear-gradient(145deg, hsl(${h} 42% 60%), hsl(${(h+38)%360} 38% 40%))`,
       boxShadow: ring ? `0 0 0 2px ${C.base}, 0 0 0 3.5px ${ring}` : 'inset 0 -2px 6px rgba(0,0,0,.4)' }}>{init}</div>
   );
@@ -232,9 +350,9 @@ function Bench({ title, people, side, accent, tint, onProfile }: {
 }) {
   const opens = Math.max(0, 1 - people.length);
   return (
-    <div style={{ flex:1, maxWidth:280, padding:'16px 18px', borderRadius:10,
-      background:`linear-gradient(${side==='left'?'110deg':'250deg'}, ${tint}22, rgba(20,18,22,0.55) 80%)`,
-      border:`1px solid ${tint}55` }}>
+    <div style={{ flex:1, maxWidth:280, padding:'18px 20px', borderRadius:18,
+      background:`linear-gradient(${side==='left'?'110deg':'250deg'}, ${a(tint,'1F')}, ${a(C.panel,'8C')} 80%)`,
+      border:`1px solid ${a(tint,'40')}` }}>
       <div style={{ fontFamily:ui, fontSize:10.5, fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase',
         color:accent, marginBottom:14, textAlign: side==='left'?'left':'right' }}>{title}</div>
       <div style={{ display:'flex', gap:16, flexWrap:'wrap', justifyContent: side==='left'?'flex-start':'flex-end' }}>
@@ -327,3 +445,229 @@ function Assembly({ members, onProfile }: { members: M[]; onProfile?: (h?: strin
 
 const iconBtn: React.CSSProperties = { width:32, height:32, borderRadius:5, border:`1px solid ${C.hair}`,
   background:'rgba(0,0,0,0.25)', color:C.dim, cursor:'pointer', fontSize:16, lineHeight:1 };
+
+/* ---- C2 · Live Debate Hall (concept panel 1) ----------------------------
+   Competitor cards (prop left / opp right) flank the center floor stage with
+   the amphitheater backdrop; gallery / audience-vote / judges row + the floor
+   stat strip sit beneath. The broadcast controls + filmstrip are preserved
+   underneath, and the host can flip the center to the broadcast MONITOR (what
+   YouTube actually composes) without losing the hall. ChamberPreview,
+   BroadcastBar, SafePanel and WinnerOverlay are reused verbatim — no live
+   LiveKit / egress wiring changes. */
+function LiveHall({
+  debateId, room, dz, bs, onLocalState, me, role, speaker, speakerSide,
+  floor, tally, myVote, onVote, sideProfiles, onProfile, narrow, countdown, onAskQuestion, mobile,
+}: {
+  debateId: string; room: any; dz: any; bs: BroadcastState;
+  onLocalState: (patch: Partial<BroadcastState>) => void;
+  me?: M; role: string; speaker?: M; speakerSide: Side | null;
+  floor: FloorStats | null; tally: Tally; myVote: Side | null; onVote: (s: Side) => void;
+  sideProfiles: { prop?: Profile; opp?: Profile }; onProfile: (h?: string | null) => void;
+  narrow: boolean; countdown: string; onAskQuestion?: () => void; mobile?: boolean;
+}) {
+  const [monitor, setMonitor] = useState(false);
+
+  const members = room.members as any[];
+  const propMember = members.find(m => m.role === 'debater' && m.side === 'prop');
+  const oppMember = members.find(m => m.role === 'debater' && m.side === 'opp');
+  const host = members.find(m => m.role === 'host');
+  const mod = members.find(m => m.role === 'moderator');
+  const judges = members.filter(m => m.role === 'judge');
+  const audience = members.filter(m => m.role === 'audience');
+
+  const segTotal = dz.segments?.[dz.segIdx]?.duration_secs ?? 0;
+  const phaseLabel = dz.seg?.label ?? 'In session';
+  const canControl = role === 'host' || role === 'debater' || role === 'moderator';
+
+  const overlays = (
+    <>
+      {dz.debate?.poll_open && (
+        <div style={{ position:'absolute', top:10, right:10, zIndex:20, display:'flex', alignItems:'center', gap:6,
+          padding:'5px 12px', borderRadius:20, background:a(C.base,'B3'), backdropFilter:'blur(6px)',
+          border:`1px solid ${a(C.jade,'55')}` }}>
+          <span style={{ width:8, height:8, borderRadius:'50%', background:C.jade, boxShadow:`0 0 6px ${C.jade}`, animation:'pulse 1.5s infinite' }} />
+          <span style={{ fontFamily:ui, fontSize:11, fontWeight:700, color:C.jade, textTransform:'uppercase', letterSpacing:'.08em' }}>Voting open</span>
+        </div>
+      )}
+      {dz.debate?.winner_announced && dz.results && (
+        <WinnerOverlay
+          winnerSide={dz.results.winner_side}
+          winMode={dz.debate.win_mode ?? 'public'}
+          peoplesChoice={dz.results.peoples_choice_side}
+          propScore={dz.results.prop_judge_total}
+          oppScore={dz.results.opp_judge_total}
+          propAudience={dz.results.prop_audience}
+          oppAudience={dz.results.opp_audience}
+        />
+      )}
+    </>
+  );
+
+  // Slides/screen-share must be visible to everyone by default — not just
+  // behind the host-only Monitor toggle, which only previews the YouTube
+  // composition. This mirrors ChamberPreview's own derivation exactly.
+  const presenter = bs.presenterId ? members.find(m => m.identity === bs.presenterId) : undefined;
+  const screenTrack = (presenter as any)?.screenTrack;
+  const hasScreen = bs.presentType === 'screen' && !!screenTrack;
+  const isPresenting = !!bs.presenterId && (bs.presentType === 'slides' || hasScreen);
+  const iPresentSlides = !!me?.identity && bs.presenterId === me.identity && bs.presentType === 'slides';
+  const presentingContent = isPresenting
+    ? (hasScreen ? <ScreenTile track={screenTrack} fit="contain" /> : <SlideStage debateId={debateId} canPresent={iPresentSlides} />)
+    : null;
+
+  const stage = monitor
+    ? (
+      <div style={{ position:'relative', height:'100%', width:'100%', minHeight:0, display:'flex', alignItems:'center', justifyContent:'center',
+        borderRadius:18, overflow:'hidden', border:`1px solid ${C.hair}`, background:C.base2 }}>
+        <div style={{ width:'100%', aspectRatio:'16 / 9', maxHeight:'100%', position:'relative' }}>
+          <SafePanel resetKey={`mon:${bs.layout}:${bs.presenterId ?? ''}`} label="Monitor" fill>
+            <ChamberPreview members={members} bs={bs} debateId={debateId} speaker={speaker} speakerSide={speakerSide} meId={me?.identity} />
+          </SafePanel>
+        </div>
+        {overlays}
+      </div>
+    )
+    : <FloorStage roundLabel={phaseLabel} countdown={countdown} hasFloorSide={speakerSide}
+        presenting={presentingContent} presenterName={presenter?.name}>{overlays}</FloorStage>;
+
+  const propCard = (
+    <CompetitorCard side="prop" member={propMember} profile={sideProfiles.prop}
+      hasFloor={speakerSide === 'prop'} speakingSecs={floor?.prop_speaking ?? 0} segTotal={segTotal} onProfile={onProfile} />
+  );
+  const oppCard = (
+    <CompetitorCard side="opp" member={oppMember} profile={sideProfiles.opp}
+      hasFloor={speakerSide === 'opp'} speakingSecs={floor?.opp_speaking ?? 0} segTotal={segTotal} onProfile={onProfile} />
+  );
+
+  const isHost = role === 'host';
+  const [manageOpen, setManageOpen] = useState(false);
+
+  const monitorToggle = canControl ? (
+    <div style={{ display:'flex', gap:8 }}>
+      {isHost && (
+        <button onClick={() => setManageOpen(true)} title="Move a seated participant back to the audience"
+          style={{ padding:'6px 12px', borderRadius:10, border:`1px solid ${C.hair}`,
+            background:C.glass, color:C.dim, fontFamily:ui, fontSize:12, fontWeight:600, cursor:'pointer' }}>
+          ⚙ Manage seats
+        </button>
+      )}
+      <button onClick={() => setMonitor(v => !v)} title="Toggle the broadcast monitor (what YouTube sees)"
+        style={{ padding:'6px 12px', borderRadius:10, border:`1px solid ${monitor ? a(C.gold,'66') : C.hair}`,
+          background: monitor ? a(C.gold,'1F') : C.glass, color: monitor ? C.goldHi : C.dim,
+          fontFamily:ui, fontSize:12, fontWeight:600, cursor:'pointer' }}>
+        ◉ {monitor ? 'Monitor on' : 'Monitor'}
+      </button>
+    </div>
+  ) : undefined;
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', minHeight:0, height:'100%',
+      overflowY:'auto', paddingBottom: narrow ? 10 : 0 }}>
+      <div style={{ flexShrink:0 }}>
+        <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile} right={monitorToggle} />
+      </div>
+
+      {manageOpen && (
+        <ManageSeatsModal debateId={debateId} members={members} onClose={() => setManageOpen(false)} />
+      )}
+
+      {narrow ? (
+        <div style={{ display:'flex', flexDirection:'column', gap:12, flexShrink:0 }}>
+          <div style={{ height:'46vh', minHeight:260, display:'flex' }}>{stage}</div>
+          <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1fr', gap:12 }}>{propCard}{oppCard}</div>
+        </div>
+      ) : (
+        <div style={{ flex:'1 1 auto', flexShrink:0, minHeight:0, display:'grid', gap:14,
+          gridTemplateColumns:'minmax(220px,300px) minmax(0,1fr) minmax(220px,300px)' }}>
+          {propCard}
+          <div style={{ display:'flex', minHeight:0 }}>{stage}</div>
+          {oppCard}
+        </div>
+      )}
+
+      <div style={{ display:'grid', gap:12, marginTop:14, flexShrink:0,
+        gridTemplateColumns: narrow ? '1fr' : '1.1fr 1.3fr 1fr' }}>
+        <GalleryStrip audience={audience} onProfile={onProfile} />
+        <AudienceVoteStrip tally={tally} myVote={myVote} canVote={!!dz.debate?.poll_open} onVote={onVote} />
+        <JudgesStrip judges={judges} onProfile={onProfile} />
+      </div>
+
+      <div style={{ marginTop:12, flexShrink:0 }}>
+        <FloorStatStrip floor={floor} hasFloorSide={speakerSide} phaseLabel={phaseLabel} segTotal={segTotal} />
+      </div>
+
+      {me && (
+        <div style={{ marginTop:12, flexShrink:0 }}>
+          <InteractionBar room={room.room} identity={me.identity} name={me.name} onAskQuestion={onAskQuestion} />
+        </div>
+      )}
+
+      {canControl && (
+        <div style={{ marginTop:12, flexShrink:0 }}>
+          <SafePanel resetKey={`bar:${dz.phase}`} label="Controls">
+            <BroadcastBar debateId={debateId} role={role} identity={me?.identity ?? ''}
+              members={members} lkRoom={room.room} setScreenShare={room.setScreenShare}
+              onLocalState={onLocalState} />
+          </SafePanel>
+        </div>
+      )}
+
+      <div style={{ display:'flex', gap:9, overflowX:'auto', padding:'12px 2px 4px', flexShrink:0 }}>
+        {members.map(m => (
+          <div key={m.identity} style={{ width:108, flexShrink:0 }}>
+            <VideoTile member={m} active={m.identity === speaker?.identity} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---- C5 · Manage Seats (host-only: return someone to the audience) ---- */
+function ManageSeatsModal({ debateId, members, onClose }: { debateId: string; members: any[]; onClose: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const seated = members.filter(m => m.role !== 'audience' && m.role !== 'host');
+
+  async function demote(m: any) {
+    setBusy(m.identity);
+    try {
+      await Promise.all([demoteToAudience(debateId, m.identity, m.identity), demoteFromStage(debateId, m.identity)]);
+    } catch (e: any) { alert(e?.message ?? 'Could not move to audience'); }
+    finally { setBusy(null); }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:200, display:'grid', placeItems:'center',
+      background:a(C.base,'CC'), backdropFilter:'blur(6px)', padding:20 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ width:420, maxWidth:'100%', maxHeight:'80vh', overflowY:'auto', borderRadius:14,
+        background:C.panel, border:`1px solid ${C.hair}`, padding:24, boxShadow:'0 20px 60px rgba(0,0,0,.5)' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+          <h3 style={{ fontFamily:display, fontSize:19, color:C.ink, margin:0 }}>Manage seats</h3>
+          <button onClick={onClose} style={{ background:'none', border:'none', color:C.faint, fontSize:20, cursor:'pointer' }}>×</button>
+        </div>
+        {seated.length === 0 ? (
+          <p style={{ fontFamily:ui, fontSize:13, color:C.faint }}>No one else is seated on stage right now.</p>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {seated.map(m => (
+              <div key={m.identity} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 11px',
+                borderRadius:10, background:C.panel2, border:`1px solid ${C.hair}` }}>
+                <span style={{ flex:1, minWidth:0, fontFamily:ui, fontSize:13.5, color:C.ink,
+                  whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{m.name}</span>
+                <span style={{ fontFamily:ui, fontSize:10.5, fontWeight:700, letterSpacing:'.06em', textTransform:'uppercase',
+                  color:C.faint }}>{m.role}{m.side ? ` · ${m.side}` : ''}</span>
+                <button onClick={() => demote(m)} disabled={busy === m.identity}
+                  style={{ padding:'6px 11px', borderRadius:8, cursor:'pointer', fontFamily:ui, fontSize:11.5, fontWeight:600,
+                    color:C.garnetHi, background:a(C.garnet,'14'), border:`1px solid ${a(C.garnet,'44')}`,
+                    opacity: busy === m.identity ? .6 : 1 }}>
+                  {busy === m.identity ? '…' : '→ Audience'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

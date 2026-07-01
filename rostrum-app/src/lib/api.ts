@@ -865,3 +865,41 @@ export async function declineTeamInvite(inviteId: string): Promise<void> {
   const { error } = await supabase.from('team_invites').update({ status: 'declined', responded_at: new Date().toISOString() }).eq('id', inviteId);
   if (error) throw error;
 }
+
+/* ─────────────────── PROFILE EDITING ─────────────────── */
+export async function updateProfile(patch: {
+  display_name?: string; handle?: string; bio?: string | null; topics?: string[]; socials?: Partial<import('./types').Socials>;
+}): Promise<Profile> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('not signed in');
+  const { data, error } = await supabase.from('profiles').update(patch).eq('id', user.id).select('*').single();
+  if (error) {
+    if (error.code === '23505') throw new Error('That handle is already taken.');
+    throw error;
+  }
+  return data as Profile;
+}
+
+/* ─────────────────── SEARCH ─────────────────── */
+export interface SearchResults { profiles: Profile[]; debates: Debate[]; }
+export async function searchAll(q: string): Promise<SearchResults> {
+  const term = q.trim();
+  if (!term) return { profiles: [], debates: [] };
+  const [{ data: profiles }, { data: debates }] = await Promise.all([
+    supabase.from('profiles').select('*').or(`display_name.ilike.%${term}%,handle.ilike.%${term}%`).limit(20),
+    supabase.from('debates').select('*, host:profiles!debates_host_id_fkey(display_name,handle,avatar_url)')
+      .or(`motion.ilike.%${term}%,tag.ilike.%${term}%`).eq('visibility', 'public').order('created_at', { ascending: false }).limit(20),
+  ]);
+  return { profiles: (profiles ?? []) as Profile[], debates: (debates ?? []) as Debate[] };
+}
+
+/* ─────────────────── REMOVE FROM STAGE (host only) ───────────────────
+   Demotes a seated participant (host/mod/debater/judge) back to audience:
+   updates the persisted role/side (host already has full RLS rights on
+   debate_participants for their own debates) and revokes LiveKit publish
+   + pushes new metadata so it's reflected live, not just on reconnect. */
+export async function demoteToAudience(debateId: string, userId: string, identity: string): Promise<void> {
+  const { error } = await supabase.from('debate_participants')
+    .update({ role: 'audience', side: null }).eq('debate_id', debateId).eq('user_id', userId);
+  if (error) throw error;
+}
