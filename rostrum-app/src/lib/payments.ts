@@ -100,6 +100,17 @@ export async function getCreatorAccount(): Promise<CreatorAccount> {
 export const startPayoutOnboarding = () => authedPost<{ url: string }>('stripe-connect-onboard');
 export const refreshPayoutStatus = () => authedPost<CreatorAccount>('stripe-account-status');
 
+/* ---- Buy D-Bucks with real money ----
+   Display-only copy of the server's package map (netlify/functions/
+   stripe-checkout.ts is the source of truth for actual pricing — the
+   server never trusts anything the client sends about price). */
+export const DBUCKS_PACKAGES = [
+  { id: 'p500',  dbucks: 500,  priceCents: 500 },
+  { id: 'p1000', dbucks: 1000, priceCents: 1000 },
+  { id: 'p5000', dbucks: 5000, priceCents: 5000 },
+] as const;
+export const startDbucksCheckout = (packageId: string) => authedPost<{ url: string }>('stripe-checkout', { packageId });
+
 /* ---- Level / XP / progress ---- */
 export interface Progress {
   xp: number; level: number; next_level_xp: number;

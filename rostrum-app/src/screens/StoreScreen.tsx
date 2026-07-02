@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
 import { listPerks, myPerkIds, redeemPerk } from '../lib/api';
-import { getMyWallet, getGiftTiers, type Wallet, type GiftTier } from '../lib/payments';
+import { getMyWallet, getGiftTiers, startDbucksCheckout, DBUCKS_PACKAGES, type Wallet, type GiftTier } from '../lib/payments';
 import type { Perk } from '../lib/types';
 import { C, ui, display, mono, solidGold, a } from '../lib/theme';
 import { Scroll, Empty } from '../components/ui';
@@ -35,6 +35,14 @@ export function StoreScreen({ onBack }: { onBack?: () => void }) {
     finally { setBusy(null); }
   }
 
+  async function buyDbucks(packageId: string) {
+    setBusy(packageId);
+    try {
+      const { url } = await startDbucksCheckout(packageId);
+      window.location.href = url;
+    } catch (e: any) { alert(e?.message ?? 'Could not start checkout'); setBusy(null); }
+  }
+
   return (
     <Scroll title="The Store" onBack={onBack}
       right={
@@ -52,6 +60,26 @@ export function StoreScreen({ onBack }: { onBack?: () => void }) {
           <WalletChip label="Redeemable" value={wallet.redeemable} color={C.jadeHi} />
         </div>
       )}
+
+      {/* ---- Buy D-Bucks section ---- */}
+      <SectionTitle>Buy D-Bucks</SectionTitle>
+      <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint, marginBottom:14, lineHeight:1.5 }}>
+        Purchased D-Bucks are redeemable — they count toward a creator's real cash-out balance when you gift them.
+      </p>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:12, marginBottom:28 }}>
+        {DBUCKS_PACKAGES.map(p => (
+          <div key={p.id} style={{ padding:'16px 14px', borderRadius:18, border:`1px solid ${C.hair}`,
+            background:C.panel, textAlign:'center' }}>
+            <div style={{ fontFamily:mono, fontSize:20, fontWeight:800, color:C.jadeHi }}>{p.dbucks.toLocaleString()}</div>
+            <div style={{ fontFamily:ui, fontSize:11, color:C.faint, marginTop:2 }}>D-Bucks</div>
+            <button onClick={() => buyDbucks(p.id)} disabled={busy === p.id}
+              style={{ ...solidGold, width:'100%', marginTop:12, padding:'9px 0', fontSize:13,
+                opacity: busy === p.id ? .6 : 1 }}>
+              {busy === p.id ? '…' : `$${(p.priceCents / 100).toFixed(2)}`}
+            </button>
+          </div>
+        ))}
+      </div>
 
       {/* ---- Gifts section ---- */}
       <SectionTitle>Gifts</SectionTitle>
