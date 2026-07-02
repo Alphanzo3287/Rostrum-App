@@ -239,6 +239,7 @@ function InvitePanel({ debateId, format }: { debateId: string; format?: string }
   // moderator (co-host) is still a reasonable seat to invite.
   const seats = format === 'lecture' ? allSeats.filter(s => s.label === 'Moderator')
     : format === 'legacy' ? legacySeats
+    : format === 'speakers_corner' ? allSeats.filter(s => s.label !== 'Judge')
     : allSeats;
   const [copied, setCopied] = useState<string | null>(null);
   const link = (q: string) => `${origin}/debate/${debateId}/join?${q}`;

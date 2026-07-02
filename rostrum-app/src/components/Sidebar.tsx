@@ -98,9 +98,7 @@ export function Sidebar() {
         <div style={{ width:38, height:38, borderRadius:11, display:'grid', placeItems:'center',
           background:`linear-gradient(135deg, ${C.gold}, ${C.cyan})`,
           boxShadow:`0 8px 24px ${a(C.gold,'4D')}` }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
-            <path d="M5 21h14v-2H5v2zM6 3v14h12V3H6zm10 12H8V5h8v10z M9 7h6v1.5H9zM9 10h6v1.5H9zM9 13h6v1.5H9z"/>
-          </svg>
+          <img src="/logo-icon.png" alt="" style={{ width:24, height:24, objectFit:'contain' }} />
         </div>
         <div style={{ lineHeight:1.05 }}>
           <div style={{ fontFamily:display, fontSize:11, fontWeight:600, color:C.faint,
@@ -226,9 +224,7 @@ export function Sidebar() {
           <Link to="/" style={{ display:'flex', alignItems:'center', gap:9, textDecoration:'none' }}>
             <div style={{ width:30, height:30, borderRadius:8, display:'grid', placeItems:'center',
               background:`linear-gradient(135deg, ${C.gold}, ${C.cyan})` }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
-                <path d="M5 21h14v-2H5v2zM6 3v14h12V3H6zm10 12H8V5h8v10z" />
-              </svg>
+              <img src="/logo-icon.png" alt="" style={{ width:19, height:19, objectFit:'contain' }} />
             </div>
             <span style={{ fontFamily:display, fontSize:17, fontWeight:700, color:C.ink, letterSpacing:'-.01em' }}>
               THE ROSTRUM

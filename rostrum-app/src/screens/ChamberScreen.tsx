@@ -20,6 +20,7 @@ import {
 } from '../lib/api';
 import { demoteFromStage, promoteFromAudience } from '../lib/livekit';
 import { useStageInvites, type StageRole, type StageSide } from '../lib/stageInvites';
+import { useSpotlight } from '../lib/spotlight';
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
 import { ScreenTile } from '../components/ScreenTile';
@@ -757,7 +758,7 @@ function SpeakersCornerHall({
   const oppSpeakers = members.filter(m => m.role === 'debater' && m.side === 'opp');
   const audience = members.filter(m => m.role === 'audience');
   const canControl = role === 'host' || role === 'moderator';
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const { spotlightId: expandedId, setSpotlight: setExpandedId } = useSpotlight(room.room);
   const expanded = members.find(m => m.identity === expandedId);
   const { identity, reload: reloadIdentity } = useSideIdentity(debateId, true);
   const [customizing, setCustomizing] = useState<Side | null>(null);
