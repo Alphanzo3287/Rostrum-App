@@ -79,7 +79,12 @@ function Gate() {
   }
 
   if (loading) return <Splash />;
-  if (!session) return <AuthScreen onSignedUp={() => setJustSignedUp(true)} />;
+  if (!session) {
+    const returningFromStripe = typeof window !== 'undefined'
+      && /[?&](purchase|onboarding)=/.test(window.location.search);
+    return <AuthScreen onSignedUp={() => setJustSignedUp(true)}
+      notice={returningFromStripe ? 'Your Stripe step went through — just sign back in to pick up where you left off.' : undefined} />;
+  }
   if (isBanned) return <BannedScreen />;
 
   const needsOnboard = justSignedUp || (profile != null && !profile.bio && profile.topics.length === 0);

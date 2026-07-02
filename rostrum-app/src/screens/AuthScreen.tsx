@@ -7,9 +7,9 @@ import { useAuth } from '../lib/auth';
 import { C, ui, display, mono, solidGold, field, a } from '../lib/theme';
 import { useIsTablet } from '../lib/useMediaQuery';
 
-export function AuthScreen({ onSignedUp }: { onSignedUp: () => void }) {
+export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; notice?: string }) {
   const { signIn, signUp } = useAuth();
-  const [mode, setMode] = useState<'signup' | 'login'>('signup');
+  const [mode, setMode] = useState<'signup' | 'login'>(notice ? 'login' : 'signup');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
@@ -111,6 +111,13 @@ export function AuthScreen({ onSignedUp }: { onSignedUp: () => void }) {
           <p style={{ fontFamily:ui, fontSize:14, color:C.faint, margin:'0 0 28px' }}>
             {mode === 'signup' ? 'Join the chamber and start debating.' : 'Sign in to enter the chamber.'}
           </p>
+
+          {notice && (
+            <div style={{ marginBottom:20, padding:'12px 14px', borderRadius:10, fontFamily:ui, fontSize:12.5,
+              lineHeight:1.5, color:C.jadeHi, background:a(C.jade,'14'), border:`1px solid ${a(C.jade,'44')}` }}>
+              {notice}
+            </div>
+          )}
 
           {/* Mode toggle */}
           <div style={{ display:'flex', gap:5, background:C.glass, padding:5, borderRadius:12, marginBottom:24,

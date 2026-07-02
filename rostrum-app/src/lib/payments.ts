@@ -111,6 +111,55 @@ export const DBUCKS_PACKAGES = [
 ] as const;
 export const startDbucksCheckout = (packageId: string) => authedPost<{ url: string }>('stripe-checkout', { packageId });
 
+/* ---- Phase 4: creator buy-back listings ----
+   One active listing per creator. Creator lists some of their redeemable
+   D-Bucks for sale with a digital product attached; a supporter buys it
+   for real money, split 85/15 straight to the creator's bank via Stripe
+   Connect, and the D-Bucks retire back to treasury. */
+export interface BuybackListing {
+  id: string; creator_id: string; dbucks_amount: number; price_cents: number;
+  product_name: string; product_file_path: string; status: 'active' | 'sold' | 'cancelled';
+  buyer_id: string | null; created_at: string; sold_at: string | null;
+}
+
+export async function getMyListing(): Promise<BuybackListing | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase.from('buyback_listings').select('*')
+    .eq('creator_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
+  return (data as BuybackListing) ?? null;
+}
+
+export async function getCreatorListing(creatorId: string): Promise<BuybackListing | null> {
+  const { data } = await supabase.from('buyback_listings').select('*')
+    .eq('creator_id', creatorId).eq('status', 'active').maybeSingle();
+  return (data as BuybackListing) ?? null;
+}
+
+export async function createBuybackListing(
+  dbucks: number, priceCents: number, productName: string, file: File,
+): Promise<BuybackListing> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('not signed in');
+  const ext = file.name.split('.').pop() ?? 'pdf';
+  const path = `${user.id}/${Date.now()}.${ext}`;
+  const { error: upErr } = await supabase.storage.from('creator-products').upload(path, file);
+  if (upErr) throw upErr;
+  const { data, error } = await supabase.rpc('create_buyback_listing', {
+    p_dbucks: dbucks, p_price_cents: priceCents, p_product_name: productName, p_file_path: path,
+  });
+  if (error) throw error;
+  return data as BuybackListing;
+}
+
+export async function cancelBuybackListing(listingId: string): Promise<void> {
+  const { error } = await supabase.rpc('cancel_buyback_listing', { p_listing: listingId });
+  if (error) throw error;
+}
+
+export const startBuybackCheckout = (listingId: string) => authedPost<{ url: string }>('stripe-buyback-checkout', { listingId });
+export const getBuybackDownloadUrl = (listingId: string) => authedPost<{ url: string }>('buyback-download', { listingId });
+
 /* ---- Level / XP / progress ---- */
 export interface Progress {
   xp: number; level: number; next_level_xp: number;

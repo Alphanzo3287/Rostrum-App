@@ -5,13 +5,14 @@
 // manage payouts. Real transactions and the gift/access checkout arrive in
 // the next slice; this screen is the payout foundation.
 // =====================================================================
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   getMyEarnings, getCreatorAccount, getPlatformConfig, startPayoutOnboarding, refreshPayoutStatus,
-  type Earnings, type CreatorAccount, type PlatformConfig,
+  getMyProgress, getMyWallet, getMyListing, createBuybackListing, cancelBuybackListing,
+  type Earnings, type CreatorAccount, type PlatformConfig, type Progress, type Wallet, type BuybackListing,
 } from '../lib/payments';
-import { C, ui, display, mono, solidGold } from '../lib/theme';
+import { C, ui, display, mono, solidGold, field } from '../lib/theme';
 import { Scroll, Center, ghostBtn } from '../components/ui';
 
 export function EarningsScreen({ onBack }: { onBack?: () => void }) {
@@ -21,6 +22,9 @@ export function EarningsScreen({ onBack }: { onBack?: () => void }) {
   const [cfg, setCfg] = useState<PlatformConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [progress, setProgress] = useState<Progress | null>(null);
+  const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [listing, setListing] = useState<BuybackListing | null>(null);
 
   const justReturned = params.get('onboarding'); // 'done' | 'refresh' | null
 
@@ -28,8 +32,10 @@ export function EarningsScreen({ onBack }: { onBack?: () => void }) {
     try {
       // If the user just came back from Stripe, pull live status first.
       if (justReturned) { try { await refreshPayoutStatus(); } catch { /* fall through */ } }
-      const [e, a, c] = await Promise.all([getMyEarnings(), getCreatorAccount(), getPlatformConfig()]);
-      setEarn(e); setAcct(a); setCfg(c);
+      const [e, a, c, p, w, l] = await Promise.all([
+        getMyEarnings(), getCreatorAccount(), getPlatformConfig(), getMyProgress(), getMyWallet(), getMyListing(),
+      ]);
+      setEarn(e); setAcct(a); setCfg(c); setProgress(p); setWallet(w); setListing(l);
     } catch (e: any) {
       setErr(e?.message ?? 'Could not load your earnings');
     } finally {
@@ -134,11 +140,142 @@ export function EarningsScreen({ onBack }: { onBack?: () => void }) {
         )}
       </div>
 
+      {/* ---- Buy-back listing (Phase 4) ---- */}
+      <div style={{ ...card, marginTop: 18 }}>
+        <div style={{ fontFamily: ui, fontSize: 12.5, color: C.faint, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+          Cash-out buy-back
+        </div>
+        {!progress?.cashout_unlocked ? (
+          <p style={{ fontFamily: ui, fontSize: 14, color: C.dim, lineHeight: 1.55, margin: '10px 0 0' }}>
+            Reach Level 25 with at least 10 qualifying debates to unlock cash-out buy-backs.
+            {progress && ` You're currently Level ${progress.level} with ${progress.qualifying_debates} qualifying debate${progress.qualifying_debates === 1 ? '' : 's'}.`}
+          </p>
+        ) : payoutState !== 'active' ? (
+          <p style={{ fontFamily: ui, fontSize: 14, color: C.dim, lineHeight: 1.55, margin: '10px 0 0' }}>
+            Set up payouts above first — buy-back money is paid straight to that same account.
+          </p>
+        ) : (
+          <BuybackCard listing={listing} redeemable={wallet?.redeemable ?? 0}
+            onChanged={load} />
+        )}
+      </div>
+
       <p style={{ fontFamily: mono, fontSize: 11, color: C.faint, textAlign: 'center', marginTop: 22 }}>
         Powered by Stripe · test mode
       </p>
       {!earn && !err && <Center><span style={{ color: C.faint, fontFamily: ui }}>Loading…</span></Center>}
     </Scroll>
+  );
+}
+
+function BuybackCard({ listing, redeemable, onChanged }: {
+  listing: BuybackListing | null; redeemable: number; onChanged: () => void;
+}) {
+  const [creating, setCreating] = useState(false);
+  const [dbucks, setDbucks] = useState(Math.min(1000, redeemable));
+  const [price, setPrice] = useState(10);
+  const [name, setName] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function submit() {
+    setErr('');
+    if (dbucks <= 0 || dbucks > redeemable) { setErr(`Enter an amount up to your redeemable balance (${redeemable.toLocaleString()}).`); return; }
+    if (price <= 0) { setErr('Set a price above $0.'); return; }
+    if (!name.trim()) { setErr("Give supporters a name for what they're getting."); return; }
+    if (!file) { setErr('Attach a digital product (PDF, slides, or similar).'); return; }
+    setBusy(true);
+    try {
+      await createBuybackListing(dbucks, Math.round(price * 100), name.trim(), file);
+      setCreating(false);
+      onChanged();
+    } catch (e: any) { setErr(e?.message ?? 'Could not create listing'); }
+    finally { setBusy(false); }
+  }
+
+  async function cancel() {
+    if (!listing) return;
+    setBusy(true);
+    try { await cancelBuybackListing(listing.id); onChanged(); }
+    catch (e: any) { alert(e?.message ?? 'Could not cancel listing'); }
+    finally { setBusy(false); }
+  }
+
+  if (listing?.status === 'active') {
+    return (
+      <div style={{ marginTop: 12 }}>
+        <div style={{ ...statusRow, color: C.jadeHi }}>
+          <Dot color={C.jade} /> Listed — {listing.dbucks_amount.toLocaleString()} D-Bucks for ${(listing.price_cents / 100).toFixed(2)}
+        </div>
+        <div style={{ fontFamily: ui, fontSize: 13, color: C.dim, marginTop: 6 }}>{listing.product_name}</div>
+        <button onClick={cancel} disabled={busy} style={{ ...ghostBtn, marginTop: 14 }}>
+          {busy ? '…' : 'Cancel listing'}
+        </button>
+      </div>
+    );
+  }
+
+  if (listing?.status === 'sold' && !creating) {
+    return (
+      <div style={{ marginTop: 12 }}>
+        <div style={{ ...statusRow, color: C.gold }}>
+          <Dot color={C.gold} /> Last listing sold — {listing.dbucks_amount.toLocaleString()} D-Bucks for ${(listing.price_cents / 100).toFixed(2)}
+        </div>
+        <button onClick={() => setCreating(true)} style={{ ...solidGold, marginTop: 14 }}>Create a new listing</button>
+      </div>
+    );
+  }
+
+  if (!creating) {
+    return (
+      <div style={{ marginTop: 12 }}>
+        <p style={{ fontFamily: ui, fontSize: 13.5, color: C.dim, lineHeight: 1.5, margin: '0 0 12px' }}>
+          Offer some of your redeemable D-Bucks ({redeemable.toLocaleString()} available) for real money, with a
+          digital product attached as the incentive. Money goes straight to your bank — 85% to you, 15% platform fee.
+        </p>
+        <button onClick={() => setCreating(true)} disabled={redeemable <= 0} style={solidGold}>
+          {redeemable <= 0 ? 'No redeemable D-Bucks yet' : '+ Create a listing'}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Field label={`D-Bucks to offer (up to ${redeemable.toLocaleString()})`}>
+        <input type="number" min={1} max={redeemable} value={dbucks}
+          onChange={e => setDbucks(Math.max(1, Math.min(redeemable, +e.target.value)))} style={field} />
+      </Field>
+      <Field label="Price supporters pay (USD)">
+        <input type="number" min={1} step="0.01" value={price} onChange={e => setPrice(+e.target.value)} style={field} />
+      </Field>
+      <Field label="What are they getting?">
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. My debate prep notes" style={field} />
+      </Field>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+        <span style={{ ...ghostBtn, fontSize: 12.5, padding: '8px 13px' }}>
+          {file ? `✓ ${file.name}` : 'Attach file (PDF, PPTX, etc.)'}
+        </span>
+        <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={e => setFile(e.target.files?.[0] ?? null)} />
+      </label>
+      {err && <div style={{ fontFamily: ui, fontSize: 12.5, color: C.garnetHi }}>{err}</div>}
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={submit} disabled={busy} style={{ ...solidGold, opacity: busy ? .6 : 1 }}>
+          {busy ? 'Creating…' : 'List it'}
+        </button>
+        <button onClick={() => setCreating(false)} style={ghostBtn}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontFamily: ui, fontSize: 11.5, fontWeight: 600, color: C.dim }}>
+      {label}
+      {children}
+    </label>
   );
 }
 
