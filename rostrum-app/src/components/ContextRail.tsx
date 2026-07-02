@@ -18,7 +18,7 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/auth';
 import { Avatar } from './ui';
 import { ShareButton } from './ShareSheet';
-import { getMyWallet, getGiftTiers, getDebateParticipants, sendGift, type Wallet, type GiftTier, type DebateParticipant } from '../lib/payments';
+import { getMyWallet, getGiftTiers, getDebateParticipants, sendGift, startGiftCheckout, type Wallet, type GiftTier, type DebateParticipant } from '../lib/payments';
 import { publishBcastControl } from '../lib/livekit';
 import { EvidencePanel } from './EvidenceViewer';
 
@@ -611,6 +611,15 @@ function GiftPanel({ debateId }: { debateId: string }) {
     finally { setBusy(false); }
   }
 
+  async function buyAndSend(tier: GiftTier) {
+    if (!picked) return alert('Pick a recipient first');
+    setBusy(true);
+    try {
+      const { url } = await startGiftCheckout(tier.id, picked, debateId);
+      window.location.href = url;
+    } catch (e: any) { alert(e?.message ?? 'Could not start checkout'); setBusy(false); }
+  }
+
   const total = wallet?.total ?? 0;
 
   return (
@@ -646,13 +655,16 @@ function GiftPanel({ debateId }: { debateId: string }) {
         {tiers.map(t => {
           const canAfford = total >= t.price_dbucks;
           return (
-            <button key={t.id} onClick={() => send(t)} disabled={busy || !canAfford || !picked}
-              style={{ padding:'10px 8px', borderRadius:10, border:`1px solid ${C.hair}`,
-                background: canAfford && picked ? C.panel : `${a(C.panel,'88')}`,
-                cursor: canAfford && picked ? 'pointer' : 'default', textAlign:'center' }}>
+            <button key={t.id} onClick={() => canAfford ? send(t) : buyAndSend(t)} disabled={busy || !picked}
+              style={{ padding:'10px 8px', borderRadius:10, border:`1px solid ${canAfford ? C.hair : a(C.gold,'44')}`,
+                background: picked ? (canAfford ? C.panel : a(C.gold,'0D')) : `${a(C.panel,'88')}`,
+                cursor: picked ? 'pointer' : 'default', textAlign:'center' }}>
               <div style={{ fontSize:24 }}>{t.icon}</div>
-              <div style={{ fontFamily:ui, fontSize:11, fontWeight:600, color: canAfford ? C.ink : C.faint, marginTop:4 }}>{t.name}</div>
-              <div style={{ fontFamily:mono, fontSize:10, color: canAfford ? C.gold : C.faint, marginTop:2 }}>{t.price_dbucks.toLocaleString()}</div>
+              <div style={{ fontFamily:ui, fontSize:11, fontWeight:600, color: picked ? C.ink : C.faint, marginTop:4 }}>{t.name}</div>
+              {canAfford
+                ? <div style={{ fontFamily:mono, fontSize:10, color: picked ? C.gold : C.faint, marginTop:2 }}>{t.price_dbucks.toLocaleString()}</div>
+                : <div style={{ fontFamily:ui, fontSize:9.5, fontWeight:700, color:C.goldHi, marginTop:2 }}>
+                    Buy · ${(t.amount_cents / 100).toFixed(2)}</div>}
             </button>
           );
         })}

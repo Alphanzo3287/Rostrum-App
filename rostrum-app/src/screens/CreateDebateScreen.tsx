@@ -89,7 +89,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
 
   const pickFormat = (f: DebateFormat) => {
     setFormat(f); setSegs(FORMATS[f]);
-    if (f === 'legacy' || f === 'speakers_corner') setPaid(false); // entry is always free for these
+    if (f === 'speakers_corner') setPaid(false); // entry is always free for this format
     if (f === 'lecture' || f === 'legacy') setVoters(false);
     if (f === 'oxford') setVoters(true);
     if (f !== 'oxford') setWinMode('public'); // no judge concept outside Oxford
@@ -304,7 +304,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
             <Toggle label="Gifts & donations" sub="Audience can tip debaters and the host live" on={gifts} set={setGifts} />
             <Toggle label="Record & allow downloads" sub="Host and debaters get the MP4 afterward" on={recording} set={setRecording} />
 
-            {(format === 'oxford' || format === 'lecture') && (
+            {(format === 'oxford' || format === 'lecture' || format === 'legacy') && (
               <div style={{ display:'flex', alignItems:'center', gap:14, padding:'15px 0', borderBottom:`1px solid ${C.hair}` }}>
                 <div style={{ flex:1 }}>
                   <div style={{ fontFamily:ui, fontSize:14, color:C.ink, fontWeight:600 }}>Entry</div>

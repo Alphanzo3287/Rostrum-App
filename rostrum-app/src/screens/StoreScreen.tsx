@@ -1,12 +1,15 @@
 // =====================================================================
 // The Rostrum · src/screens/StoreScreen.tsx
-// The D-Bucks store: tiered gifts (sendable to creators) + perks.
-// Wallet reads from the new dbucks_wallets table (two-color balance).
+// The D-Bucks store: gift catalog (bought & sent directly with real
+// money via GiftPanel during a debate — no separate wallet top-up step)
+// + perks. Wallet shows one combined number; the promo/redeemable split
+// still exists underneath (it matters for buy-back eligibility) but
+// isn't something the user needs to think about day to day.
 // =====================================================================
 import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
 import { listPerks, myPerkIds, redeemPerk } from '../lib/api';
-import { getMyWallet, getGiftTiers, startDbucksCheckout, DBUCKS_PACKAGES, type Wallet, type GiftTier } from '../lib/payments';
+import { getMyWallet, getGiftTiers, type Wallet, type GiftTier } from '../lib/payments';
 import type { Perk } from '../lib/types';
 import { C, ui, display, mono, solidGold, a } from '../lib/theme';
 import { Scroll, Empty } from '../components/ui';
@@ -35,14 +38,6 @@ export function StoreScreen({ onBack }: { onBack?: () => void }) {
     finally { setBusy(null); }
   }
 
-  async function buyDbucks(packageId: string) {
-    setBusy(packageId);
-    try {
-      const { url } = await startDbucksCheckout(packageId);
-      window.location.href = url;
-    } catch (e: any) { alert(e?.message ?? 'Could not start checkout'); setBusy(null); }
-  }
-
   return (
     <Scroll title="The Store" onBack={onBack}
       right={
@@ -53,38 +48,11 @@ export function StoreScreen({ onBack }: { onBack?: () => void }) {
         </div>
       }>
 
-      {/* Wallet breakdown */}
-      {wallet && (
-        <div style={{ display:'flex', gap:16, marginBottom:22, flexWrap:'wrap' }}>
-          <WalletChip label="Spendable" value={wallet.promo} color={C.gold} />
-          <WalletChip label="Redeemable" value={wallet.redeemable} color={C.jadeHi} />
-        </div>
-      )}
-
-      {/* ---- Buy D-Bucks section ---- */}
-      <SectionTitle>Buy D-Bucks</SectionTitle>
-      <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint, marginBottom:14, lineHeight:1.5 }}>
-        Purchased D-Bucks are redeemable — they count toward a creator's real cash-out balance when you gift them.
-      </p>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:12, marginBottom:28 }}>
-        {DBUCKS_PACKAGES.map(p => (
-          <div key={p.id} style={{ padding:'16px 14px', borderRadius:18, border:`1px solid ${C.hair}`,
-            background:C.panel, textAlign:'center' }}>
-            <div style={{ fontFamily:mono, fontSize:20, fontWeight:800, color:C.jadeHi }}>{p.dbucks.toLocaleString()}</div>
-            <div style={{ fontFamily:ui, fontSize:11, color:C.faint, marginTop:2 }}>D-Bucks</div>
-            <button onClick={() => buyDbucks(p.id)} disabled={busy === p.id}
-              style={{ ...solidGold, width:'100%', marginTop:12, padding:'9px 0', fontSize:13,
-                opacity: busy === p.id ? .6 : 1 }}>
-              {busy === p.id ? '…' : `$${(p.priceCents / 100).toFixed(2)}`}
-            </button>
-          </div>
-        ))}
-      </div>
-
       {/* ---- Gifts section ---- */}
       <SectionTitle>Gifts</SectionTitle>
       <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint, marginBottom:14, lineHeight:1.5 }}>
-        Send gifts to creators you admire during live debates. Gifts transfer D-Bucks from your wallet to theirs.
+        Send a gift to a creator from any live debate's Gift tab. If you don't have the balance for it, you can
+        buy and send it directly with a card — no need to top up first.
       </p>
       {!gifts ? <Empty>Loading gifts...</Empty> :
        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:12, marginBottom:28 }}>
@@ -95,7 +63,7 @@ export function StoreScreen({ onBack }: { onBack?: () => void }) {
              <div style={{ fontFamily:display, fontSize:15, fontWeight:600, color:C.ink, marginTop:8 }}>{g.name}</div>
              <div style={{ fontFamily:mono, fontSize:13, color:C.gold, marginTop:4 }}>{g.price_dbucks.toLocaleString()} D-Bucks</div>
              <div style={{ fontFamily:ui, fontSize:10.5, color:C.faint, marginTop:2 }}>
-               ${(g.price_dbucks / 100).toFixed(2)} value
+               ${(g.price_dbucks / 100).toFixed(2)}
              </div>
            </div>
          ))}
@@ -131,16 +99,6 @@ export function StoreScreen({ onBack }: { onBack?: () => void }) {
          })}
        </div>}
     </Scroll>
-  );
-}
-
-function WalletChip({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px', borderRadius:999,
-      border:`1px solid ${color}44`, background:`${color}0a` }}>
-      <span style={{ fontFamily:ui, fontSize:10.5, color:C.faint, textTransform:'uppercase' }}>{label}</span>
-      <span style={{ fontFamily:mono, fontSize:14, fontWeight:600, color }}>{value.toLocaleString()}</span>
-    </div>
   );
 }
 

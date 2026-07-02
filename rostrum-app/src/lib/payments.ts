@@ -160,6 +160,19 @@ export async function cancelBuybackListing(listingId: string): Promise<void> {
 export const startBuybackCheckout = (listingId: string) => authedPost<{ url: string }>('stripe-buyback-checkout', { listingId });
 export const getBuybackDownloadUrl = (listingId: string) => authedPost<{ url: string }>('buyback-download', { listingId });
 
+/* ---- Buy & send a gift directly with real money (no wallet top-up step) ---- */
+export const startGiftCheckout = (tierId: string, toUserId: string, debateId?: string) =>
+  authedPost<{ url: string }>('stripe-gift-checkout', { tierId, toUserId, debateId });
+
+/* ---- Pay-per-view debate entry (Oxford / Legacy) ---- */
+export const startDebateEntryCheckout = (debateId: string) =>
+  authedPost<{ url: string }>('stripe-debate-entry-checkout', { debateId });
+export async function hasPaidDebateEntry(debateId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('has_paid_debate_entry', { p_debate: debateId });
+  if (error) return false;
+  return !!data;
+}
+
 /* ---- Level / XP / progress ---- */
 export interface Progress {
   xp: number; level: number; next_level_xp: number;
