@@ -18,7 +18,6 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/auth';
 import { Avatar } from './ui';
 import { ShareButton } from './ShareSheet';
-import { getMyWallet, getGiftTiers, getDebateParticipants, sendGift, startGiftCheckout, type Wallet, type GiftTier, type DebateParticipant } from '../lib/payments';
 import { publishBcastControl } from '../lib/livekit';
 import { EvidencePanel } from './EvidenceViewer';
 
@@ -34,10 +33,10 @@ export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom,
   debateId: string; role: Role; tab: string; setTab: (t: string) => void; ros?: RosData;
   members?: any[]; lkRoom?: any; pollOpen?: boolean; format?: string;
 }) {
-  let tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']]
-            : role === 'moderator' ? [['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']]
-            : role === 'judge'  ? [['score','Score'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']]
-            :                     [['vote','Vote'],['chat','Chat'],['qa','Ask'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']];
+  let tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence']]
+            : role === 'moderator' ? [['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence']]
+            : role === 'judge'  ? [['score','Score'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence']]
+            :                     [['vote','Vote'],['chat','Chat'],['qa','Ask'],['poll','Poll'],['evidence','Evidence']];
   // Lecture has no sides, no audience verdict — the run-of-show list and
   // prop/opp poll don't apply.
   if (format === 'lecture') tabs = tabs.filter(([k]) => k !== 'ros' && k !== 'poll' && k !== 'vote' && k !== 'score');
@@ -63,7 +62,7 @@ export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom,
         {tab==='qa' && <QAPanel debateId={debateId} canModerate={role==='host'||role==='moderator'} />}
         {tab==='score' && <ScorePanel debateId={debateId} />}
         {tab==='evidence' && <EvidencePanel debateId={debateId} canAdd={role==='host'||role==='moderator'||role==='debater'} />}
-        {tab==='gift' && <GiftPanel debateId={debateId} />}
+        {/* Gifting now happens by hovering/tapping a person on stage → Send gift. */}
       </div>
     </aside>
   );
@@ -579,98 +578,3 @@ function ScorePanel({ debateId }: { debateId: string }) {
   );
 }
 
-/* ---- Gift panel: tiered gifts, pick a recipient, send ---- */
-function GiftPanel({ debateId }: { debateId: string }) {
-  const { user } = useAuth();
-  const [wallet, setWallet]   = useState<Wallet | null>(null);
-  const [tiers, setTiers]     = useState<GiftTier[]>([]);
-  const [people, setPeople]   = useState<DebateParticipant[]>([]);
-  const [picked, setPicked]   = useState<string | null>(null);
-  const [busy, setBusy]       = useState(false);
-  const [sent, setSent]       = useState<string | null>(null);
-
-  useEffect(() => {
-    getMyWallet().then(setWallet);
-    getGiftTiers().then(setTiers);
-    getDebateParticipants(debateId).then(p => {
-      const others = p.filter(x => x.user_id !== user?.id);
-      setPeople(others);
-      if (others.length === 1) setPicked(others[0].user_id);
-    });
-  }, [debateId, user?.id]);
-
-  async function send(tier: GiftTier) {
-    if (!picked) return alert('Pick a recipient first');
-    setBusy(true); setSent(null);
-    try {
-      await sendGift(tier.id, picked, debateId);
-      setWallet(await getMyWallet());
-      const name = people.find(p => p.user_id === picked)?.display_name ?? 'them';
-      setSent(`${tier.icon} ${tier.name} sent to ${name}!`);
-    } catch (e: any) { alert(e?.message ?? 'Could not send gift'); }
-    finally { setBusy(false); }
-  }
-
-  async function buyAndSend(tier: GiftTier) {
-    if (!picked) return alert('Pick a recipient first');
-    setBusy(true);
-    try {
-      const { url } = await startGiftCheckout(tier.id, picked, debateId);
-      window.location.href = url;
-    } catch (e: any) { alert(e?.message ?? 'Could not start checkout'); setBusy(false); }
-  }
-
-  const total = wallet?.total ?? 0;
-
-  return (
-    <>
-      <h3 style={{ fontFamily:display, fontSize:19, color:C.ink, margin:'0 0 6px' }}>Send a gift</h3>
-      <div style={{ fontFamily:mono, fontSize:13, color:C.gold, marginBottom:12 }}>
-        {total.toLocaleString()} D-Bucks
-      </div>
-
-      {/* Recipient picker */}
-      {people.length === 0
-        ? <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>No one else in the debate yet.</p>
-        : <div style={{ marginBottom:12 }}>
-            <div style={{ fontFamily:ui, fontSize:11, color:C.faint, textTransform:'uppercase', letterSpacing:'.4px', marginBottom:6 }}>To</div>
-            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-              {people.map(p => (
-                <button key={p.user_id} onClick={() => setPicked(p.user_id)}
-                  style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 10px', borderRadius:999,
-                    border: `1px solid ${picked === p.user_id ? C.gold : C.hair}`,
-                    background: picked === p.user_id ? a(C.gold,'18') : 'transparent',
-                    color: picked === p.user_id ? C.ink : C.dim,
-                    fontFamily:ui, fontSize:12, fontWeight:500, cursor:'pointer' }}>
-                  {p.avatar_url && <Avatar src={p.avatar_url} size={18} />}
-                  {p.display_name}
-                </button>
-              ))}
-            </div>
-          </div>
-      }
-
-      {/* Gift tiers */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-        {tiers.map(t => {
-          const canAfford = total >= t.price_dbucks;
-          return (
-            <button key={t.id} onClick={() => canAfford ? send(t) : buyAndSend(t)} disabled={busy || !picked}
-              style={{ padding:'10px 8px', borderRadius:10, border:`1px solid ${canAfford ? C.hair : a(C.gold,'44')}`,
-                background: picked ? (canAfford ? C.panel : a(C.gold,'0D')) : `${a(C.panel,'88')}`,
-                cursor: picked ? 'pointer' : 'default', textAlign:'center' }}>
-              <div style={{ fontSize:24 }}>{t.icon}</div>
-              <div style={{ fontFamily:ui, fontSize:11, fontWeight:600, color: picked ? C.ink : C.faint, marginTop:4 }}>{t.name}</div>
-              {canAfford
-                ? <div style={{ fontFamily:mono, fontSize:10, color: picked ? C.gold : C.faint, marginTop:2 }}>{t.price_dbucks.toLocaleString()}</div>
-                : <div style={{ fontFamily:ui, fontSize:9.5, fontWeight:700, color:C.goldHi, marginTop:2 }}>
-                    Buy · ${(t.amount_cents / 100).toFixed(2)}</div>}
-            </button>
-          );
-        })}
-      </div>
-
-      {sent && <div style={{ fontFamily:ui, fontSize:13, color:C.jadeHi, marginTop:10, textAlign:'center' }}>{sent}</div>}
-    </>
-  );
-}

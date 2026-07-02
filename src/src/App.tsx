@@ -41,8 +41,9 @@ import { ModerationScreen } from './screens/ModerationScreen';
 import { BannedScreen } from './screens/BannedScreen';
 import { AdminPortalScreen } from './screens/AdminPortalScreen';
 import { getDebate, getMyBan } from './lib/api';
+import { hasPaidDebateEntry, startDebateEntryCheckout } from './lib/payments';
 import type { DebateRole, Side } from './lib/types';
-import { C, ui, display, solidGold, a } from './lib/theme';
+import { C, ui, display, solidGold, ghostBtn, a } from './lib/theme';
 
 export default function App() {
   return (
@@ -79,7 +80,12 @@ function Gate() {
   }
 
   if (loading) return <Splash />;
-  if (!session) return <AuthScreen onSignedUp={() => setJustSignedUp(true)} />;
+  if (!session) {
+    const returningFromStripe = typeof window !== 'undefined'
+      && /[?&](purchase|onboarding)=/.test(window.location.search);
+    return <AuthScreen onSignedUp={() => setJustSignedUp(true)}
+      notice={returningFromStripe ? 'Your Stripe step went through — just sign back in to pick up where you left off.' : undefined} />;
+  }
   if (isBanned) return <BannedScreen />;
 
   const needsOnboard = justSignedUp || (profile != null && !profile.bio && profile.topics.length === 0);
@@ -188,13 +194,25 @@ function CreateRoute() {
 function ChamberRoute() {
   const { id } = useParams();
   const nav = useNavigate();
-  const [phase, setPhase] = useState<'loading' | 'scheduled' | 'open'>('loading');
+  const [phase, setPhase] = useState<'loading' | 'scheduled' | 'open' | 'paywall'>('loading');
+  const [paywallInfo, setPaywallInfo] = useState<{ motion: string; priceCents: number } | null>(null);
   useEffect(() => {
     if (!id) return;
     let on = true;
-    getDebate(id)
-      .then(({ debate }) => { if (on) setPhase(debate.status === 'scheduled' ? 'scheduled' : 'open'); })
-      .catch(() => { if (on) setPhase('open'); });   // let the chamber surface any real error
+    (async () => {
+      try {
+        const { debate } = await getDebate(id);
+        if (!on) return;
+        if (debate.status === 'scheduled') { setPhase('scheduled'); return; }
+        if (debate.is_paid && debate.price_cents) {
+          const paid = await hasPaidDebateEntry(id);
+          if (!on) return;
+          if (!paid) { setPaywallInfo({ motion: debate.motion, priceCents: debate.price_cents }); setPhase('paywall'); return; }
+        }
+        setPhase('open');
+      } catch { if (on) setPhase('open'); }   // let the chamber surface any real error
+    })();
+    return () => { on = false; };
   }, [id]);
   if (!id) return <Navigate to="/" replace />;
   if (phase === 'loading')
@@ -202,14 +220,67 @@ function ChamberRoute() {
       fontFamily:ui, color:C.faint }}>Loading…</div>;
   if (phase === 'scheduled')
     return <ScheduledScreen debateId={id} onBack={() => nav('/')} onStarted={() => setPhase('open')} />;
+  if (phase === 'paywall' && paywallInfo)
+    return <PaywallScreen debateId={id} motion={paywallInfo.motion} priceCents={paywallInfo.priceCents} onBack={() => nav('/')} />;
   return <ChamberScreen debateId={id} onLeave={() => nav('/')}
     onEnded={() => nav(`/debate/${id}/results`, { replace: true })} />;
+}
+function PaywallScreen({ debateId, motion, priceCents, onBack }: {
+  debateId: string; motion: string; priceCents: number; onBack: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  async function pay() {
+    setBusy(true); setErr('');
+    try { const { url } = await startDebateEntryCheckout(debateId); window.location.href = url; }
+    catch (e: any) { setErr(e?.message ?? 'Could not start checkout'); setBusy(false); }
+  }
+  return (
+    <div style={{ position:'absolute', inset:0, display:'grid', placeItems:'center', background:C.base, padding:20 }}>
+      <div style={{ width:400, maxWidth:'100%', textAlign:'center', padding:'34px 28px', borderRadius:18,
+        border:`1px solid ${C.hair}`, background:C.panel }}>
+        <div style={{ fontFamily:ui, fontSize:11, fontWeight:700, letterSpacing:'.1em', textTransform:'uppercase', color:C.gold, marginBottom:10 }}>
+          Pay-per-view</div>
+        <h2 style={{ fontFamily:display, fontSize:22, fontWeight:600, color:C.ink, margin:'0 0 8px', lineHeight:1.3 }}>{motion}</h2>
+        <p style={{ fontFamily:ui, fontSize:13.5, color:C.faint, margin:'0 0 24px' }}>This room requires payment to enter.</p>
+        {err && <div style={{ fontFamily:ui, fontSize:12.5, color:C.garnetHi, marginBottom:14 }}>{err}</div>}
+        <button onClick={pay} disabled={busy} style={{ ...solidGold, width:'100%', opacity: busy ? .6 : 1 }}>
+          {busy ? 'Opening…' : `Pay $${(priceCents / 100).toFixed(2)} to enter`}
+        </button>
+        <button onClick={onBack} style={{ ...ghostBtn, width:'100%', marginTop:10 }}>Back to lobby</button>
+      </div>
+    </div>
+  );
 }
 function WatchRoute() {
   const { id } = useParams();
   const nav = useNavigate();
+  const [gate, setGate] = useState<'loading' | 'paywall' | 'ok'>('loading');
+  const [info, setInfo] = useState<{ motion: string; priceCents: number } | null>(null);
+  useEffect(() => {
+    if (!id) return;
+    let on = true;
+    (async () => {
+      try {
+        const { debate } = await getDebate(id);
+        if (!on) return;
+        if (debate.is_paid && debate.price_cents) {
+          const paid = await hasPaidDebateEntry(id);
+          if (!on) return;
+          if (!paid) { setInfo({ motion: debate.motion, priceCents: debate.price_cents }); setGate('paywall'); return; }
+        }
+        setGate('ok');
+      } catch { if (on) setGate('ok'); }
+    })();
+    return () => { on = false; };
+  }, [id]);
   if (!id) return <Navigate to="/" replace />;
-  return <WatchScreen debateId={id} onLeave={() => nav('/')} />;
+  if (gate === 'loading')
+    return <div style={{ position:'absolute', inset:0, display:'grid', placeItems:'center', background:C.base,
+      fontFamily:ui, color:C.faint }}>Loading…</div>;
+  if (gate === 'paywall' && info)
+    return <PaywallScreen debateId={id} motion={info.motion} priceCents={info.priceCents} onBack={() => nav(`/debate/${id}`)} />;
+  return <WatchScreen debateId={id} onLeave={() => nav(`/debate/${id}`)} />;
 }
 function InviteRoute() {
   const { id } = useParams();

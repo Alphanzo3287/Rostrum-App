@@ -57,7 +57,7 @@ export function Initials({ name, size = 30, url }: { name: string; size?: number
 }
 
 /* ============================ COMPETITOR CARD ============================ */
-export function CompetitorCard({ side, member, profile, hasFloor, speakingSecs, segTotal, onProfile, onContextMenu }: {
+export function CompetitorCard({ side, member, profile, hasFloor, speakingSecs, segTotal, onProfile, onContextMenu, bind }: {
   side: Side;
   member?: RoomMember;
   profile?: Profile;
@@ -66,6 +66,7 @@ export function CompetitorCard({ side, member, profile, hasFloor, speakingSecs, 
   segTotal: number;
   onProfile?: (handle?: string | null) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
+  bind?: React.HTMLAttributes<HTMLDivElement>;
 }) {
   const t = sideTone(side);
   const name = profile?.display_name || member?.name || t.label;
@@ -76,12 +77,13 @@ export function CompetitorCard({ side, member, profile, hasFloor, speakingSecs, 
   const winRate = wins + losses > 0 ? Math.round((wins / (wins + losses)) * 100) : null;
   const followers = profile?.follower_count ?? 0;
   const fill = segTotal > 0 ? Math.min(1, speakingSecs / segTotal) : 0;
-  const clickable = !!(onProfile && handle);
+  const interactive = !!(member && bind);
 
   return (
-    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: 20, overflow: 'hidden',
+    <div {...(interactive ? bind : {})} style={{ position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: 20, overflow: 'hidden',
       background: `linear-gradient(180deg, ${a(t.base, '14')}, ${a(C.panel, 'CC')} 42%)`,
       border: `1px solid ${a(t.base, hasFloor ? '66' : '33')}`,
+      cursor: interactive ? 'pointer' : 'default',
       boxShadow: hasFloor ? `0 0 0 1px ${a(t.base, '40')}, 0 18px 50px ${a(t.base, '24')}` : `0 14px 40px ${a('#000000', '40')}` }}
       onContextMenu={member && onContextMenu ? (e) => { e.preventDefault(); onContextMenu(e); } : undefined}>
 
@@ -109,8 +111,8 @@ export function CompetitorCard({ side, member, profile, hasFloor, speakingSecs, 
       </div>
 
       {/* identity */}
-      <div style={{ padding: '12px 14px 4px', cursor: clickable ? 'pointer' : 'default' }}
-        onClick={clickable ? () => onProfile!(handle) : undefined} title={clickable ? `View ${name}'s profile` : undefined}>
+      <div style={{ padding: '12px 14px 4px', cursor: interactive ? 'pointer' : 'default' }}
+        title={interactive ? `${name} — hover or tap for options` : undefined}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <span style={{ fontFamily: ui, fontWeight: 700, fontSize: 17, color: C.ink, whiteSpace: 'nowrap',
             overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
@@ -252,15 +254,18 @@ export function FloorStage({ roundLabel, countdown, hasFloorSide, assembling, ch
 }
 
 /* =========================== HOST / MOD / JUDGE TOP ROW =========================== */
-export function HostTopRow({ host, mod, judgeCount, onProfile, right, onModContextMenu, hideJudge }: {
+export function HostTopRow({ host, mod, judgeCount, onProfile, right, onModContextMenu, hideJudge, personBind }: {
   host?: RoomMember; mod?: RoomMember; judgeCount: number;
   onProfile?: (handle?: string | null) => void; right?: React.ReactNode;
   onModContextMenu?: (e: React.MouseEvent) => void; hideJudge?: boolean;
+  personBind?: (m: RoomMember) => React.HTMLAttributes<HTMLElement>;
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18, padding: '4px 0 12px', flexWrap: 'wrap' }}>
-      <SeatPill member={host} label="Host" tone={C.warning} glow onProfile={onProfile} />
-      <SeatPill member={mod} label="Moderator" tone={C.gold} onProfile={onProfile} onContextMenu={onModContextMenu} />
+      <SeatPill member={host} label="Host" tone={C.warning} glow onProfile={onProfile}
+        bind={host && personBind ? personBind(host) : undefined} />
+      <SeatPill member={mod} label="Moderator" tone={C.gold} onProfile={onProfile} onContextMenu={onModContextMenu}
+        bind={mod && personBind ? personBind(mod) : undefined} />
       {!hideJudge && (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 12,
           background: C.glass, border: `1px solid ${C.hair}` }}>
@@ -276,18 +281,18 @@ export function HostTopRow({ host, mod, judgeCount, onProfile, right, onModConte
   );
 }
 
-function SeatPill({ member, label, tone, glow, onProfile, onContextMenu }: {
+function SeatPill({ member, label, tone, glow, onProfile, onContextMenu, bind }: {
   member?: RoomMember; label: string; tone: string; glow?: boolean; onProfile?: (h?: string | null) => void;
-  onContextMenu?: (e: React.MouseEvent) => void;
+  onContextMenu?: (e: React.MouseEvent) => void; bind?: React.HTMLAttributes<HTMLElement>;
 }) {
-  const clickable = !!(member && onProfile && member.handle);
+  const interactive = !!(member && bind);
   return (
-    <span onClick={clickable ? () => onProfile!(member!.handle) : undefined}
+    <span {...(interactive ? bind : {})}
       onContextMenu={member && onContextMenu ? (e) => { e.preventDefault(); onContextMenu(e); } : undefined}
-      title={member ? member.name : `Open ${label}`}
+      title={member ? `${member.name} — hover or tap for options` : `Open ${label}`}
       style={{ display: 'inline-flex', alignItems: 'center', gap: 9, padding: '6px 12px 6px 6px', borderRadius: 999,
         background: member ? a(tone, '14') : C.glass, border: `1px solid ${member ? a(tone, '55') : C.hair}`,
-        cursor: clickable ? 'pointer' : 'default' }}>
+        cursor: interactive ? 'pointer' : 'default' }}>
       {member
         ? <span style={{ borderRadius: '50%', boxShadow: glow ? `0 0 0 2px ${C.base}, 0 0 14px ${a(tone, '99')}` : 'none' }}>
             <Initials name={member.name} size={28} />
@@ -305,9 +310,10 @@ function SeatPill({ member, label, tone, glow, onProfile, onContextMenu }: {
 }
 
 /* ============================== BOTTOM ROW ============================== */
-export function GalleryStrip({ audience, onProfile, onMemberContextMenu }: {
+export function GalleryStrip({ audience, onProfile, onMemberContextMenu, personBind }: {
   audience: RoomMember[]; onProfile?: (h?: string | null) => void;
   onMemberContextMenu?: (e: React.MouseEvent, m: RoomMember) => void;
+  personBind?: (m: RoomMember) => React.HTMLAttributes<HTMLElement>;
 }) {
   const GAL = 9;
   return (
@@ -315,16 +321,13 @@ export function GalleryStrip({ audience, onProfile, onMemberContextMenu }: {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         {audience.length === 0
           ? <span style={{ fontFamily: ui, fontSize: 12, color: C.faint }}>Empty for now.</span>
-          : audience.slice(0, GAL).map(m => {
-              const clickable = !!(onProfile && m.handle);
-              return (
-                <span key={m.identity} onClick={clickable ? () => onProfile!(m.handle) : undefined}
-                  onContextMenu={onMemberContextMenu ? (e) => { e.preventDefault(); onMemberContextMenu(e, m); } : undefined}
-                  title={m.name} style={{ cursor: clickable ? 'pointer' : 'default' }}>
-                  <Initials name={m.name} size={28} />
-                </span>
-              );
-            })}
+          : audience.slice(0, GAL).map(m => (
+              <span key={m.identity} {...(personBind ? personBind(m) : {})}
+                onContextMenu={onMemberContextMenu ? (e) => { e.preventDefault(); onMemberContextMenu(e, m); } : undefined}
+                title={`${m.name} — hover or tap for options`} style={{ cursor: personBind ? 'pointer' : 'default' }}>
+                <Initials name={m.name} size={28} />
+              </span>
+            ))}
         {audience.length > GAL &&
           <span style={{ width: 28, height: 28, borderRadius: '50%', display: 'grid', placeItems: 'center',
             background: C.panel2, color: C.dim, fontFamily: mono, fontSize: 10.5 }}>+{audience.length - GAL}</span>}
@@ -375,21 +378,20 @@ export function AudienceVoteStrip({ tally, myVote, canVote, onVote, propLabel, o
   );
 }
 
-export function JudgesStrip({ judges, onProfile, onJudgeContextMenu }: {
+export function JudgesStrip({ judges, onProfile, onJudgeContextMenu, personBind }: {
   judges: RoomMember[]; onProfile?: (h?: string | null) => void;
   onJudgeContextMenu?: (e: React.MouseEvent, m: RoomMember) => void;
+  personBind?: (m: RoomMember) => React.HTMLAttributes<HTMLElement>;
 }) {
   return (
     <Panel title={`Judges · ${judges.length}`}>
       <div style={{ display: 'flex', gap: 10 }}>
         {judges.length === 0
           ? <span style={{ fontFamily: ui, fontSize: 12, color: C.faint }}>No judges seated.</span>
-          : judges.slice(0, 5).map((j, i) => {
-              const clickable = !!(onProfile && j.handle);
-              return (
-                <div key={j.identity} onClick={clickable ? () => onProfile!(j.handle) : undefined}
+          : judges.slice(0, 5).map((j, i) => (
+                <div key={j.identity} {...(personBind ? personBind(j) : {})}
                   onContextMenu={onJudgeContextMenu ? (e) => { e.preventDefault(); onJudgeContextMenu(e, j); } : undefined}
-                  title={j.name} style={{ textAlign: 'center', cursor: clickable ? 'pointer' : 'default' }}>
+                  title={`${j.name} — hover or tap for options`} style={{ textAlign: 'center', cursor: personBind ? 'pointer' : 'default' }}>
                   <div style={{ position: 'relative', display: 'inline-block' }}>
                     <Initials name={j.name} size={34} />
                     <span style={{ position: 'absolute', bottom: -2, right: -2, width: 15, height: 15, borderRadius: '50%',
@@ -397,8 +399,7 @@ export function JudgesStrip({ judges, onProfile, onJudgeContextMenu }: {
                       display: 'grid', placeItems: 'center' }}>J{i + 1}</span>
                   </div>
                 </div>
-              );
-            })}
+            ))}
       </div>
     </Panel>
   );
@@ -518,10 +519,11 @@ function WaitingSeatCard({ side, member, debateId, canInvite, onContextMenu }: {
   );
 }
 
-export function WaitingHall({ debateId, members, motion, viewerCount, scheduledAt, role, onProfile, onContextMenu, format }: {
+export function WaitingHall({ debateId, members, motion, viewerCount, scheduledAt, role, onProfile, onContextMenu, personBind, format }: {
   debateId: string; members: RoomMember[]; motion: string; viewerCount: number;
   scheduledAt: string | null | undefined; role: string; onProfile?: (h?: string | null) => void;
-  onContextMenu?: (e: React.MouseEvent, m: RoomMember) => void; format?: string;
+  onContextMenu?: (e: React.MouseEvent, m: RoomMember) => void;
+  personBind?: (m: RoomMember) => React.HTMLAttributes<HTMLElement>; format?: string;
 }) {
   const host = members.find(m => m.role === 'host');
   const mod = members.find(m => m.role === 'moderator');
@@ -571,6 +573,7 @@ export function WaitingHall({ debateId, members, motion, viewerCount, scheduledA
 
       {/* host / mod / judges */}
       <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile} hideJudge={hideJudge}
+        personBind={personBind}
         onModContextMenu={mod && onContextMenu ? (e) => onContextMenu(e, mod) : undefined} />
 
       {/* competitor waiting cards — not applicable to Lecture (single presenter, no sides) */}

@@ -4,7 +4,7 @@
 //   supabase gen types typescript --project-id <ref> > src/lib/types.ts
 // =====================================================================
 
-export type DebateFormat = 'oxford' | 'cross_exam' | 'lincoln_douglas' | 'town_hall' | 'freestyle';
+export type DebateFormat = 'oxford' | 'cross_exam' | 'lincoln_douglas' | 'town_hall' | 'freestyle' | 'lecture' | 'legacy' | 'speakers_corner';
 export type DebateStatus = 'draft' | 'scheduled' | 'assembly' | 'live' | 'ended' | 'cancelled';
 export type Visibility   = 'public' | 'unlisted' | 'private';
 export type DebateRole   = 'host' | 'moderator' | 'debater' | 'judge' | 'audience';
@@ -68,6 +68,9 @@ export interface Debate {
   win_mode?: string;
   poll_open?: boolean;
   winner_announced?: boolean;
+  // capacity controls (Legacy / Speakers' Corner)
+  max_stage_seats: number | null;
+  max_moderators: number | null;
 }
 
 export interface Segment { id: string; debate_id: string; idx: number; label: string; side: Side | null; duration_secs: number; }

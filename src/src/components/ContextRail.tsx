@@ -18,7 +18,6 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/auth';
 import { Avatar } from './ui';
 import { ShareButton } from './ShareSheet';
-import { getMyWallet, getGiftTiers, getDebateParticipants, sendGift, type Wallet, type GiftTier, type DebateParticipant } from '../lib/payments';
 import { publishBcastControl } from '../lib/livekit';
 import { EvidencePanel } from './EvidenceViewer';
 
@@ -30,14 +29,21 @@ export type RosData = {
   onJump: (i: number) => void; onToggle: () => void; onNext: () => void; onSetRemaining: (s: number) => void;
 };
 
-export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom, pollOpen }: {
+export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom, pollOpen, format }: {
   debateId: string; role: Role; tab: string; setTab: (t: string) => void; ros?: RosData;
-  members?: any[]; lkRoom?: any; pollOpen?: boolean;
+  members?: any[]; lkRoom?: any; pollOpen?: boolean; format?: string;
 }) {
-  const tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']]
-            : role === 'moderator' ? [['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']]
-            : role === 'judge'  ? [['score','Score'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']]
-            :                     [['vote','Vote'],['chat','Chat'],['qa','Ask'],['poll','Poll'],['evidence','Evidence'],['gift','Gift']];
+  let tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence']]
+            : role === 'moderator' ? [['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence']]
+            : role === 'judge'  ? [['score','Score'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence']]
+            :                     [['vote','Vote'],['chat','Chat'],['qa','Ask'],['poll','Poll'],['evidence','Evidence']];
+  // Lecture has no sides, no audience verdict — the run-of-show list and
+  // prop/opp poll don't apply.
+  if (format === 'lecture') tabs = tabs.filter(([k]) => k !== 'ros' && k !== 'poll' && k !== 'vote' && k !== 'score');
+  // Legacy is a freeform open room — no run-of-show, no voting, no Q&A queue.
+  if (format === 'legacy') tabs = tabs.filter(([k]) => k !== 'ros' && k !== 'poll' && k !== 'vote' && k !== 'score' && k !== 'qa');
+  // Speakers' Corner keeps audience voting but drops judges/ballots/Q&A/run-of-show.
+  if (format === 'speakers_corner') tabs = tabs.filter(([k]) => k !== 'ros' && k !== 'score' && k !== 'qa');
   return (
     <aside style={{ borderLeft:`1px solid ${C.hair}`, background:a(C.base2,'EB'), backdropFilter:'blur(20px)', display:'flex', flexDirection:'column', minHeight:0 }}>
       <div style={{ display:'flex', padding:8, gap:5, borderBottom:`1px solid ${C.hair}`, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
@@ -49,14 +55,14 @@ export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom,
         ))}
       </div>
       <div style={{ flex:1, overflowY:'auto', padding:16, display:'flex', flexDirection:'column', minHeight:0 }}>
-        {tab==='invite' && <InvitePanel debateId={debateId} />}
+        {tab==='invite' && <InvitePanel debateId={debateId} format={format} />}
         {tab==='ros' && (ros ? <RosPanel ros={ros} /> : <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>Run of show is unavailable.</p>)}
         {tab==='chat' && <ChatPanel debateId={debateId} />}
         {(tab==='vote'||tab==='poll') && <PollPanel debateId={debateId} canVote={role==='audience'} pollOpen={pollOpen} />}
         {tab==='qa' && <QAPanel debateId={debateId} canModerate={role==='host'||role==='moderator'} />}
         {tab==='score' && <ScorePanel debateId={debateId} />}
         {tab==='evidence' && <EvidencePanel debateId={debateId} canAdd={role==='host'||role==='moderator'||role==='debater'} />}
-        {tab==='gift' && <GiftPanel debateId={debateId} />}
+        {/* Gifting now happens by hovering/tapping a person on stage → Send gift. */}
       </div>
     </aside>
   );
@@ -216,14 +222,24 @@ function ChatPanel({ debateId }: { debateId: string }) {
 }
 
 /* ----- invite (host) ----- */
-function InvitePanel({ debateId }: { debateId: string }) {
+function InvitePanel({ debateId, format }: { debateId: string; format?: string }) {
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const seats: { label: string; q: string; color: string }[] = [
+  const allSeats: { label: string; q: string; color: string }[] = [
     { label: 'Proposition debater', q: 'role=debater&side=prop', color: C.jadeHi },
     { label: 'Opposition debater',  q: 'role=debater&side=opp',  color: C.garnetHi },
     { label: 'Moderator',           q: 'role=moderator',          color: C.gold },
     { label: 'Judge',               q: 'role=judge',              color: C.dim },
   ];
+  const legacySeats: { label: string; q: string; color: string }[] = [
+    { label: 'Speaker',   q: 'role=debater',   color: C.jadeHi },
+    { label: 'Moderator', q: 'role=moderator', color: C.gold },
+  ];
+  // Lecture is a single presenter — no debater sides, no judges. A
+  // moderator (co-host) is still a reasonable seat to invite.
+  const seats = format === 'lecture' ? allSeats.filter(s => s.label === 'Moderator')
+    : format === 'legacy' ? legacySeats
+    : format === 'speakers_corner' ? allSeats.filter(s => s.label !== 'Judge')
+    : allSeats;
   const [copied, setCopied] = useState<string | null>(null);
   const link = (q: string) => `${origin}/debate/${debateId}/join?${q}`;
   async function copy(q: string) {
@@ -562,86 +578,3 @@ function ScorePanel({ debateId }: { debateId: string }) {
   );
 }
 
-/* ---- Gift panel: tiered gifts, pick a recipient, send ---- */
-function GiftPanel({ debateId }: { debateId: string }) {
-  const { user } = useAuth();
-  const [wallet, setWallet]   = useState<Wallet | null>(null);
-  const [tiers, setTiers]     = useState<GiftTier[]>([]);
-  const [people, setPeople]   = useState<DebateParticipant[]>([]);
-  const [picked, setPicked]   = useState<string | null>(null);
-  const [busy, setBusy]       = useState(false);
-  const [sent, setSent]       = useState<string | null>(null);
-
-  useEffect(() => {
-    getMyWallet().then(setWallet);
-    getGiftTiers().then(setTiers);
-    getDebateParticipants(debateId).then(p => {
-      const others = p.filter(x => x.user_id !== user?.id);
-      setPeople(others);
-      if (others.length === 1) setPicked(others[0].user_id);
-    });
-  }, [debateId, user?.id]);
-
-  async function send(tier: GiftTier) {
-    if (!picked) return alert('Pick a recipient first');
-    setBusy(true); setSent(null);
-    try {
-      await sendGift(tier.id, picked, debateId);
-      setWallet(await getMyWallet());
-      const name = people.find(p => p.user_id === picked)?.display_name ?? 'them';
-      setSent(`${tier.icon} ${tier.name} sent to ${name}!`);
-    } catch (e: any) { alert(e?.message ?? 'Could not send gift'); }
-    finally { setBusy(false); }
-  }
-
-  const total = wallet?.total ?? 0;
-
-  return (
-    <>
-      <h3 style={{ fontFamily:display, fontSize:19, color:C.ink, margin:'0 0 6px' }}>Send a gift</h3>
-      <div style={{ fontFamily:mono, fontSize:13, color:C.gold, marginBottom:12 }}>
-        {total.toLocaleString()} D-Bucks
-      </div>
-
-      {/* Recipient picker */}
-      {people.length === 0
-        ? <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>No one else in the debate yet.</p>
-        : <div style={{ marginBottom:12 }}>
-            <div style={{ fontFamily:ui, fontSize:11, color:C.faint, textTransform:'uppercase', letterSpacing:'.4px', marginBottom:6 }}>To</div>
-            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-              {people.map(p => (
-                <button key={p.user_id} onClick={() => setPicked(p.user_id)}
-                  style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 10px', borderRadius:999,
-                    border: `1px solid ${picked === p.user_id ? C.gold : C.hair}`,
-                    background: picked === p.user_id ? a(C.gold,'18') : 'transparent',
-                    color: picked === p.user_id ? C.ink : C.dim,
-                    fontFamily:ui, fontSize:12, fontWeight:500, cursor:'pointer' }}>
-                  {p.avatar_url && <Avatar src={p.avatar_url} size={18} />}
-                  {p.display_name}
-                </button>
-              ))}
-            </div>
-          </div>
-      }
-
-      {/* Gift tiers */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-        {tiers.map(t => {
-          const canAfford = total >= t.price_dbucks;
-          return (
-            <button key={t.id} onClick={() => send(t)} disabled={busy || !canAfford || !picked}
-              style={{ padding:'10px 8px', borderRadius:10, border:`1px solid ${C.hair}`,
-                background: canAfford && picked ? C.panel : `${a(C.panel,'88')}`,
-                cursor: canAfford && picked ? 'pointer' : 'default', textAlign:'center' }}>
-              <div style={{ fontSize:24 }}>{t.icon}</div>
-              <div style={{ fontFamily:ui, fontSize:11, fontWeight:600, color: canAfford ? C.ink : C.faint, marginTop:4 }}>{t.name}</div>
-              <div style={{ fontFamily:mono, fontSize:10, color: canAfford ? C.gold : C.faint, marginTop:2 }}>{t.price_dbucks.toLocaleString()}</div>
-            </button>
-          );
-        })}
-      </div>
-
-      {sent && <div style={{ fontFamily:ui, fontSize:13, color:C.jadeHi, marginTop:10, textAlign:'center' }}>{sent}</div>}
-    </>
-  );
-}

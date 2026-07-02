@@ -3,11 +3,11 @@
 // Browse + create teams; open one to manage its roster. Admin controls
 // (add by @handle, promote/demote, remove) show only for owner/admin.
 // =====================================================================
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../lib/auth';
 import {
   listTeams, createTeam, listTeamMembers, setTeamRole, removeTeamMember, getProfile,
-  inviteToTeam, listMyTeamInvites, acceptTeamInvite, declineTeamInvite, type TeamInvite,
+  inviteToTeam, listMyTeamInvites, acceptTeamInvite, declineTeamInvite, uploadTeamCrest, type TeamInvite,
 } from '../lib/api';
 import type { Team, TeamMember, Profile, TeamRole } from '../lib/types';
 import { C, ui, display, mono, solidGold, field, a } from '../lib/theme';
@@ -126,11 +126,21 @@ function Roster({ team, meId, onOpenProfile, onChanged }: {
   const [members, setMembers] = useState<(TeamMember & { profile: Profile })[]>([]);
   const [handle, setHandle] = useState('');
   const [busy, setBusy] = useState(false);
+  const [crestUrl, setCrestUrl] = useState(team.crest_url);
+  const [crestBusy, setCrestBusy] = useState(false);
+  const crestRef = useRef<HTMLInputElement>(null);
   const load = () => listTeamMembers(team.id).then(setMembers);
   useEffect(() => { load(); }, [team.id]);
 
   const myRole = members.find(m => m.user_id === meId)?.role;
   const canAdmin = myRole === 'owner' || myRole === 'admin';
+
+  async function changeCrest(file: File) {
+    setCrestBusy(true);
+    try { setCrestUrl(await uploadTeamCrest(team.id, file)); }
+    catch (e: any) { alert(e?.message ?? 'Could not upload logo'); }
+    finally { setCrestBusy(false); if (crestRef.current) crestRef.current.value = ''; }
+  }
 
   async function add() {
     const h = handle.replace(/^@/, '').trim();
@@ -156,12 +166,25 @@ function Roster({ team, meId, onOpenProfile, onChanged }: {
   return (
     <div style={{ padding:'20px 20px', borderRadius:12, border:`1px solid ${C.hair}`, background:C.panel }}>
       <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-        <span style={{ width:46, height:46, borderRadius:9, display:'grid', placeItems:'center', flexShrink:0,
-          background:`${team.color}22`, border:`1px solid ${team.color}66`, color:team.color, fontFamily:display, fontWeight:700 }}>{team.tag}</span>
-        <div>
+        {crestUrl ? (
+          <img src={crestUrl} alt="" style={{ width:46, height:46, borderRadius:9, objectFit:'cover', flexShrink:0,
+            border:`1px solid ${team.color}66` }} />
+        ) : (
+          <span style={{ width:46, height:46, borderRadius:9, display:'grid', placeItems:'center', flexShrink:0,
+            background:`${team.color}22`, border:`1px solid ${team.color}66`, color:team.color, fontFamily:display, fontWeight:700 }}>{team.tag}</span>
+        )}
+        <div style={{ flex:1 }}>
           <div style={{ fontFamily:display, fontSize:22, fontWeight:600, color:C.ink }}>{team.name}</div>
           <div style={{ fontFamily:mono, fontSize:12, color:C.faint }}>{team.wins}W {team.losses}L · {team.member_count} members</div>
         </div>
+        {canAdmin && (
+          <>
+            <input ref={crestRef} type="file" accept="image/*" style={{ display:'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) changeCrest(f); }} />
+            <button onClick={() => crestRef.current?.click()} disabled={crestBusy}
+              style={{ ...ghostBtn, fontSize:12, padding:'7px 12px' }}>{crestBusy ? '…' : (crestUrl ? 'Change logo' : '+ Add logo')}</button>
+          </>
+        )}
       </div>
 
       {canAdmin && (

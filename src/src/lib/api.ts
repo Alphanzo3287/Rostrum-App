@@ -95,6 +95,8 @@ export interface CreateDebateInput {
   scheduledAt?: string | null;
   segments: { label: string; side: Side | null; durationSecs: number }[];
   thumbnailFile?: File | null;
+  maxStageSeats?: number | null;
+  maxModerators?: number | null;
 }
 
 export async function createDebate(input: CreateDebateInput): Promise<Debate> {
@@ -116,6 +118,8 @@ export async function createDebate(input: CreateDebateInput): Promise<Debate> {
     win_mode: input.winMode ?? 'public',
     scheduled_at: input.scheduledAt ?? null,
     status: input.scheduledAt ? 'scheduled' : 'assembly',
+    max_stage_seats: input.maxStageSeats ?? null,
+    max_moderators: input.maxModerators ?? null,
   }).select().single();
   if (error) throw error;
   const d = debate as Debate;
@@ -849,9 +853,11 @@ export async function inviteToTeam(teamId: string, userId: string): Promise<void
 }
 
 export async function listMyTeamInvites(): Promise<TeamInvite[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
   const { data, error } = await supabase.from('team_invites')
     .select('*, team:teams(id,name,tag,color), inviter:profiles!team_invites_invited_by_fkey(display_name,handle,avatar_url)')
-    .eq('status', 'pending').order('created_at', { ascending: false });
+    .eq('status', 'pending').eq('invited_user_id', user.id).order('created_at', { ascending: false });
   if (error) throw error;
   return (data ?? []) as unknown as TeamInvite[];
 }
@@ -900,6 +906,96 @@ export async function searchAll(q: string): Promise<SearchResults> {
    + pushes new metadata so it's reflected live, not just on reconnect. */
 export async function demoteToAudience(debateId: string, userId: string, identity: string): Promise<void> {
   const { error } = await supabase.from('debate_participants')
-    .update({ role: 'audience', side: null }).eq('debate_id', debateId).eq('user_id', userId);
+    .update({ role: 'audience', side: null, can_publish: false }).eq('debate_id', debateId).eq('user_id', userId);
+  if (error) throw error;
+}
+
+/** Host: promote a seated audience member into a stage role (the inverse
+ * of demoteToAudience). Persists the role + grants publish so a reconnect
+ * doesn't silently revert them, and pushes live metadata via LiveKit. */
+export async function promoteToRole(
+  debateId: string, userId: string, role: 'moderator' | 'debater' | 'judge', side: Side | null,
+): Promise<void> {
+  const { error } = await supabase.from('debate_participants')
+    .update({ role, side, can_publish: true }).eq('debate_id', debateId).eq('user_id', userId);
+  if (error) throw error;
+}
+
+/* ─────────────────── TEAM CRESTS + SPEAKERS' CORNER SIDE IDENTITY ───────────────────
+   Team crest upload reuses the same {user_id}/... storage convention (and
+   RLS) already used for avatars/thumbnails — teams_update RLS already
+   restricts the actual row write to the team's owner/admin. */
+export async function getMyTeams(): Promise<Team[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  return getUserTeams(user.id);
+}
+export async function getUserTeams(userId: string): Promise<Team[]> {
+  const { data, error } = await supabase.from('team_members')
+    .select('team:teams(*)').eq('user_id', userId);
+  if (error) throw error;
+  return ((data ?? []) as any[]).map(r => r.team).filter(Boolean) as Team[];
+}
+
+export async function uploadTeamCrest(teamId: string, file: File): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('not signed in');
+  const ext = file.name.split('.').pop() ?? 'png';
+  const path = `${user.id}/team-crest-${teamId}.${ext}`;
+  const { error: upErr } = await supabase.storage.from('thumbnails').upload(path, file, { upsert: true });
+  if (upErr) throw upErr;
+  const url = supabase.storage.from('thumbnails').getPublicUrl(path).data.publicUrl;
+  const { error } = await supabase.from('teams').update({ crest_url: url }).eq('id', teamId);
+  if (error) throw error;
+  return url;
+}
+
+export interface SideIdentity { label: string; logoUrl: string | null; teamId: string | null }
+export async function getSideIdentity(debateId: string): Promise<{ prop: SideIdentity | null; opp: SideIdentity | null }> {
+  const { data, error } = await supabase.from('debate_side_identity')
+    .select('side, custom_name, custom_logo_url, team:teams(id,name,crest_url)').eq('debate_id', debateId);
+  if (error) throw error;
+  const out: { prop: SideIdentity | null; opp: SideIdentity | null } = { prop: null, opp: null };
+  for (const row of (data ?? []) as any[]) {
+    const identity: SideIdentity = row.team
+      ? { label: row.team.name, logoUrl: row.team.crest_url, teamId: row.team.id }
+      : { label: row.custom_name ?? '', logoUrl: row.custom_logo_url ?? null, teamId: null };
+    if (row.side === 'prop') out.prop = identity; else if (row.side === 'opp') out.opp = identity;
+  }
+  return out;
+}
+export async function setSideCustomIdentity(debateId: string, side: Side, name: string, logoFile?: File | null): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('not signed in');
+  let logoUrl: string | undefined;
+  if (logoFile) {
+    const ext = logoFile.name.split('.').pop() ?? 'png';
+    const path = `${user.id}/side-crest-${debateId}-${side}.${ext}`;
+    const { error: upErr } = await supabase.storage.from('thumbnails').upload(path, logoFile, { upsert: true });
+    if (upErr) throw upErr;
+    logoUrl = supabase.storage.from('thumbnails').getPublicUrl(path).data.publicUrl;
+  }
+  const { error } = await supabase.from('debate_side_identity').upsert({
+    debate_id: debateId, side, team_id: null, custom_name: name,
+    ...(logoUrl ? { custom_logo_url: logoUrl } : {}), updated_by: user.id, updated_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+export async function setSideTeam(debateId: string, side: Side, teamId: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('not signed in');
+  const { error } = await supabase.from('debate_side_identity').upsert({
+    debate_id: debateId, side, team_id: teamId, custom_name: null, custom_logo_url: null,
+    updated_by: user.id, updated_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+
+/* Speakers' Corner spotlight — persisted (rides the existing broadcast-state
+   realtime + initial-read), so a late joiner sees the current spotlight
+   immediately instead of only future changes. Any seated debater or the
+   host may set it (see set_spotlight RPC). */
+export async function setSpotlight(debateId: string, identity: string | null): Promise<void> {
+  const { error } = await supabase.rpc('set_spotlight', { p_debate: debateId, p_identity: identity });
   if (error) throw error;
 }

@@ -5,13 +5,13 @@
 // =====================================================================
 import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
-import { getProfile, getAchievements, amFollowing, follow, unfollow } from '../lib/api';
+import { getProfile, getAchievements, amFollowing, follow, unfollow, getUserTeams } from '../lib/api';
 import { ReportModal } from '../components/ReportModal';
 import { EditProfileModal } from '../components/EditProfileModal';
-import type { Profile, Achievement } from '../lib/types';
+import type { Profile, Achievement, Team } from '../lib/types';
 import { C, ui, display, mono, solidGold, a } from '../lib/theme';
 import { Avatar, RankBadge, Section, Scroll, Center, Empty, pill, ghostBtn, hrefFor } from '../components/ui';
-import { getMyWallet, getMyProgress, type Wallet, type Progress } from '../lib/payments';
+import { getMyWallet, getMyProgress, getCreatorListing, startBuybackCheckout, type Wallet, type Progress, type BuybackListing } from '../lib/payments';
 
 export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
   handle?: string; onBack?: () => void; onOpenStore?: () => void; onMessage?: (handle: string) => void;
@@ -25,6 +25,9 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [editing, setEditing] = useState(false);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [listing, setListing] = useState<BuybackListing | null>(null);
+  const [buyBusy, setBuyBusy] = useState(false);
 
   useEffect(() => {
     if (isSelf) setProfile(me);
@@ -35,6 +38,8 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
     if (!profile) return;
     getAchievements(profile.id).then(setAch);
     if (!isSelf) amFollowing(profile.id).then(setFollowing);
+    getUserTeams(profile.id).then(setTeams).catch(() => {});
+    if (!isSelf) getCreatorListing(profile.id).then(setListing).catch(() => {});
   }, [profile, isSelf]);
 
   useEffect(() => {
@@ -112,8 +117,40 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
               ))}
             </div>
           )}
+          {teams.length > 0 && (
+            <div style={{ display:'flex', gap:10, marginTop:16, flexWrap:'wrap' }}>
+              {teams.map(t => (
+                <span key={t.id} style={{ display:'inline-flex', alignItems:'center', gap:7, padding:'5px 11px 5px 5px',
+                  borderRadius:999, background:C.panel2, border:`1px solid ${C.hair}` }}>
+                  {t.crest_url
+                    ? <img src={t.crest_url} alt="" style={{ width:22, height:22, borderRadius:6, objectFit:'cover' }} />
+                    : <span style={{ width:22, height:22, borderRadius:6, display:'grid', placeItems:'center',
+                        background:`${t.color}22`, color:t.color, fontFamily:display, fontWeight:700, fontSize:10 }}>{t.tag}</span>}
+                  <span style={{ fontFamily:ui, fontSize:12, fontWeight:600, color:C.ink }}>{t.name}</span>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
+
+      {listing && (
+        <div style={{ display:'flex', alignItems:'center', gap:16, padding:'18px 20px', borderRadius:14,
+          border:`1px solid ${a(C.gold,'44')}`, background:a(C.gold,'0D'), marginBottom:22, flexWrap:'wrap' }}>
+          <div style={{ flex:1, minWidth:200 }}>
+            <div style={{ fontFamily:ui, fontSize:11, fontWeight:700, letterSpacing:'.06em', textTransform:'uppercase', color:C.goldHi }}>
+              Support {profile.display_name}</div>
+            <div style={{ fontFamily:display, fontSize:16, fontWeight:600, color:C.ink, marginTop:3 }}>{listing.product_name}</div>
+          </div>
+          <button onClick={async () => {
+            setBuyBusy(true);
+            try { const { url } = await startBuybackCheckout(listing.id); window.location.href = url; }
+            catch (e: any) { alert(e?.message ?? 'Could not start checkout'); setBuyBusy(false); }
+          }} disabled={buyBusy} style={{ ...solidGold, opacity: buyBusy ? .6 : 1, whiteSpace:'nowrap' }}>
+            {buyBusy ? '…' : `Buy for $${(listing.price_cents / 100).toFixed(2)}`}
+          </button>
+        </div>
+      )}
 
       {/* record — editorial stat cards */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))', gap:12, marginBottom:22 }}>

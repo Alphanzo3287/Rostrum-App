@@ -7,7 +7,7 @@
 //   poll/Q&A/score -> ContextRail
 //   controls -> RoleDock (host go-live, segment mic-gating, end)
 // =====================================================================
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { useRoom, type RoomMember } from '../lib/useRoom';
@@ -20,6 +20,7 @@ import {
 } from '../lib/api';
 import { demoteFromStage, promoteFromAudience } from '../lib/livekit';
 import { useStageInvites, type StageRole, type StageSide } from '../lib/stageInvites';
+import { GiftModal } from '../components/GiftModal';
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
 import { ScreenTile } from '../components/ScreenTile';
@@ -82,17 +83,35 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
     setTab(role === 'judge' ? 'score' : role === 'host' ? 'ros' : 'vote');
   }, [role, isLecture, isLegacy, isSpeakersCorner]);
 
-  // ---- C6 · Stage management (right-click promote/demote) — lives at the
-  // top level so it works during assembly (before "Begin debate") as well
-  // as once the debate is live, not just one phase. ----
-  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; member: RoomMember } | null>(null);
-  const openCtxMenu = (e: React.MouseEvent, m: RoomMember) => {
+  // ---- Person menu (hover on desktop / tap on mobile) — profile, gift,
+  // and, for the host or a moderator, invite/remove. Lives at the top
+  // level so it works in assembly and live. Anyone can open it on anyone
+  // (to view a profile or send a gift); management options inside are
+  // gated to host/moderator. ----
+  const canManage = isHost || role === 'moderator';
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; member: RoomMember; via: 'hover' | 'tap' } | null>(null);
+  const [giftTarget, setGiftTarget] = useState<RoomMember | null>(null);
+  const menuCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelMenuClose = () => { if (menuCloseTimer.current) { clearTimeout(menuCloseTimer.current); menuCloseTimer.current = null; } };
+  const scheduleMenuClose = () => { cancelMenuClose(); menuCloseTimer.current = setTimeout(() => setCtxMenu(null), 260); };
+  const closeMenuNow = () => { cancelMenuClose(); setCtxMenu(null); };
+  const openPerson = (e: React.MouseEvent, m: RoomMember, via: 'hover' | 'tap') => {
     const isSelf = m.identity === me?.identity;
-    if (!isHost && !isSelf) return;         // only the host can act on others
-    if (isSelf && m.role === 'audience') return; // nothing to do for yourself while in the audience
-    if (!isSelf && m.role === 'host') return;    // the host isn't managed through this menu
-    setCtxMenu({ x: e.clientX, y: e.clientY, member: m });
+    if (isSelf && m.role === 'audience') return; // nothing useful for yourself in the audience
+    cancelMenuClose();
+    setCtxMenu({ x: e.clientX, y: e.clientY, member: m, via });
   };
+  // Bound onto each on-stage tile: hover opens on desktop (mouse only),
+  // tap/click opens everywhere. Right-click still works as a fallback.
+  const personHandlers = (m: RoomMember) => ({
+    onClick: (e: React.MouseEvent) => openPerson(e, m, 'tap'),
+    onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); openPerson(e, m, 'tap'); },
+    onPointerEnter: (e: React.PointerEvent) => { if (e.pointerType === 'mouse') openPerson(e as unknown as React.MouseEvent, m, 'hover'); },
+    onPointerLeave: (e: React.PointerEvent) => { if (e.pointerType === 'mouse') scheduleMenuClose(); },
+  });
+  // Legacy adapter: existing tiles call onContextMenu(e, member); route
+  // that through the same opener so every tile behaves consistently.
+  const openCtxMenu = (e: React.MouseEvent, m: RoomMember) => { e.preventDefault?.(); openPerson(e, m, 'tap'); };
   const { incoming: incomingStageInvite, sendInvite: sendStageInvite, respond: respondStageInvite } =
     useStageInvites(room.room, me?.identity ?? '', me?.name ?? '', isHost,
       (fromIdentity, _fromName, role, side) => {
@@ -199,7 +218,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
             ? <WaitingHall debateId={debateId} members={room.members} motion={dz.debate?.motion ?? ''}
                 viewerCount={Math.max(dz.debate?.viewer_count ?? 0, room.members.length)}
                 scheduledAt={dz.debate?.scheduled_at} role={role} onProfile={openProfile}
-                onContextMenu={openCtxMenu} format={dz.debate?.format} />
+                onContextMenu={openCtxMenu} personBind={personHandlers} format={dz.debate?.format} />
             : isLecture
             ? <LectureHall
                 debateId={debateId} room={room} bs={bs}
@@ -207,13 +226,13 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
                 me={me} role={role} speaker={speaker}
                 onProfile={openProfile} narrow={isNarrow}
                 countdown={`${mm}:${ss}`} phaseLabel={dz.seg?.label ?? 'Presentation'}
-                onAskQuestion={() => setTab('qa')} isHost={isHost} onContextMenu={openCtxMenu}
+                onAskQuestion={() => setTab('qa')} isHost={isHost} onContextMenu={openCtxMenu} personBind={personHandlers}
               />
             : isLegacy
             ? <LegacyHall
                 debateId={debateId} room={room} me={me} role={role} motion={dz.debate?.motion ?? ''}
                 maxStageSeats={dz.debate?.max_stage_seats} maxModerators={dz.debate?.max_moderators}
-                onProfile={openProfile} onAskQuestion={() => setTab('qa')} isHost={isHost} onContextMenu={openCtxMenu}
+                onProfile={openProfile} onAskQuestion={() => setTab('qa')} isHost={isHost} onContextMenu={openCtxMenu} personBind={personHandlers}
               />
             : isSpeakersCorner
             ? <SpeakersCornerHall
@@ -221,7 +240,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
                 onLocalState={(patch) => setBs(b => ({ ...b, ...patch }))}
                 me={me} role={role} tally={tally} myVote={myVote} onVote={onVote}
                 onProfile={openProfile} narrow={isNarrow} onAskQuestion={() => setTab('qa')}
-                isHost={isHost} onContextMenu={openCtxMenu}
+                isHost={isHost} onContextMenu={openCtxMenu} personBind={personHandlers}
               />
             : <LiveHall
                 debateId={debateId} room={room} dz={dz} bs={bs}
@@ -230,13 +249,17 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
                 floor={floor} tally={tally} myVote={myVote} onVote={onVote}
                 sideProfiles={sideProfiles} onProfile={openProfile} narrow={isNarrow} mobile={isMobile}
                 countdown={`${mm}:${ss}`} onAskQuestion={() => setTab('qa')}
-                isHost={isHost} onContextMenu={openCtxMenu}
+                isHost={isHost} onContextMenu={openCtxMenu} personBind={personHandlers}
               />}
         </div>
 
         {ctxMenu && (
-          <StageActionMenu x={ctxMenu.x} y={ctxMenu.y} member={ctxMenu.member} debateId={debateId} format={format}
-            isSelf={ctxMenu.member.identity === me?.identity}
+          <StageActionMenu x={ctxMenu.x} y={ctxMenu.y} via={ctxMenu.via} member={ctxMenu.member} debateId={debateId} format={format}
+            isSelf={ctxMenu.member.identity === me?.identity} canManage={canManage}
+            onProfile={openProfile}
+            onGift={() => { setGiftTarget(ctxMenu.member); closeMenuNow(); }}
+            onHoverKeep={ctxMenu.via === 'hover' ? cancelMenuClose : undefined}
+            onHoverLeave={ctxMenu.via === 'hover' ? scheduleMenuClose : undefined}
             onSendInvite={(r, s) => {
               const maxSeats = dz.debate?.max_stage_seats;
               const maxMods = dz.debate?.max_moderators;
@@ -258,7 +281,11 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
               }
               sendStageInvite(ctxMenu.member.identity, r, s);
             }}
-            onClose={() => setCtxMenu(null)} />
+            onClose={closeMenuNow} />
+        )}
+        {giftTarget && (
+          <GiftModal debateId={debateId} toUserId={giftTarget.identity} toName={giftTarget.name}
+            onClose={() => setGiftTarget(null)} />
         )}
         {incomingStageInvite && (
           <IncomingStageInviteCard invite={incomingStageInvite}
@@ -552,13 +579,13 @@ const iconBtn: React.CSSProperties = { width:32, height:32, borderRadius:5, bord
    there's no competing cinematic floor view to switch away from). ---- */
 function LectureHall({
   debateId, room, bs, onLocalState, me, role, speaker,
-  onProfile, narrow, countdown, phaseLabel, onAskQuestion, isHost, onContextMenu,
+  onProfile, narrow, countdown, phaseLabel, onAskQuestion, isHost, onContextMenu, personBind,
 }: {
   debateId: string; room: any; bs: BroadcastState;
   onLocalState: (patch: Partial<BroadcastState>) => void;
   me?: M; role: string; speaker?: M;
   onProfile: (h?: string | null) => void; narrow: boolean; countdown: string; phaseLabel: string;
-  onAskQuestion?: () => void; isHost: boolean; onContextMenu: (e: React.MouseEvent, m: any) => void;
+  onAskQuestion?: () => void; isHost: boolean; onContextMenu: (e: React.MouseEvent, m: any) => void; personBind: (m: any) => React.HTMLAttributes<HTMLElement>;
 }) {
   const members = room.members as any[];
   const host = members.find(m => m.role === 'host');
@@ -571,7 +598,7 @@ function LectureHall({
 
       {/* presenter identity strip */}
       <div style={{ flexShrink:0 }}>
-        <HostTopRow host={host} mod={mod} judgeCount={0} onProfile={onProfile} hideJudge
+        <HostTopRow host={host} mod={mod} judgeCount={0} onProfile={onProfile} hideJudge personBind={personBind}
           onModContextMenu={mod ? (e) => onContextMenu(e, mod) : undefined} />
       </div>
 
@@ -619,12 +646,12 @@ function LectureHall({
    at invite-time, shown here as a simple counter. ---- */
 function LegacyHall({
   debateId, room, me, role, motion, maxStageSeats, maxModerators,
-  onProfile, onAskQuestion, isHost, onContextMenu,
+  onProfile, onAskQuestion, isHost, onContextMenu, personBind,
 }: {
   debateId: string; room: any; me?: M; role: string; motion: string;
   maxStageSeats: number | null | undefined; maxModerators: number | null | undefined;
   onProfile: (h?: string | null) => void; onAskQuestion?: () => void;
-  isHost: boolean; onContextMenu: (e: React.MouseEvent, m: any) => void;
+  isHost: boolean; onContextMenu: (e: React.MouseEvent, m: any) => void; personBind: (m: any) => React.HTMLAttributes<HTMLElement>;
 }) {
   const members = room.members as any[];
   const host = members.find(m => m.role === 'host');
@@ -657,10 +684,10 @@ function LegacyHall({
           )}
         </div>
         <div style={{ display:'flex', flexWrap:'wrap', gap:18 }}>
-          {host && <SpeakerTile member={host} tag="Host" tone={C.warning} onProfile={onProfile} />}
+          {host && <SpeakerTile member={host} tag="Host" tone={C.warning} onProfile={onProfile} bind={personBind(host)} />}
           {speakers.map(m => (
             <SpeakerTile key={m.identity} member={m} tag={m.role === 'moderator' ? 'Mod' : undefined}
-              tone={m.role === 'moderator' ? C.gold : C.jadeHi} onProfile={onProfile}
+              tone={m.role === 'moderator' ? C.gold : C.jadeHi} onProfile={onProfile} bind={personBind(m)}
               onContextMenu={isHost ? (e) => onContextMenu(e, m) : undefined} />
           ))}
         </div>
@@ -675,7 +702,7 @@ function LegacyHall({
         ) : (
           <div style={{ display:'flex', flexWrap:'wrap', gap:14, maxHeight:260, overflowY:'auto', paddingRight:4 }}>
             {listeners.map(m => (
-              <ListenerTile key={m.identity} member={m} onProfile={onProfile}
+              <ListenerTile key={m.identity} member={m} onProfile={onProfile} bind={personBind(m)}
                 onContextMenu={isHost ? (e) => onContextMenu(e, m) : undefined} />
             ))}
           </div>
@@ -690,15 +717,15 @@ function LegacyHall({
     </div>
   );
 }
-function SpeakerTile({ member, tag, tone, onProfile, onContextMenu }: {
+function SpeakerTile({ member, tag, tone, onProfile, onContextMenu, bind }: {
   member: any; tag?: string; tone: string; onProfile: (h?: string | null) => void;
-  onContextMenu?: (e: React.MouseEvent) => void;
+  onContextMenu?: (e: React.MouseEvent) => void; bind?: React.HTMLAttributes<HTMLElement>;
 }) {
-  const clickable = !!member.handle;
   return (
-    <div onClick={clickable ? () => onProfile(member.handle) : undefined}
+    <div {...(bind ?? {})}
       onContextMenu={onContextMenu ? (e) => { e.preventDefault(); onContextMenu(e); } : undefined}
-      style={{ width:84, textAlign:'center', cursor: clickable ? 'pointer' : 'default' }}>
+      title={`${member.name} — hover or tap for options`}
+      style={{ width:84, textAlign:'center', cursor: bind ? 'pointer' : 'default' }}>
       <div style={{ position:'relative', display:'inline-block' }}>
         <span style={{ display:'block', borderRadius:'50%',
           boxShadow: member.isSpeaking ? `0 0 0 3px ${C.base}, 0 0 0 5px ${tone}, 0 0 16px ${a(tone,'99')}` : `0 0 0 2px ${a(tone,'44')}` }}>
@@ -719,14 +746,15 @@ function SpeakerTile({ member, tag, tone, onProfile, onContextMenu }: {
     </div>
   );
 }
-function ListenerTile({ member, onProfile, onContextMenu }: {
+function ListenerTile({ member, onProfile, onContextMenu, bind }: {
   member: any; onProfile: (h?: string | null) => void; onContextMenu?: (e: React.MouseEvent) => void;
+  bind?: React.HTMLAttributes<HTMLElement>;
 }) {
-  const clickable = !!member.handle;
   return (
-    <div onClick={clickable ? () => onProfile(member.handle) : undefined}
+    <div {...(bind ?? {})}
       onContextMenu={onContextMenu ? (e) => { e.preventDefault(); onContextMenu(e); } : undefined}
-      style={{ width:60, textAlign:'center', cursor: clickable ? 'pointer' : 'default' }}>
+      title={`${member.name} — hover or tap for options`}
+      style={{ width:60, textAlign:'center', cursor: bind ? 'pointer' : 'default' }}>
       <Initials name={member.name} url={member.avatar} size={44} />
       <div style={{ fontFamily:ui, fontSize:10.5, color:C.dim, marginTop:5,
         whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{member.name}</div>
@@ -743,12 +771,12 @@ function ListenerTile({ member, onProfile, onContextMenu }: {
    so everyone can focus on whoever they want independently. ---- */
 function SpeakersCornerHall({
   debateId, room, bs, onLocalState, me, role, tally, myVote, onVote,
-  onProfile, narrow, onAskQuestion, isHost, onContextMenu,
+  onProfile, narrow, onAskQuestion, isHost, onContextMenu, personBind,
 }: {
   debateId: string; room: any; bs: BroadcastState; onLocalState: (patch: Partial<BroadcastState>) => void;
   me?: M; role: string; tally: Tally; myVote: Side | null; onVote: (s: Side) => void;
   onProfile: (h?: string | null) => void; narrow: boolean; onAskQuestion?: () => void;
-  isHost: boolean; onContextMenu: (e: React.MouseEvent, m: any) => void;
+  isHost: boolean; onContextMenu: (e: React.MouseEvent, m: any) => void; personBind: (m: any) => React.HTMLAttributes<HTMLElement>;
 }) {
   const members = room.members as any[];
   const host = members.find(m => m.role === 'host');
@@ -772,7 +800,7 @@ function SpeakersCornerHall({
     <div style={{ display:'flex', flexDirection:'column', minHeight:0, height:'100%',
       overflowY:'auto', paddingBottom: narrow ? 10 : 0 }}>
       <div style={{ flexShrink:0 }}>
-        <HostTopRow host={host} mod={mod} judgeCount={0} onProfile={onProfile} hideJudge
+        <HostTopRow host={host} mod={mod} judgeCount={0} onProfile={onProfile} hideJudge personBind={personBind}
           onModContextMenu={mod ? (e) => onContextMenu(e, mod) : undefined} />
       </div>
 
@@ -784,7 +812,7 @@ function SpeakersCornerHall({
       <div style={{ display:'grid', gap:14, flexShrink:0, marginBottom:14,
         gridTemplateColumns: narrow ? '1fr' : 'minmax(160px,1fr) minmax(0,1.4fr) minmax(160px,1fr)' }}>
         <CornerSide side="prop" speakers={propSpeakers} expandedId={expandedId} setExpandedId={setExpandedId}
-          isHost={isHost} onContextMenu={onContextMenu} identity={identity.prop}
+          isHost={isHost} onContextMenu={onContextMenu} personBind={personBind} identity={identity.prop}
           canCustomize={iAmPropSpeaker} onCustomize={() => setCustomizing('prop')} />
         <div style={{ borderRadius:18, border:`1px solid ${C.hair}`, background:C.base2, minHeight:220,
           display:'flex', alignItems:'center', justifyContent:'center', position:'relative', overflow:'hidden' }}>
@@ -807,12 +835,12 @@ function SpeakersCornerHall({
                 <rect x="33" y="10" width="5" height="14" fill={C.warning} opacity=".85" />
                 <rect x="2" y="24" width="42" height="2.4" rx="1.2" fill={C.warning} opacity=".9" />
               </svg>
-              <div style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>Click a speaker to bring them into focus</div>
+              <div style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>Tap the ⛶ on a speaker to bring them into focus</div>
             </div>
           )}
         </div>
         <CornerSide side="opp" speakers={oppSpeakers} expandedId={expandedId} setExpandedId={setExpandedId}
-          isHost={isHost} onContextMenu={onContextMenu} identity={identity.opp}
+          isHost={isHost} onContextMenu={onContextMenu} personBind={personBind} identity={identity.opp}
           canCustomize={iAmOppSpeaker} onCustomize={() => setCustomizing('opp')} />
       </div>
 
@@ -820,7 +848,7 @@ function SpeakersCornerHall({
         gridTemplateColumns: narrow ? '1fr' : '1.2fr 1fr' }}>
         <AudienceVoteStrip tally={tally} myVote={myVote} canVote onVote={onVote}
           propLabel={sideLabelFor('prop', identity.prop)} oppLabel={sideLabelFor('opp', identity.opp)} />
-        <GalleryStrip audience={audience} onProfile={onProfile}
+        <GalleryStrip audience={audience} onProfile={onProfile} personBind={personBind}
           onMemberContextMenu={isHost ? (e, m) => onContextMenu(e, m) : undefined} />
       </div>
 
@@ -842,9 +870,9 @@ function SpeakersCornerHall({
     </div>
   );
 }
-function CornerSide({ side, speakers, expandedId, setExpandedId, isHost, onContextMenu, identity, canCustomize, onCustomize }: {
+function CornerSide({ side, speakers, expandedId, setExpandedId, isHost, onContextMenu, personBind, identity, canCustomize, onCustomize }: {
   side: Side; speakers: any[]; expandedId: string | null; setExpandedId: (id: string | null) => void;
-  isHost: boolean; onContextMenu: (e: React.MouseEvent, m: any) => void;
+  isHost: boolean; onContextMenu: (e: React.MouseEvent, m: any) => void; personBind: (m: any) => React.HTMLAttributes<HTMLElement>;
   identity: { label: string; logoUrl: string | null } | null; canCustomize: boolean; onCustomize: () => void;
 }) {
   const tone = side === 'prop' ? C.jadeHi : C.garnetHi;
@@ -871,13 +899,20 @@ function CornerSide({ side, speakers, expandedId, setExpandedId, isHost, onConte
       ) : (
         <div style={{ display:'flex', flexWrap:'wrap', gap:12, justifyContent:'center' }}>
           {speakers.map(m => (
-            <div key={m.identity} onClick={() => setExpandedId(expandedId === m.identity ? null : m.identity)}
-              onContextMenu={isHost ? (e) => { e.preventDefault(); onContextMenu(e, m); } : undefined}
-              style={{ width:72, textAlign:'center', cursor:'pointer' }}>
+            <div key={m.identity} {...personBind(m)}
+              onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, m); }}
+              title={`${m.name} — hover or tap for options`}
+              style={{ position:'relative', width:72, textAlign:'center', cursor:'pointer' }}>
               <span style={{ display:'block', borderRadius:'50%',
                 boxShadow: expandedId === m.identity ? `0 0 0 3px ${C.base}, 0 0 0 5px ${tone}` : `0 0 0 2px ${a(tone,'44')}` }}>
                 <Initials name={m.name} url={m.avatar} size={56} />
               </span>
+              <button onClick={(e) => { e.stopPropagation(); setExpandedId(expandedId === m.identity ? null : m.identity); }}
+                title={expandedId === m.identity ? 'Remove from center' : 'Bring to center'}
+                style={{ position:'absolute', top:-4, right:-4, width:22, height:22, borderRadius:'50%',
+                  background:a(C.base,'D9'), border:`1px solid ${expandedId === m.identity ? tone : C.hairHi}`,
+                  color: expandedId === m.identity ? tone : C.dim, cursor:'pointer', fontSize:11, lineHeight:1,
+                  display:'grid', placeItems:'center' }}>⛶</button>
               <div style={{ fontFamily:ui, fontSize:11, fontWeight:600, color:C.ink, marginTop:5,
                 whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{m.name}</div>
             </div>
@@ -892,7 +927,7 @@ function CornerSide({ side, speakers, expandedId, setExpandedId, isHost, onConte
 function LiveHall({
   debateId, room, dz, bs, onLocalState, me, role, speaker, speakerSide,
   floor, tally, myVote, onVote, sideProfiles, onProfile, narrow, countdown, onAskQuestion, mobile,
-  isHost, onContextMenu,
+  isHost, onContextMenu, personBind,
 }: {
   debateId: string; room: any; dz: any; bs: BroadcastState;
   onLocalState: (patch: Partial<BroadcastState>) => void;
@@ -901,6 +936,7 @@ function LiveHall({
   sideProfiles: { prop?: Profile; opp?: Profile }; onProfile: (h?: string | null) => void;
   narrow: boolean; countdown: string; onAskQuestion?: () => void; mobile?: boolean;
   isHost: boolean; onContextMenu: (e: React.MouseEvent, m: any) => void;
+  personBind: (m: any) => React.HTMLAttributes<HTMLElement>;
 }) {
   const [monitor, setMonitor] = useState(false);
 
@@ -970,11 +1006,13 @@ function LiveHall({
   const propCard = (
     <CompetitorCard side="prop" member={propMember} profile={sideProfiles.prop}
       hasFloor={speakerSide === 'prop'} speakingSecs={floor?.prop_speaking ?? 0} segTotal={segTotal} onProfile={onProfile}
+      bind={propMember ? personBind(propMember) : undefined}
       onContextMenu={propMember ? (e) => onContextMenu(e, propMember) : undefined} />
   );
   const oppCard = (
     <CompetitorCard side="opp" member={oppMember} profile={sideProfiles.opp}
       hasFloor={speakerSide === 'opp'} speakingSecs={floor?.opp_speaking ?? 0} segTotal={segTotal} onProfile={onProfile}
+      bind={oppMember ? personBind(oppMember) : undefined}
       onContextMenu={oppMember ? (e) => onContextMenu(e, oppMember) : undefined} />
   );
 
@@ -992,6 +1030,7 @@ function LiveHall({
       overflowY:'auto', paddingBottom: narrow ? 10 : 0 }}>
       <div style={{ flexShrink:0 }}>
         <HostTopRow host={host} mod={mod} judgeCount={judges.length} onProfile={onProfile} right={monitorToggle}
+          personBind={personBind}
           onModContextMenu={mod ? (e) => onContextMenu(e, mod) : undefined} />
       </div>
 
@@ -1011,10 +1050,10 @@ function LiveHall({
 
       <div style={{ display:'grid', gap:12, marginTop:14, flexShrink:0,
         gridTemplateColumns: narrow ? '1fr' : '1.1fr 1.3fr 1fr' }}>
-        <GalleryStrip audience={audience} onProfile={onProfile}
+        <GalleryStrip audience={audience} onProfile={onProfile} personBind={personBind}
           onMemberContextMenu={(e, m) => onContextMenu(e, m)} />
         <AudienceVoteStrip tally={tally} myVote={myVote} canVote={!!dz.debate?.poll_open} onVote={onVote} />
-        <JudgesStrip judges={judges} onProfile={onProfile}
+        <JudgesStrip judges={judges} onProfile={onProfile} personBind={personBind}
           onJudgeContextMenu={(e, m) => onContextMenu(e, m)} />
       </div>
 
@@ -1051,13 +1090,17 @@ function LiveHall({
 
 /* ---- C5 · Stage Action Menu (host-only: right-click a profile to
    promote them onto the stage or move them back to the audience) ---- */
-function StageActionMenu({ x, y, member, debateId, isSelf, onSendInvite, onClose, format }: {
-  x: number; y: number; member: RoomMember; debateId: string; isSelf: boolean;
-  onSendInvite: (role: StageRole, side: StageSide) => void; onClose: () => void; format?: string;
+function StageActionMenu({ x, y, via, member, debateId, isSelf, canManage, onSendInvite, onProfile, onGift, onClose, onHoverKeep, onHoverLeave, format }: {
+  x: number; y: number; via: 'hover' | 'tap'; member: RoomMember; debateId: string; isSelf: boolean; canManage: boolean;
+  onSendInvite: (role: StageRole, side: StageSide) => void;
+  onProfile: (handle?: string | null) => void; onGift: () => void;
+  onClose: () => void; onHoverKeep?: () => void; onHoverLeave?: () => void; format?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
   const onStage = member.role !== 'audience';
+  const showInvite = canManage && !isSelf && !onStage;
+  const showDemote = canManage && !isSelf && onStage && member.role !== 'host';
 
   async function demote() {
     setBusy(true);
@@ -1074,13 +1117,14 @@ function StageActionMenu({ x, y, member, debateId, isSelf, onSendInvite, onClose
 
   const menuW = 210;
   const left = typeof window !== 'undefined' ? Math.min(x, window.innerWidth - menuW - 12) : x;
-  const top = typeof window !== 'undefined' ? Math.min(y, window.innerHeight - 220) : y;
+  const top = typeof window !== 'undefined' ? Math.min(y, window.innerHeight - 260) : y;
 
   return (
     <>
       <div onClick={onClose} onContextMenu={e => { e.preventDefault(); onClose(); }}
-        style={{ position:'fixed', inset:0, zIndex:205 }} />
-      <div style={{ position:'fixed', top, left, zIndex:210, width:menuW, borderRadius:12,
+        style={{ position:'fixed', inset:0, zIndex:205, pointerEvents: via === 'hover' ? 'none' : 'auto' }} />
+      <div onMouseEnter={onHoverKeep} onMouseLeave={onHoverLeave}
+        style={{ position:'fixed', top, left, zIndex:210, width:menuW, borderRadius:12,
         background:C.panel, border:`1px solid ${C.hairHi}`, boxShadow:'0 20px 50px rgba(0,0,0,.5)', padding:6 }}>
         <div style={{ padding:'8px 10px 7px', fontFamily:ui, fontSize:11.5, fontWeight:700, color:C.ink,
           borderBottom:`1px solid ${C.hair}`, marginBottom:4, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
@@ -1088,27 +1132,42 @@ function StageActionMenu({ x, y, member, debateId, isSelf, onSendInvite, onClose
         </div>
         {sent ? (
           <div style={{ padding:'9px 10px', fontFamily:ui, fontSize:12.5, color:C.jadeHi }}>✓ Invite sent — {sent}</div>
-        ) : isSelf ? (
-          <MenuBtn label="Leave the stage" danger onClick={demote} busy={busy} />
-        ) : onStage ? (
-          <MenuBtn label="→ Move to audience" danger onClick={demote} busy={busy} />
-        ) : format === 'legacy' ? (
-          <>
-            <MenuBtn label="Invite as Speaker" onClick={() => invite('debater', null, 'Speaker')} busy={busy} />
-            <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
-          </>
-        ) : format === 'speakers_corner' ? (
-          <>
-            <MenuBtn label="Invite as Proposition" onClick={() => invite('debater', 'prop', 'Proposition')} busy={busy} />
-            <MenuBtn label="Invite as Opposition" onClick={() => invite('debater', 'opp', 'Opposition')} busy={busy} />
-            <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
-          </>
         ) : (
           <>
-            <MenuBtn label="Invite as Proposition" onClick={() => invite('debater', 'prop', 'Proposition')} busy={busy} />
-            <MenuBtn label="Invite as Opposition" onClick={() => invite('debater', 'opp', 'Opposition')} busy={busy} />
-            <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
-            <MenuBtn label="Invite as Judge" onClick={() => invite('judge', null, 'Judge')} busy={busy} />
+            {member.handle && (
+              <MenuBtn label="View profile" onClick={() => { onProfile(member.handle); onClose(); }} busy={busy} />
+            )}
+            {!isSelf && (
+              <MenuBtn label="🎁 Send gift" onClick={() => { onGift(); onClose(); }} busy={busy} />
+            )}
+            {(showInvite || showDemote || isSelf) && <div style={{ height:1, background:C.hair, margin:'4px 6px' }} />}
+            {isSelf && onStage && (
+              <MenuBtn label="Leave the stage" danger onClick={demote} busy={busy} />
+            )}
+            {showDemote && (
+              <MenuBtn label="→ Move to audience" danger onClick={demote} busy={busy} />
+            )}
+            {showInvite && (format === 'legacy' ? (
+              <>
+                <MenuBtn label="Invite as Speaker" onClick={() => invite('debater', null, 'Speaker')} busy={busy} />
+                <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
+              </>
+            ) : format === 'speakers_corner' ? (
+              <>
+                <MenuBtn label="Invite as Proposition" onClick={() => invite('debater', 'prop', 'Proposition')} busy={busy} />
+                <MenuBtn label="Invite as Opposition" onClick={() => invite('debater', 'opp', 'Opposition')} busy={busy} />
+                <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
+              </>
+            ) : format === 'lecture' ? (
+              <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
+            ) : (
+              <>
+                <MenuBtn label="Invite as Proposition" onClick={() => invite('debater', 'prop', 'Proposition')} busy={busy} />
+                <MenuBtn label="Invite as Opposition" onClick={() => invite('debater', 'opp', 'Opposition')} busy={busy} />
+                <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
+                <MenuBtn label="Invite as Judge" onClick={() => invite('judge', null, 'Judge')} busy={busy} />
+              </>
+            ))}
           </>
         )}
       </div>

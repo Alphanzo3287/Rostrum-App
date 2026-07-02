@@ -34,6 +34,7 @@ const MenuIcon = () => <Icon d="M3 6h18M3 12h18M3 18h18" size={20} />;
 const CloseIcon = () => <Icon d="M18 6L6 18M6 6l12 12" size={20} />;
 const TeamsIcon = () => <Icon d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75M18 8l1.5 1.5L23 6" />;
 const TournamentIcon = () => <Icon d="M6 3h12M6 3v4a6 6 0 0 0 12 0V3M6 3H3v2a4 4 0 0 0 4 4M18 3h3v2a4 4 0 0 1-4 4M9 13h6M12 13v5m-4 4h8" />;
+const EarningsIcon = () => <Icon d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />;
 const CrownIcon = ({ size = 24 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
     <path d="M5 16L3 7l5.5 4L12 5l3.5 6L21 7l-2 9H5zm0 2h14v2H5v-2z" />
@@ -88,6 +89,7 @@ export function Sidebar() {
     { to: '/leaderboard',  label: 'Rankings',      icon: RankingsIcon },
     { to: '/messages',     label: 'Messages',      icon: MessagesIcon,    badge: unread || undefined },
     { to: '/store',        label: 'Wallet',        icon: WalletIcon },
+    { to: '/earnings',     label: 'Earnings',      icon: EarningsIcon },
   ];
 
   const sidebarBody = (
@@ -98,9 +100,7 @@ export function Sidebar() {
         <div style={{ width:38, height:38, borderRadius:11, display:'grid', placeItems:'center',
           background:`linear-gradient(135deg, ${C.gold}, ${C.cyan})`,
           boxShadow:`0 8px 24px ${a(C.gold,'4D')}` }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
-            <path d="M5 21h14v-2H5v2zM6 3v14h12V3H6zm10 12H8V5h8v10z M9 7h6v1.5H9zM9 10h6v1.5H9zM9 13h6v1.5H9z"/>
-          </svg>
+          <img src="/logo-icon.png" alt="" style={{ width:24, height:24, objectFit:'contain' }} />
         </div>
         <div style={{ lineHeight:1.05 }}>
           <div style={{ fontFamily:display, fontSize:11, fontWeight:600, color:C.faint,
@@ -226,9 +226,7 @@ export function Sidebar() {
           <Link to="/" style={{ display:'flex', alignItems:'center', gap:9, textDecoration:'none' }}>
             <div style={{ width:30, height:30, borderRadius:8, display:'grid', placeItems:'center',
               background:`linear-gradient(135deg, ${C.gold}, ${C.cyan})` }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
-                <path d="M5 21h14v-2H5v2zM6 3v14h12V3H6zm10 12H8V5h8v10z" />
-              </svg>
+              <img src="/logo-icon.png" alt="" style={{ width:19, height:19, objectFit:'contain' }} />
             </div>
             <span style={{ fontFamily:display, fontSize:17, fontWeight:700, color:C.ink, letterSpacing:'-.01em' }}>
               THE ROSTRUM
