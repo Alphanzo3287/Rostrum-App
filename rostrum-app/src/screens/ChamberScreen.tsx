@@ -31,7 +31,7 @@ import { BroadcastBar } from '../components/BroadcastBar';
 import { ShareButton } from '../components/ShareSheet';
 import { C, ui, display, mono, a, ghostBtn, solidGold } from '../lib/theme';
 import { useIsTablet, useIsMobile } from '../lib/useMediaQuery';
-import { CompetitorCard, FloorStage, HostTopRow, GalleryStrip, AudienceVoteStrip, JudgesStrip, FloorStatStrip, WaitingHall, Initials } from '../components/hall';
+import { CompetitorCard, FloorStage, HostTopRow, GalleryStrip, AudienceVoteStrip, JudgesStrip, FloorStatStrip, WaitingHall, Initials, useSideIdentity, sideLabelFor, SideIdentityModal } from '../components/hall';
 import { InteractionBar } from '../components/InteractionBar';
 import type { Profile, Side, Tally } from '../lib/types';
 
@@ -759,6 +759,10 @@ function SpeakersCornerHall({
   const canControl = role === 'host' || role === 'moderator';
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const expanded = members.find(m => m.identity === expandedId);
+  const { identity, reload: reloadIdentity } = useSideIdentity(debateId, true);
+  const [customizing, setCustomizing] = useState<Side | null>(null);
+  const iAmPropSpeaker = !!propSpeakers.find(m => m.identity === me?.identity);
+  const iAmOppSpeaker = !!oppSpeakers.find(m => m.identity === me?.identity);
 
   return (
     <div style={{ display:'flex', flexDirection:'column', minHeight:0, height:'100%',
@@ -768,10 +772,16 @@ function SpeakersCornerHall({
           onModContextMenu={mod ? (e) => onContextMenu(e, mod) : undefined} />
       </div>
 
+      {customizing && (
+        <SideIdentityModal debateId={debateId} side={customizing} onClose={() => setCustomizing(null)}
+          onSaved={() => { setCustomizing(null); reloadIdentity(); }} />
+      )}
+
       <div style={{ display:'grid', gap:14, flexShrink:0, marginBottom:14,
         gridTemplateColumns: narrow ? '1fr' : 'minmax(160px,1fr) minmax(0,1.4fr) minmax(160px,1fr)' }}>
         <CornerSide side="prop" speakers={propSpeakers} expandedId={expandedId} setExpandedId={setExpandedId}
-          isHost={isHost} onContextMenu={onContextMenu} />
+          isHost={isHost} onContextMenu={onContextMenu} identity={identity.prop}
+          canCustomize={iAmPropSpeaker} onCustomize={() => setCustomizing('prop')} />
         <div style={{ borderRadius:18, border:`1px solid ${C.hair}`, background:C.base2, minHeight:220,
           display:'flex', alignItems:'center', justifyContent:'center', position:'relative', overflow:'hidden' }}>
           {expanded ? (
@@ -798,12 +808,14 @@ function SpeakersCornerHall({
           )}
         </div>
         <CornerSide side="opp" speakers={oppSpeakers} expandedId={expandedId} setExpandedId={setExpandedId}
-          isHost={isHost} onContextMenu={onContextMenu} />
+          isHost={isHost} onContextMenu={onContextMenu} identity={identity.opp}
+          canCustomize={iAmOppSpeaker} onCustomize={() => setCustomizing('opp')} />
       </div>
 
       <div style={{ display:'grid', gap:12, marginBottom:14, flexShrink:0,
         gridTemplateColumns: narrow ? '1fr' : '1.2fr 1fr' }}>
-        <AudienceVoteStrip tally={tally} myVote={myVote} canVote onVote={onVote} />
+        <AudienceVoteStrip tally={tally} myVote={myVote} canVote onVote={onVote}
+          propLabel={sideLabelFor('prop', identity.prop)} oppLabel={sideLabelFor('opp', identity.opp)} />
         <GalleryStrip audience={audience} onProfile={onProfile}
           onMemberContextMenu={isHost ? (e, m) => onContextMenu(e, m) : undefined} />
       </div>
@@ -826,16 +838,30 @@ function SpeakersCornerHall({
     </div>
   );
 }
-function CornerSide({ side, speakers, expandedId, setExpandedId, isHost, onContextMenu }: {
+function CornerSide({ side, speakers, expandedId, setExpandedId, isHost, onContextMenu, identity, canCustomize, onCustomize }: {
   side: Side; speakers: any[]; expandedId: string | null; setExpandedId: (id: string | null) => void;
   isHost: boolean; onContextMenu: (e: React.MouseEvent, m: any) => void;
+  identity: { label: string; logoUrl: string | null } | null; canCustomize: boolean; onCustomize: () => void;
 }) {
   const tone = side === 'prop' ? C.jadeHi : C.garnetHi;
-  const label = side === 'prop' ? 'Proposition' : 'Opposition';
+  const label = identity?.label || (side === 'prop' ? 'Proposition' : 'Opposition');
   return (
     <div style={{ borderRadius:18, border:`1px solid ${a(tone,'33')}`, background:a(tone,'0A'), padding:'12px 10px' }}>
-      <div style={{ fontFamily:ui, fontWeight:800, fontSize:10.5, letterSpacing:'.14em', textTransform:'uppercase',
-        color:tone, marginBottom:10, textAlign:'center' }}>{label}</div>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginBottom:10 }}>
+        {identity?.logoUrl && (
+          <img src={identity.logoUrl} alt="" style={{ width:18, height:18, borderRadius:5, objectFit:'cover' }} />
+        )}
+        <span style={{ fontFamily:ui, fontWeight:800, fontSize:10.5, letterSpacing:'.1em', textTransform:'uppercase',
+          color:tone, textAlign:'center', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:140 }}>{label}</span>
+      </div>
+      {canCustomize && (
+        <div style={{ textAlign:'center', marginBottom:10 }}>
+          <button onClick={onCustomize} style={{ background:'none', border:'none', cursor:'pointer',
+            fontFamily:ui, fontSize:10, color:C.faint, textDecoration:'underline' }}>
+            {identity ? 'Change name/logo' : 'Name this side'}
+          </button>
+        </div>
+      )}
       {speakers.length === 0 ? (
         <div style={{ fontFamily:ui, fontSize:11.5, color:C.faint, textAlign:'center', padding:'14px 0' }}>Open seat</div>
       ) : (

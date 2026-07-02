@@ -13,11 +13,12 @@
 //   debate_segments     -> round label + "has the floor"
 // =====================================================================
 import React, { useState, useEffect } from 'react';
-import { C, ui, mono, display, a } from '../lib/theme';
+import { C, ui, mono, display, a, solidGold, ghostBtn, field } from '../lib/theme';
 import { VideoTile } from './VideoTile';
 import type { RoomMember } from '../lib/useRoom';
-import type { Profile, Side } from '../lib/types';
+import type { Profile, Side, Team } from '../lib/types';
 import type { FloorStats } from '../lib/api';
+import { getMyTeams, getSideIdentity, setSideCustomIdentity, setSideTeam, type SideIdentity } from '../lib/api';
 
 const STAGE_BACKDROP = '/stage-backdrop.jpg';
 
@@ -332,9 +333,9 @@ export function GalleryStrip({ audience, onProfile, onMemberContextMenu }: {
   );
 }
 
-export function AudienceVoteStrip({ tally, myVote, canVote, onVote }: {
+export function AudienceVoteStrip({ tally, myVote, canVote, onVote, propLabel, oppLabel }: {
   tally: { prop: number; opp: number }; myVote: Side | null; canVote: boolean;
-  onVote: (side: Side) => void;
+  onVote: (side: Side) => void; propLabel?: string; oppLabel?: string;
 }) {
   const total = tally.prop + tally.opp;
   const pp = total > 0 ? Math.round((tally.prop / total) * 100) : 50;
@@ -342,12 +343,14 @@ export function AudienceVoteStrip({ tally, myVote, canVote, onVote }: {
   const Btn = ({ side, pct }: { side: Side; pct: number }) => {
     const t = sideTone(side);
     const mine = myVote === side;
+    const label = side === 'prop' ? (propLabel || t.label) : (oppLabel || t.label);
     return (
       <button disabled={!canVote} onClick={() => canVote && onVote(side)}
         style={{ background: 'none', border: 'none', padding: 0, textAlign: side === 'prop' ? 'left' : 'right',
-          cursor: canVote ? 'pointer' : 'default', flex: 1 }}>
-        <span style={{ fontFamily: ui, fontSize: 11, fontWeight: 600, color: t.hi }}>
-          {mine ? '✓ ' : ''}{t.label}</span>
+          cursor: canVote ? 'pointer' : 'default', flex: 1, minWidth: 0 }}>
+        <span style={{ fontFamily: ui, fontSize: 11, fontWeight: 600, color: t.hi,
+          display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {mine ? '✓ ' : ''}{label}</span>
         <div style={{ fontFamily: ui, fontWeight: 800, fontSize: 18, color: C.ink }}>{pct}%</div>
       </button>
     );
@@ -358,6 +361,7 @@ export function AudienceVoteStrip({ tally, myVote, canVote, onVote }: {
         <Btn side="prop" pct={pp} />
         <span style={{ fontFamily: ui, fontSize: 11, color: C.faint, paddingBottom: 4 }}>vs</span>
         <Btn side="opp" pct={op} />
+
       </div>
       <div style={{ display: 'flex', height: 9, borderRadius: 999, overflow: 'hidden', margin: '8px 0 6px', gap: 2 }}>
         <div style={{ width: `${pp}%`, background: `linear-gradient(90deg, ${C.jade}, ${C.jadeHi})`, transition: 'width .8s ease' }} />
@@ -674,6 +678,98 @@ export function DebateSummaryPanel({ summary }: { summary: { total_time_secs: nu
       <Row label="Evidence Used" value={summary.evidence_count} />
       <Row label="Audience Votes" value={fmtN(summary.audience_votes)} />
       <Row label="Chat Messages" value={fmtN(summary.chat_count)} />
+    </div>
+  );
+}
+
+/* =====================================================================
+   Speakers' Corner — custom side identity. Any seated speaker on a side
+   can set a name + logo for that side, either a one-off for this event
+   or pulled from a real team they belong to. Falls back to the plain
+   "Proposition"/"Opposition" label wherever nothing's been set.
+   ===================================================================== */
+export function useSideIdentity(debateId: string, enabled: boolean) {
+  const [identity, setIdentity] = useState<{ prop: SideIdentity | null; opp: SideIdentity | null }>({ prop: null, opp: null });
+  const reload = () => { if (enabled) getSideIdentity(debateId).then(setIdentity).catch(() => {}); };
+  useEffect(() => { reload(); const iv = enabled ? setInterval(reload, 8000) : undefined; return () => { if (iv) clearInterval(iv); }; }, [debateId, enabled]);
+  return { identity, reload };
+}
+
+export function sideLabelFor(side: Side, identity: SideIdentity | null): string {
+  return identity?.label || (side === 'prop' ? 'Proposition' : 'Opposition');
+}
+
+export function SideIdentityModal({ debateId, side, onClose, onSaved }: {
+  debateId: string; side: Side; onClose: () => void; onSaved: () => void;
+}) {
+  const [myTeams, setMyTeams] = useState<Team[]>([]);
+  const [name, setName] = useState('');
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const t = sideTone(side);
+
+  useEffect(() => { getMyTeams().then(setMyTeams).catch(() => {}); }, []);
+
+  async function useTeam(teamId: string) {
+    setBusy(true);
+    try { await setSideTeam(debateId, side, teamId); onSaved(); }
+    catch (e: any) { alert(e?.message ?? 'Could not set team'); }
+    finally { setBusy(false); }
+  }
+  async function saveCustom() {
+    if (!name.trim()) { alert('Give this side a name first.'); return; }
+    setBusy(true);
+    try { await setSideCustomIdentity(debateId, side, name.trim(), logoFile); onSaved(); }
+    catch (e: any) { alert(e?.message ?? 'Could not save'); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:250, display:'grid', placeItems:'center',
+      background:a(C.base,'CC'), backdropFilter:'blur(6px)', padding:20 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ width:400, maxWidth:'100%', borderRadius:16, background:C.panel, border:`1px solid ${C.hair}`,
+        padding:24, boxShadow:'0 20px 60px rgba(0,0,0,.5)' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
+          <h3 style={{ fontFamily:display, fontSize:19, color:C.ink, margin:0 }}>
+            Name your side</h3>
+          <button onClick={onClose} style={{ background:'none', border:'none', color:C.faint, fontSize:20, cursor:'pointer' }}>×</button>
+        </div>
+        <p style={{ fontFamily:ui, fontSize:12, color:t.hi, margin:'0 0 18px', fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em' }}>
+          {side === 'prop' ? 'Proposition' : 'Opposition'} side</p>
+
+        {myTeams.length > 0 && (
+          <div style={{ marginBottom:18 }}>
+            <div style={{ fontFamily:ui, fontSize:11.5, fontWeight:600, color:C.dim, marginBottom:8 }}>Use one of your teams</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              {myTeams.map(team => (
+                <button key={team.id} onClick={() => useTeam(team.id)} disabled={busy}
+                  style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:10, cursor:'pointer',
+                    background:C.panel2, border:`1px solid ${C.hair}`, textAlign:'left' }}>
+                  {team.crest_url
+                    ? <img src={team.crest_url} alt="" style={{ width:28, height:28, borderRadius:7, objectFit:'cover' }} />
+                    : <span style={{ width:28, height:28, borderRadius:7, display:'grid', placeItems:'center',
+                        background:`${team.color}22`, color:team.color, fontFamily:display, fontWeight:700, fontSize:11 }}>{team.tag}</span>}
+                  <span style={{ fontFamily:ui, fontSize:13.5, fontWeight:600, color:C.ink }}>{team.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ fontFamily:ui, fontSize:11.5, fontWeight:600, color:C.dim, marginBottom:8 }}>
+          {myTeams.length > 0 ? 'Or, just for this event' : 'Name this side just for this event'}</div>
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Team Falcons" style={field} />
+          <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}>
+            <span style={{ ...ghostBtn, fontSize:12, padding:'7px 12px' }}>{logoFile ? '✓ Logo selected' : 'Add a logo (optional)'}</span>
+            <input type="file" accept="image/*" style={{ display:'none' }} onChange={e => setLogoFile(e.target.files?.[0] ?? null)} />
+          </label>
+          <button onClick={saveCustom} disabled={busy} style={{ ...solidGold, opacity: busy ? .6 : 1 }}>
+            {busy ? 'Saving…' : 'Save for this event'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

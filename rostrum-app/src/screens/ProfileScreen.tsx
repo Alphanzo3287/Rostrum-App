@@ -5,10 +5,10 @@
 // =====================================================================
 import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
-import { getProfile, getAchievements, amFollowing, follow, unfollow } from '../lib/api';
+import { getProfile, getAchievements, amFollowing, follow, unfollow, getUserTeams } from '../lib/api';
 import { ReportModal } from '../components/ReportModal';
 import { EditProfileModal } from '../components/EditProfileModal';
-import type { Profile, Achievement } from '../lib/types';
+import type { Profile, Achievement, Team } from '../lib/types';
 import { C, ui, display, mono, solidGold, a } from '../lib/theme';
 import { Avatar, RankBadge, Section, Scroll, Center, Empty, pill, ghostBtn, hrefFor } from '../components/ui';
 import { getMyWallet, getMyProgress, type Wallet, type Progress } from '../lib/payments';
@@ -25,6 +25,7 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [editing, setEditing] = useState(false);
+  const [teams, setTeams] = useState<Team[]>([]);
 
   useEffect(() => {
     if (isSelf) setProfile(me);
@@ -35,6 +36,7 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
     if (!profile) return;
     getAchievements(profile.id).then(setAch);
     if (!isSelf) amFollowing(profile.id).then(setFollowing);
+    getUserTeams(profile.id).then(setTeams).catch(() => {});
   }, [profile, isSelf]);
 
   useEffect(() => {
@@ -109,6 +111,20 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
               {socials.map(([k, v]) => (
                 <a key={k} href={hrefFor(k, v)} target="_blank" rel="noreferrer"
                   style={{ fontFamily:ui, fontSize:12.5, color:C.gold, textDecoration:'none' }}>{k}</a>
+              ))}
+            </div>
+          )}
+          {teams.length > 0 && (
+            <div style={{ display:'flex', gap:10, marginTop:16, flexWrap:'wrap' }}>
+              {teams.map(t => (
+                <span key={t.id} style={{ display:'inline-flex', alignItems:'center', gap:7, padding:'5px 11px 5px 5px',
+                  borderRadius:999, background:C.panel2, border:`1px solid ${C.hair}` }}>
+                  {t.crest_url
+                    ? <img src={t.crest_url} alt="" style={{ width:22, height:22, borderRadius:6, objectFit:'cover' }} />
+                    : <span style={{ width:22, height:22, borderRadius:6, display:'grid', placeItems:'center',
+                        background:`${t.color}22`, color:t.color, fontFamily:display, fontWeight:700, fontSize:10 }}>{t.tag}</span>}
+                  <span style={{ fontFamily:ui, fontSize:12, fontWeight:600, color:C.ink }}>{t.name}</span>
+                </span>
               ))}
             </div>
           )}

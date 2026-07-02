@@ -7,7 +7,7 @@
 // share links exactly as before. Every number here traces to a real RPC.
 // =====================================================================
 import { useEffect, useState } from 'react';
-import { getResults, getDebate, listParticipants, getDebateSummary, type DebateSummary } from '../lib/api';
+import { getResults, getDebate, listParticipants, getDebateSummary, getSideIdentity, type DebateSummary, type SideIdentity } from '../lib/api';
 import type { Debate, DebateResult, Participant, Profile, Side } from '../lib/types';
 import { C, ui, display, mono, solidGold } from '../lib/theme';
 import { ResultCompetitorCard, JudgesDecisionCard, AudienceVerdictCard, DebateSummaryPanel } from '../components/hall';
@@ -21,12 +21,14 @@ export function ResultsScreen({ debateId, onBackToLobby }: {
   const [debate, setDebate] = useState<Debate | null>(null);
   const [parts, setParts] = useState<PartWithProfile[]>([]);
   const [summary, setSummary] = useState<DebateSummary | null>(null);
+  const [sideId, setSideId] = useState<{ prop: SideIdentity | null; opp: SideIdentity | null }>({ prop: null, opp: null });
 
   useEffect(() => {
     getResults(debateId).then(setResult).catch(() => {});
     getDebate(debateId).then(r => setDebate(r.debate)).catch(() => {});
     listParticipants(debateId).then(setParts).catch(() => {});
     getDebateSummary(debateId).then(setSummary).catch(() => {});
+    getSideIdentity(debateId).then(setSideId).catch(() => {});
   }, [debateId]);
 
   const propScore = (result?.prop_judge_total ?? 0) + (result?.prop_audience ?? 0);
@@ -63,14 +65,16 @@ export function ResultsScreen({ debateId, onBackToLobby }: {
             {/* scorecards + judges decision */}
             <div style={{ display:'grid', gap:14, marginBottom:18,
               gridTemplateColumns:'1fr minmax(180px,220px) 1fr' }}>
-              <ResultCompetitorCard side="prop" name={propDebater?.profile?.display_name ?? 'Proposition'}
-                avatarUrl={propDebater?.profile?.avatar_url} score={propScore} isWinner={winner === 'prop'} />
+              <ResultCompetitorCard side="prop"
+                name={sideId.prop?.label || propDebater?.profile?.display_name || 'Proposition'}
+                avatarUrl={sideId.prop?.logoUrl ?? propDebater?.profile?.avatar_url} score={propScore} isWinner={winner === 'prop'} />
               {debate?.win_mode === 'academic'
                 ? <JudgesDecisionCard propWins={summary?.judge_prop_wins ?? 0} oppWins={summary?.judge_opp_wins ?? 0}
                     judgeCount={summary?.judge_count ?? 0} />
                 : <AudienceVerdictCard propVotes={result?.prop_audience ?? 0} oppVotes={result?.opp_audience ?? 0} />}
-              <ResultCompetitorCard side="opp" name={oppDebater?.profile?.display_name ?? 'Opposition'}
-                avatarUrl={oppDebater?.profile?.avatar_url} score={oppScore} isWinner={winner === 'opp'} />
+              <ResultCompetitorCard side="opp"
+                name={sideId.opp?.label || oppDebater?.profile?.display_name || 'Opposition'}
+                avatarUrl={sideId.opp?.logoUrl ?? oppDebater?.profile?.avatar_url} score={oppScore} isWinner={winner === 'opp'} />
             </div>
           </>
         )}
