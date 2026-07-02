@@ -110,6 +110,8 @@ export const DBUCKS_PACKAGES = [
   { id: 'p5000', dbucks: 5000, priceCents: 5000 },
 ] as const;
 export const startDbucksCheckout = (packageId: string) => authedPost<{ url: string }>('stripe-checkout', { packageId });
+/* Store: buy a gift's D-Bucks value into your own wallet, to send later. */
+export const startGiftDbucksCheckout = (tierId: string) => authedPost<{ url: string }>('stripe-checkout', { tierId });
 
 /* ---- Phase 4: creator buy-back listings ----
    One active listing per creator. Creator lists some of their redeemable

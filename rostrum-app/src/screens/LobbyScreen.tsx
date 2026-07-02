@@ -177,6 +177,13 @@ function ArenaCard({ d, onOpen }: { d: Debate; onOpen: () => void }) {
           fontFamily:ui, fontSize:11, fontWeight:600 }}>
           👁 {fmt(d.viewer_count ?? 0)}
         </div>
+        {d.is_paid && d.price_cents > 0 && (
+          <div style={{ position:'absolute', bottom:12, left:12, display:'flex', alignItems:'center', gap:5,
+            padding:'4px 10px', borderRadius:8, background:a(C.gold,'F2'), color:'#1a1400',
+            fontFamily:ui, fontSize:11, fontWeight:800, letterSpacing:'.02em' }}>
+            🔒 ${(d.price_cents / 100).toFixed(2)}
+          </div>
+        )}
       </div>
       {/* Body */}
       <div style={{ padding:'14px 16px 16px' }}>

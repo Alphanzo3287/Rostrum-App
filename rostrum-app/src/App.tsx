@@ -255,7 +255,31 @@ function PaywallScreen({ debateId, motion, priceCents, onBack }: {
 function WatchRoute() {
   const { id } = useParams();
   const nav = useNavigate();
+  const [gate, setGate] = useState<'loading' | 'paywall' | 'ok'>('loading');
+  const [info, setInfo] = useState<{ motion: string; priceCents: number } | null>(null);
+  useEffect(() => {
+    if (!id) return;
+    let on = true;
+    (async () => {
+      try {
+        const { debate } = await getDebate(id);
+        if (!on) return;
+        if (debate.is_paid && debate.price_cents) {
+          const paid = await hasPaidDebateEntry(id);
+          if (!on) return;
+          if (!paid) { setInfo({ motion: debate.motion, priceCents: debate.price_cents }); setGate('paywall'); return; }
+        }
+        setGate('ok');
+      } catch { if (on) setGate('ok'); }
+    })();
+    return () => { on = false; };
+  }, [id]);
   if (!id) return <Navigate to="/" replace />;
+  if (gate === 'loading')
+    return <div style={{ position:'absolute', inset:0, display:'grid', placeItems:'center', background:C.base,
+      fontFamily:ui, color:C.faint }}>Loading…</div>;
+  if (gate === 'paywall' && info)
+    return <PaywallScreen debateId={id} motion={info.motion} priceCents={info.priceCents} onBack={() => nav(`/debate/${id}`)} />;
   return <WatchScreen debateId={id} onLeave={() => nav(`/debate/${id}`)} />;
 }
 function InviteRoute() {

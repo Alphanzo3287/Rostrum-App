@@ -9,7 +9,7 @@
 // =====================================================================
 import type { Handler } from '@netlify/functions';
 import Stripe from 'stripe';
-import { userFromToken } from '../../src/server/supabaseAdmin';
+import { supabaseAdmin, userFromToken } from '../../src/server/supabaseAdmin';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const SITE = process.env.PUBLIC_SITE_URL || 'https://rostrums.site';
@@ -28,9 +28,24 @@ export const handler: Handler = async (event) => {
   if (!user) return json(401, { error: 'invalid session' });
 
   const body = safeBody(event.body);
-  const packageId = body.packageId as DbucksPackageId;
-  const pkg = DBUCKS_PACKAGES[packageId];
-  if (!pkg) return json(400, { error: 'unknown package' });
+  const packageId = body.packageId as DbucksPackageId | undefined;
+  const tierId = body.tierId as string | undefined;
+
+  let dbucks: number, priceCents: number, label: string, refId: string;
+
+  if (tierId) {
+    // Store "buy a gift" path — resolve the D-Bucks value + price from the
+    // gift tier server-side so the client can't set its own amount.
+    const { data: tier } = await supabaseAdmin
+      .from('gift_tiers').select('id, name, amount_cents, price_dbucks, active').eq('id', tierId).maybeSingle();
+    if (!tier || !tier.active) return json(400, { error: 'unknown gift' });
+    dbucks = Number(tier.price_dbucks); priceCents = Number(tier.amount_cents);
+    label = `${tier.name} · ${dbucks.toLocaleString()} D-Bucks`; refId = tier.id;
+  } else {
+    const pkg = packageId ? DBUCKS_PACKAGES[packageId] : undefined;
+    if (!pkg) return json(400, { error: 'unknown package' });
+    dbucks = pkg.dbucks; priceCents = pkg.price_cents; label = pkg.label; refId = packageId!;
+  }
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -39,12 +54,12 @@ export const handler: Handler = async (event) => {
       line_items: [{
         price_data: {
           currency: 'usd',
-          product_data: { name: pkg.label, description: 'D-Bucks for The Rostrum' },
-          unit_amount: pkg.price_cents,
+          product_data: { name: label, description: 'D-Bucks for The Rostrum' },
+          unit_amount: priceCents,
         },
         quantity: 1,
       }],
-      metadata: { kind: 'dbucks_purchase', user_id: user.id, package_id: packageId, dbucks_amount: String(pkg.dbucks) },
+      metadata: { kind: 'dbucks_purchase', user_id: user.id, package_id: refId, dbucks_amount: String(dbucks) },
       success_url: `${SITE}/store?purchase=success`,
       cancel_url: `${SITE}/store?purchase=cancelled`,
     });
