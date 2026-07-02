@@ -99,15 +99,29 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
     const isSelf = m.identity === me?.identity;
     if (isSelf && m.role === 'audience') return; // nothing useful for yourself in the audience
     cancelMenuClose();
-    setCtxMenu({ x: e.clientX, y: e.clientY, member: m, via });
+    // Anchor the menu just below the hovered tile rather than exactly under
+    // the cursor. Spawning it under the pointer made the tile immediately
+    // register "pointer left" and the menu could close before it was ever
+    // seen — which is why hover worked on the small host pill but not on
+    // the larger competitor cards or gallery avatars. Anchoring to the
+    // tile's own box keeps the cursor on the tile when the menu appears.
+    const el = e.currentTarget as HTMLElement | null;
+    if (el && typeof el.getBoundingClientRect === 'function') {
+      const r = el.getBoundingClientRect();
+      setCtxMenu({ x: r.left, y: r.bottom + 6, member: m, via });
+    } else {
+      setCtxMenu({ x: e.clientX, y: e.clientY, member: m, via });
+    }
   };
-  // Bound onto each on-stage tile: hover opens on desktop (mouse only),
-  // tap/click opens everywhere. Right-click still works as a fallback.
+  // Bound onto each on-stage tile: mouse-enter opens on desktop (a plain
+  // hover), click/tap opens everywhere, right-click still works as a
+  // fallback. onMouseEnter is far more reliable across element types than
+  // pointerenter with a pointerType guard.
   const personHandlers = (m: RoomMember) => ({
     onClick: (e: React.MouseEvent) => openPerson(e, m, 'tap'),
     onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); openPerson(e, m, 'tap'); },
-    onPointerEnter: (e: React.PointerEvent) => { if (e.pointerType === 'mouse') openPerson(e as unknown as React.MouseEvent, m, 'hover'); },
-    onPointerLeave: (e: React.PointerEvent) => { if (e.pointerType === 'mouse') scheduleMenuClose(); },
+    onMouseEnter: (e: React.MouseEvent) => openPerson(e, m, 'hover'),
+    onMouseLeave: () => scheduleMenuClose(),
   });
   // Legacy adapter: existing tiles call onContextMenu(e, member); route
   // that through the same opener so every tile behaves consistently.
@@ -258,8 +272,8 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
             isSelf={ctxMenu.member.identity === me?.identity} canManage={canManage}
             onProfile={openProfile}
             onGift={() => { setGiftTarget(ctxMenu.member); closeMenuNow(); }}
-            onHoverKeep={ctxMenu.via === 'hover' ? cancelMenuClose : undefined}
-            onHoverLeave={ctxMenu.via === 'hover' ? scheduleMenuClose : undefined}
+            onHoverKeep={cancelMenuClose}
+            onHoverLeave={scheduleMenuClose}
             onSendInvite={(r, s) => {
               const maxSeats = dz.debate?.max_stage_seats;
               const maxMods = dz.debate?.max_moderators;
