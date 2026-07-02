@@ -12,7 +12,7 @@ import Stripe from 'stripe';
 import { userFromToken } from '../../src/server/supabaseAdmin';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-const SITE = process.env.PUBLIC_SITE_URL || process.env.URL || 'https://rostrums.site';
+const SITE = process.env.PUBLIC_SITE_URL || 'https://rostrums.site';
 
 export const DBUCKS_PACKAGES = {
   p500:  { dbucks: 500,   price_cents: 500,   label: '500 D-Bucks' },
