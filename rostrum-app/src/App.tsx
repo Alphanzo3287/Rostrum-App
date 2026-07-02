@@ -17,6 +17,7 @@ import { useIsTablet } from './lib/useMediaQuery';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { WelcomeTour } from './components/WelcomeTour';
 import { AuthScreen } from './screens/AuthScreen';
+import { MfaChallengeScreen, ResetPasswordScreen } from './components/authGates';
 import { OnboardScreen } from './screens/OnboardScreen';
 import { LobbyScreen } from './screens/LobbyScreen';
 import { CreateDebateScreen } from './screens/CreateDebateScreen';
@@ -59,7 +60,7 @@ export default function App() {
 
 /* Decide auth → onboarding → ban → app, then hand off to the router. */
 function Gate() {
-  const { session, profile, loading } = useAuth();
+  const { session, profile, loading, recoveryMode, mfaRequired } = useAuth();
   const [justSignedUp, setJustSignedUp] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
 
@@ -80,6 +81,11 @@ function Gate() {
   }
 
   if (loading) return <Splash />;
+  // Arrived from a password-reset email → let them set a new password
+  // before anything else, even though a (recovery) session exists.
+  if (recoveryMode) return <ResetPasswordScreen />;
+  // Signed in with a password but the account has 2FA → require the code.
+  if (session && mfaRequired) return <MfaChallengeScreen />;
   if (!session) {
     const returningFromStripe = typeof window !== 'undefined'
       && /[?&](purchase|onboarding)=/.test(window.location.search);

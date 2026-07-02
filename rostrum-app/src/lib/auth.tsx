@@ -21,11 +21,16 @@ interface AuthCtx {
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
+  recoveryMode: boolean;   // landed here from a password-reset email link
+  mfaRequired: boolean;    // signed in at aal1 but a verified 2FA factor exists → must step up
   signUp: (i: SignUpInput) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   completeOnboarding: (i: OnboardInput) => Promise<void>;
   refreshProfile: () => Promise<void>;
+  resetPasswordForEmail: (email: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
+  refreshAuthLevel: () => Promise<void>;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -34,24 +39,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [mfaRequired, setMfaRequired] = useState(false);
 
   const loadProfile = useCallback(async (uid: string) => {
     const { data } = await supabase.from('profiles').select('*').eq('id', uid).single();
     setProfile((data as Profile) ?? null);
   }, []);
 
+  // Does this session still owe us a second factor? True only when the user
+  // has a verified TOTP factor (nextLevel aal2) but the current session is
+  // still aal1. Until they clear it, we don't treat them as fully logged in.
+  const computeMfa = useCallback(async () => {
+    try {
+      const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      return data?.currentLevel === 'aal1' && data?.nextLevel === 'aal2';
+    } catch { return false; }
+  }, []);
+
+  const syncSession = useCallback(async (s: Session | null) => {
+    setSession(s);
+    if (s) {
+      const needs = await computeMfa();
+      setMfaRequired(needs);
+      if (!needs) await loadProfile(s.user.id);
+      else setProfile(null);
+    } else {
+      setProfile(null);
+      setMfaRequired(false);
+    }
+  }, [computeMfa, loadProfile]);
+
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
-      setSession(data.session);
-      if (data.session) await loadProfile(data.session.user.id);
+      await syncSession(data.session);
       setLoading(false);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_e, s) => {
-      setSession(s);
-      if (s) await loadProfile(s.user.id); else setProfile(null);
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, s) => {
+      // A reset-password link signs the user in with a special recovery
+      // session and fires this event — intercept it so we show the
+      // "set a new password" screen instead of the normal app.
+      if (event === 'PASSWORD_RECOVERY') { setSession(s); setRecoveryMode(true); return; }
+      await syncSession(s);
     });
     return () => sub.subscription.unsubscribe();
-  }, [loadProfile]);
+  }, [syncSession]);
+
+  const refreshAuthLevel = useCallback(async () => {
+    const { data } = await supabase.auth.getSession();
+    await syncSession(data.session);
+  }, [syncSession]);
 
   const signUp: AuthCtx['signUp'] = async ({ email, password, displayName, handle }) => {
     const { error } = await supabase.auth.signUp({
@@ -66,7 +103,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
-  const signOut = async () => { await supabase.auth.signOut(); };
+  const signOut = async () => { setRecoveryMode(false); await supabase.auth.signOut(); };
+
+  const resetPasswordForEmail: AuthCtx['resetPasswordForEmail'] = async (email) => {
+    const redirectTo = `${window.location.origin}/?recovery=1`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    if (error) throw error;
+  };
+
+  const updatePassword: AuthCtx['updatePassword'] = async (newPassword) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+    setRecoveryMode(false);
+    // The recovery session is a normal aal1 session afterwards; re-sync so
+    // the app proceeds (or asks for MFA if the account also has 2FA).
+    const { data } = await supabase.auth.getSession();
+    await syncSession(data.session);
+  };
 
   const completeOnboarding: AuthCtx['completeOnboarding'] = async (i) => {
     const uid = session?.user.id;
@@ -98,8 +151,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <Ctx.Provider value={{
-      user: session?.user ?? null, session, profile, loading,
+      user: session?.user ?? null, session, profile, loading, recoveryMode, mfaRequired,
       signUp, signIn, signOut, completeOnboarding, refreshProfile,
+      resetPasswordForEmail, updatePassword, refreshAuthLevel,
     }}>
       {children}
     </Ctx.Provider>

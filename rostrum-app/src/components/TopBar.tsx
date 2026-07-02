@@ -10,6 +10,7 @@ import { useAuth } from '../lib/auth';
 import { C, ui, solidGold, a } from '../lib/theme';
 import { Avatar } from './ui';
 import { NotificationsBell } from './NotificationsBell';
+import { SecurityModal } from './SecurityModal';
 import { useIsTablet } from '../lib/useMediaQuery';
 import { useTheme } from '../lib/themeContext';
 
@@ -19,6 +20,7 @@ export function TopBar() {
   const isMobile = useIsTablet();
   const { mode, toggle } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [securityOpen, setSecurityOpen] = useState(false);
   const [q, setQ] = useState('');
 
   // On mobile the Sidebar renders its own header bar, so skip this.
@@ -102,6 +104,14 @@ export function TopBar() {
                     {i.label}
                   </button>
                 ))}
+                <button onClick={() => { setMenuOpen(false); setSecurityOpen(true); }}
+                  style={{ textAlign:'left', padding:'10px 12px', borderRadius:9,
+                    background:'transparent', border:'none', cursor:'pointer',
+                    fontFamily:ui, fontSize:13, color:C.dim, transition:'all .12s' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = C.panel2; e.currentTarget.style.color = C.ink; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.dim; }}>
+                  Security &amp; 2FA
+                </button>
                 <div style={{ height:1, background:C.hair, margin:'4px 0' }} />
                 {/* Theme toggle row */}
                 <button onClick={toggle}
@@ -134,6 +144,7 @@ export function TopBar() {
           )}
         </div>
       </div>
+      {securityOpen && <SecurityModal onClose={() => setSecurityOpen(false)} />}
     </header>
   );
 }

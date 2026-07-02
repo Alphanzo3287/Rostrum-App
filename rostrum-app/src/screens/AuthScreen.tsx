@@ -8,13 +8,15 @@ import { C, ui, display, mono, solidGold, field, a } from '../lib/theme';
 import { useIsTablet } from '../lib/useMediaQuery';
 
 export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; notice?: string }) {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, resetPasswordForEmail } = useAuth();
   const [mode, setMode] = useState<'signup' | 'login'>(notice ? 'login' : 'signup');
+  const [view, setView] = useState<'auth' | 'reset'>('auth');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [resetSent, setResetSent] = useState(false);
   const isMobile = useIsTablet();
 
   async function submit() {
@@ -29,6 +31,20 @@ export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; not
       }
     } catch (e: any) {
       setErr(e?.message ?? 'Something went wrong');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendReset() {
+    setErr(null);
+    if (!email.trim()) { setErr('Enter your email first.'); return; }
+    setBusy(true);
+    try {
+      await resetPasswordForEmail(email);
+      setResetSent(true);
+    } catch (e: any) {
+      setErr(e?.message ?? 'Could not send the reset email.');
     } finally {
       setBusy(false);
     }
@@ -106,10 +122,11 @@ export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; not
           )}
 
           <h2 style={{ fontFamily:display, fontSize:30, fontWeight:700, color:C.ink, margin:'0 0 6px', letterSpacing:'-.02em' }}>
-            {mode === 'signup' ? 'Create your account' : 'Welcome back'}
+            {view === 'reset' ? 'Reset your password' : mode === 'signup' ? 'Create your account' : 'Welcome back'}
           </h2>
           <p style={{ fontFamily:ui, fontSize:14, color:C.faint, margin:'0 0 28px' }}>
-            {mode === 'signup' ? 'Join the chamber and start debating.' : 'Sign in to enter the chamber.'}
+            {view === 'reset' ? "Enter your email and we'll send you a reset link."
+              : mode === 'signup' ? 'Join the chamber and start debating.' : 'Sign in to enter the chamber.'}
           </p>
 
           {notice && (
@@ -119,6 +136,45 @@ export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; not
             </div>
           )}
 
+          {view === 'reset' ? (
+            resetSent ? (
+              <>
+                <div style={{ padding:'14px 16px', borderRadius:10, fontFamily:ui, fontSize:13, lineHeight:1.55,
+                  color:C.jadeHi, background:a(C.jade,'14'), border:`1px solid ${a(C.jade,'44')}` }}>
+                  Check your email — if an account exists for {email.trim()}, a password-reset link is on its way.
+                  Open it on this device to set a new password.
+                </div>
+                <button onClick={() => { setView('auth'); setResetSent(false); setErr(null); }}
+                  style={{ ...solidGold, width:'100%', marginTop:18, padding:'14px', fontSize:14.5 }}>
+                  Back to login
+                </button>
+              </>
+            ) : (
+              <>
+                <Labeled label="Email">
+                  <input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@email.com"
+                    style={field} onFocus={focusField} onBlur={blurField}
+                    onKeyDown={e => { if (e.key === 'Enter') sendReset(); }} />
+                </Labeled>
+                {err && (
+                  <div style={{ fontFamily:ui, fontSize:12.5, color:C.garnetHi, margin:'4px 0 14px',
+                    padding:'10px 12px', borderRadius:10, background:a(C.garnet,'14'), border:`1px solid ${a(C.garnet,'33')}` }}>
+                    {err}
+                  </div>
+                )}
+                <button onClick={sendReset} disabled={busy}
+                  style={{ ...solidGold, width:'100%', marginTop:8, padding:'14px', fontSize:14.5, opacity: busy ? 0.6 : 1 }}>
+                  {busy ? 'Sending…' : 'Send reset link'}
+                </button>
+                <button onClick={() => { setView('auth'); setErr(null); }}
+                  style={{ background:'none', border:'none', cursor:'pointer', width:'100%', marginTop:16,
+                    fontFamily:ui, fontSize:13, color:C.dim }}>
+                  ← Back to login
+                </button>
+              </>
+            )
+          ) : (
+          <>
           {/* Mode toggle */}
           <div style={{ display:'flex', gap:5, background:C.glass, padding:5, borderRadius:12, marginBottom:24,
             border:`1px solid ${C.hair}` }}>
@@ -149,6 +205,16 @@ export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; not
               onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
           </Labeled>
 
+          {mode === 'login' && (
+            <div style={{ textAlign:'right', marginTop:-8, marginBottom:6 }}>
+              <button onClick={() => { setView('reset'); setErr(null); setResetSent(false); }}
+                style={{ background:'none', border:'none', cursor:'pointer', fontFamily:ui, fontSize:12.5,
+                  color:C.gold, fontWeight:600 }}>
+                Forgot password?
+              </button>
+            </div>
+          )}
+
           {err && (
             <div style={{ fontFamily:ui, fontSize:12.5, color:C.garnetHi, margin:'4px 0 14px',
               padding:'10px 12px', borderRadius:10, background:a(C.garnet,'14'), border:`1px solid ${a(C.garnet,'33')}` }}>
@@ -165,6 +231,8 @@ export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; not
           <p style={{ fontFamily:ui, fontSize:12, color:C.faint, textAlign:'center', margin:'20px 0 0', lineHeight:1.6 }}>
             By continuing you agree to The Rostrum's<br/>Terms of Service and Privacy Policy.
           </p>
+          </>
+          )}
         </div>
       </div>
     </div>
