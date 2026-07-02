@@ -990,3 +990,12 @@ export async function setSideTeam(debateId: string, side: Side, teamId: string):
   });
   if (error) throw error;
 }
+
+/* Speakers' Corner spotlight — persisted (rides the existing broadcast-state
+   realtime + initial-read), so a late joiner sees the current spotlight
+   immediately instead of only future changes. Any seated debater or the
+   host may set it (see set_spotlight RPC). */
+export async function setSpotlight(debateId: string, identity: string | null): Promise<void> {
+  const { error } = await supabase.rpc('set_spotlight', { p_debate: debateId, p_identity: identity });
+  if (error) throw error;
+}

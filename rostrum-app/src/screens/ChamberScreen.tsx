@@ -15,12 +15,11 @@ import { useDebate } from '../lib/useDebate';
 import { useYouTubeStream } from '../lib/useYouTubeStream';
 import {
   joinDebate, getBroadcastState, subscribeBroadcastState, getResults,
-  getFloorStats, getTally, castVote, listParticipants, demoteToAudience, promoteToRole,
+  getFloorStats, getTally, castVote, listParticipants, demoteToAudience, promoteToRole, setSpotlight,
   type BroadcastState, type FloorStats,
 } from '../lib/api';
 import { demoteFromStage, promoteFromAudience } from '../lib/livekit';
 import { useStageInvites, type StageRole, type StageSide } from '../lib/stageInvites';
-import { useSpotlight } from '../lib/spotlight';
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
 import { ScreenTile } from '../components/ScreenTile';
@@ -758,7 +757,11 @@ function SpeakersCornerHall({
   const oppSpeakers = members.filter(m => m.role === 'debater' && m.side === 'opp');
   const audience = members.filter(m => m.role === 'audience');
   const canControl = role === 'host' || role === 'moderator';
-  const { spotlightId: expandedId, setSpotlight: setExpandedId } = useSpotlight(room.room);
+  const expandedId = bs.stageId;
+  const setExpandedId = (identity: string | null) => {
+    onLocalState({ stageId: identity }); // optimistic, instant for the clicker
+    setSpotlight(debateId, identity).catch(() => {}); // persists + realtime-syncs to everyone else, incl. late joiners
+  };
   const expanded = members.find(m => m.identity === expandedId);
   const { identity, reload: reloadIdentity } = useSideIdentity(debateId, true);
   const [customizing, setCustomizing] = useState<Side | null>(null);
