@@ -328,6 +328,12 @@ export async function unblockUser(targetId: string) {
   if (error) throw error;
 }
 
+/* ---- Host/moderator permanent removal from a chamber (irreversible). ---- */
+export async function removeFromChamber(debateId: string, userId: string) {
+  const { error } = await supabase.rpc('remove_from_chamber', { p_debate: debateId, p_user: userId });
+  if (error) throw error;
+}
+
 /* ----------------------------- TEAMS ----------------------------- */
 
 export async function listTeams(): Promise<Team[]> {

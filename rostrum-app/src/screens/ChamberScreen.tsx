@@ -16,6 +16,7 @@ import { useYouTubeStream } from '../lib/useYouTubeStream';
 import {
   joinDebate, getBroadcastState, subscribeBroadcastState, getResults,
   getFloorStats, getTally, castVote, listParticipants, demoteToAudience, promoteToRole, setSpotlight,
+  removeFromChamber,
   type BroadcastState, type FloorStats,
 } from '../lib/api';
 import { demoteFromStage, promoteFromAudience } from '../lib/livekit';
@@ -1115,6 +1116,7 @@ function StageActionMenu({ x, y, via, member, debateId, isSelf, canManage, onSen
   const onStage = member.role !== 'audience';
   const showInvite = canManage && !isSelf && !onStage;
   const showDemote = canManage && !isSelf && onStage && member.role !== 'host';
+  const showRemove = canManage && !isSelf && member.role !== 'host';
 
   async function demote() {
     setBusy(true);
@@ -1127,6 +1129,12 @@ function StageActionMenu({ x, y, via, member, debateId, isSelf, canManage, onSen
     onSendInvite(role, side);
     setSent(label);
     setTimeout(onClose, 900);
+  }
+  async function remove() {
+    if (!confirm(`Permanently remove ${member.name} from this chamber?\n\nThey will never be able to rejoin or see this room again. This can't be undone.`)) return;
+    setBusy(true);
+    try { await removeFromChamber(debateId, member.identity); onClose(); }
+    catch (e: any) { alert(e?.message ?? 'Could not remove'); setBusy(false); }
   }
 
   const menuW = 210;
@@ -1182,6 +1190,12 @@ function StageActionMenu({ x, y, via, member, debateId, isSelf, canManage, onSen
                 <MenuBtn label="Invite as Judge" onClick={() => invite('judge', null, 'Judge')} busy={busy} />
               </>
             ))}
+            {showRemove && (
+              <>
+                <div style={{ height:1, background:C.hair, margin:'4px 6px' }} />
+                <MenuBtn label="⛔ Remove from chamber" danger onClick={remove} busy={busy} />
+              </>
+            )}
           </>
         )}
       </div>
