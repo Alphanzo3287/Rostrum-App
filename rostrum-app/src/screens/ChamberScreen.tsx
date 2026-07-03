@@ -103,6 +103,17 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
     return () => off();
   }, [debateId, meId, isHost]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Host cancelled the event → send everyone still inside back to the lobby in
+  // real time. The realtime status flip reaches every client, but 'cancelled'
+  // maps to the 'assembly' phase, so the results/ended flow never fires for it;
+  // without this, only the host's own device left and others had to refresh.
+  useEffect(() => {
+    if (dz.debate?.status !== 'cancelled') return;
+    try { room.room?.disconnect(); } catch { /* noop */ }
+    if (!isHost) { try { alert('This event was cancelled by the host.'); } catch { /* noop */ } }
+    onLeave();
+  }, [dz.debate?.status, isHost]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ---- Person menu (hover on desktop / tap on mobile) — profile, gift,
   // and, for the host or a moderator, invite/remove. Lives at the top
   // level so it works in assembly and live. Anyone can open it on anyone
