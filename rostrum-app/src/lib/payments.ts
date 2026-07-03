@@ -162,6 +162,24 @@ export async function cancelBuybackListing(listingId: string): Promise<void> {
 export const startBuybackCheckout = (listingId: string) => authedPost<{ url: string }>('stripe-buyback-checkout', { listingId });
 export const getBuybackDownloadUrl = (listingId: string) => authedPost<{ url: string }>('buyback-download', { listingId });
 
+/* ---- Cash-out: convert redeemable D-Bucks to a real payout ---- */
+export interface Withdrawal {
+  id: string; dbucks_amount: number; gross_cents: number; fee_cents: number; net_cents: number;
+  status: 'pending' | 'paid' | 'failed'; created_at: string; paid_at: string | null;
+}
+export const WITHDRAW_MIN_DBUCKS = 5000; // $50.00
+export const WITHDRAW_FEE_BPS = 1500;    // 15% kept at cash-out
+
+export const requestWithdrawal = (dbucks: number) =>
+  authedPost<{ ok: boolean; net_cents: number; fee_cents: number; gross_cents: number }>('stripe-withdraw', { dbucks });
+
+export async function getMyWithdrawals(): Promise<Withdrawal[]> {
+  const { data } = await supabase.from('withdrawals')
+    .select('id, dbucks_amount, gross_cents, fee_cents, net_cents, status, created_at, paid_at')
+    .order('created_at', { ascending: false }).limit(20);
+  return (data as Withdrawal[]) ?? [];
+}
+
 /* ---- Buy & send a gift directly with real money (no wallet top-up step) ---- */
 export const startGiftCheckout = (tierId: string, toUserId: string, debateId?: string) =>
   authedPost<{ url: string }>('stripe-gift-checkout', { tierId, toUserId, debateId });

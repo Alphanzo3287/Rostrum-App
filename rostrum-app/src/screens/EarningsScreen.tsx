@@ -10,7 +10,8 @@ import { useSearchParams } from 'react-router-dom';
 import {
   getMyEarnings, getCreatorAccount, getPlatformConfig, startPayoutOnboarding, refreshPayoutStatus,
   getMyProgress, getMyWallet, getMyListing, createBuybackListing, cancelBuybackListing,
-  type Earnings, type CreatorAccount, type PlatformConfig, type Progress, type Wallet, type BuybackListing,
+  requestWithdrawal, getMyWithdrawals, WITHDRAW_MIN_DBUCKS,
+  type Earnings, type CreatorAccount, type PlatformConfig, type Progress, type Wallet, type BuybackListing, type Withdrawal,
 } from '../lib/payments';
 import { C, ui, display, mono, solidGold, field } from '../lib/theme';
 import { Scroll, Center, ghostBtn } from '../components/ui';
@@ -25,6 +26,7 @@ export function EarningsScreen({ onBack }: { onBack?: () => void }) {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [listing, setListing] = useState<BuybackListing | null>(null);
+  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
 
   const justReturned = params.get('onboarding'); // 'done' | 'refresh' | null
 
@@ -32,10 +34,10 @@ export function EarningsScreen({ onBack }: { onBack?: () => void }) {
     try {
       // If the user just came back from Stripe, pull live status first.
       if (justReturned) { try { await refreshPayoutStatus(); } catch { /* fall through */ } }
-      const [e, a, c, p, w, l] = await Promise.all([
-        getMyEarnings(), getCreatorAccount(), getPlatformConfig(), getMyProgress(), getMyWallet(), getMyListing(),
+      const [e, a, c, p, w, l, wd] = await Promise.all([
+        getMyEarnings(), getCreatorAccount(), getPlatformConfig(), getMyProgress(), getMyWallet(), getMyListing(), getMyWithdrawals(),
       ]);
-      setEarn(e); setAcct(a); setCfg(c); setProgress(p); setWallet(w); setListing(l);
+      setEarn(e); setAcct(a); setCfg(c); setProgress(p); setWallet(w); setListing(l); setWithdrawals(wd);
     } catch (e: any) {
       setErr(e?.message ?? 'Could not load your earnings');
     } finally {
@@ -160,11 +162,105 @@ export function EarningsScreen({ onBack }: { onBack?: () => void }) {
         )}
       </div>
 
+      {/* ---- Withdraw to bank (cash-out) ---- */}
+      <div style={{ ...card, marginTop: 18 }}>
+        <div style={{ fontFamily: ui, fontSize: 12.5, color: C.faint, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+          Withdraw to bank
+        </div>
+        {!progress?.cashout_unlocked ? (
+          <p style={{ fontFamily: ui, fontSize: 14, color: C.dim, lineHeight: 1.55, margin: '10px 0 0' }}>
+            Cash withdrawals unlock at Level 25 with at least 10 qualifying debates.
+            {progress && ` You're currently Level ${progress.level} with ${progress.qualifying_debates} qualifying debate${progress.qualifying_debates === 1 ? '' : 's'}.`}
+          </p>
+        ) : payoutState !== 'active' ? (
+          <p style={{ fontFamily: ui, fontSize: 14, color: C.dim, lineHeight: 1.55, margin: '10px 0 0' }}>
+            Set up payouts above first — withdrawals go straight to that same account.
+          </p>
+        ) : (
+          <WithdrawCard redeemable={wallet?.redeemable ?? 0} withdrawals={withdrawals} money={money} onChanged={load} />
+        )}
+      </div>
+
       <p style={{ fontFamily: mono, fontSize: 11, color: C.faint, textAlign: 'center', marginTop: 22 }}>
         Powered by Stripe · test mode
       </p>
       {!earn && !err && <Center><span style={{ color: C.faint, fontFamily: ui }}>Loading…</span></Center>}
     </Scroll>
+  );
+}
+
+function WithdrawCard({ redeemable, withdrawals, money, onChanged }: {
+  redeemable: number; withdrawals: Withdrawal[]; money: (c: number) => string; onChanged: () => void;
+}) {
+  const [dbucks, setDbucks] = useState<number>(Math.max(WITHDRAW_MIN_DBUCKS, 0));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [done, setDone] = useState<string | null>(null);
+
+  const fee = Math.round(dbucks * 0.15);
+  const net = dbucks - fee;
+  const belowMin = dbucks < WITHDRAW_MIN_DBUCKS;
+  const overBalance = dbucks > redeemable;
+
+  async function submit() {
+    setErr(''); setDone(null);
+    if (belowMin) { setErr(`Minimum withdrawal is ${WITHDRAW_MIN_DBUCKS.toLocaleString()} D-Bucks ($${(WITHDRAW_MIN_DBUCKS / 100).toFixed(2)}).`); return; }
+    if (overBalance) { setErr(`You only have ${redeemable.toLocaleString()} cashable D-Bucks.`); return; }
+    setBusy(true);
+    try {
+      const r = await requestWithdrawal(dbucks);
+      setDone(`${money(r.net_cents)} is on its way to your bank via Stripe.`);
+      onChanged();
+    } catch (e: any) { setErr(e?.message ?? 'Withdrawal failed'); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <p style={{ fontFamily: ui, fontSize: 13.5, color: C.dim, lineHeight: 1.5, margin: '0 0 12px' }}>
+        You have <span style={{ color: C.gold, fontFamily: mono }}>{redeemable.toLocaleString()}</span> cashable D-Bucks
+        ({money(redeemable)}). Withdraw to your connected bank account — The Rostrum keeps 15%, and you receive the rest.
+      </p>
+
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontFamily: ui, fontSize: 11.5, fontWeight: 600, color: C.dim, maxWidth: 260 }}>
+        D-Bucks to withdraw
+        <input type="number" min={WITHDRAW_MIN_DBUCKS} max={redeemable} step={100} value={dbucks}
+          onChange={e => setDbucks(Math.max(0, Math.floor(+e.target.value)))} style={field} />
+      </label>
+
+      <div style={{ display: 'flex', gap: 18, margin: '12px 0', flexWrap: 'wrap' }}>
+        <Mini label="You withdraw" value={money(dbucks)} />
+        <Mini label="Platform fee (15%)" value={`− ${money(fee)}`} />
+        <Mini label="You receive" value={money(net)} />
+      </div>
+
+      {err && <div style={{ fontFamily: ui, fontSize: 12.5, color: C.garnetHi, marginBottom: 10 }}>{err}</div>}
+      {done && <div style={{ fontFamily: ui, fontSize: 13, color: C.jadeHi, marginBottom: 10 }}>✓ {done}</div>}
+
+      <button onClick={submit} disabled={busy || belowMin || overBalance}
+        style={{ ...solidGold, opacity: (busy || belowMin || overBalance) ? 0.55 : 1 }}>
+        {busy ? 'Processing…' : `Withdraw ${money(net)}`}
+      </button>
+
+      {withdrawals.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontFamily: ui, fontSize: 11, color: C.faint, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 8 }}>
+            Recent withdrawals
+          </div>
+          {withdrawals.slice(0, 5).map(w => (
+            <div key={w.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '8px 0', borderBottom: `1px solid ${C.hair}` }}>
+              <span style={{ fontFamily: ui, fontSize: 13, color: C.ink }}>{money(w.net_cents)}</span>
+              <span style={{ fontFamily: mono, fontSize: 11, color: C.faint }}>{new Date(w.created_at).toLocaleDateString()}</span>
+              <span style={{ fontFamily: ui, fontSize: 11, fontWeight: 700,
+                color: w.status === 'paid' ? C.jadeHi : w.status === 'failed' ? C.garnetHi : C.warning }}>
+                {w.status === 'paid' ? 'Paid' : w.status === 'failed' ? 'Failed' : 'Processing'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
