@@ -4,6 +4,7 @@
 // global activity map, trending topics, top debaters.
 // =====================================================================
 import { useEffect, useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   listLiveDebates, listUpcomingDebates, getPlatformStats, getTopDebaters,
   type PlatformStats, type TopDebater,
@@ -63,7 +64,7 @@ function Card({ children, style }: { children: ReactNode; style?: React.CSSPrope
 }
 
 // ── HERO ──────────────────────────────────────────────────────────────
-function Hero({ stats, onExplore }: { stats: PlatformStats | null; onExplore: () => void }) {
+function Hero({ stats, onExplore, onHowItWorks }: { stats: PlatformStats | null; onExplore: () => void; onHowItWorks: () => void }) {
   return (
     <div style={{ position:'relative', borderRadius:28, overflow:'hidden',
       border:`1px solid ${C.hair}`, minHeight:380,
@@ -94,7 +95,7 @@ function Hero({ stats, onExplore }: { stats: PlatformStats | null; onExplore: ()
               style={{ ...solidGold, padding:'14px 22px', fontSize:14, borderRadius:14 }}>
               Explore Live Debates <span style={{ fontSize:14 }}>→</span>
             </button>
-            <button style={{ display:'inline-flex', alignItems:'center', gap:10,
+            <button onClick={onHowItWorks} style={{ display:'inline-flex', alignItems:'center', gap:10,
               padding:'14px 22px', borderRadius:14, background:'transparent',
               border:`1px solid ${a('#FFFFFF','26')}`, color:'#FFFFFF',
               fontFamily:ui, fontSize:14, fontWeight:600, cursor:'pointer' }}>
@@ -272,6 +273,8 @@ export function LobbyScreen({ onOpenDebate, onHost: _onHost }: {
   }, []);
 
   const open = (id: string) => onOpenDebate ? onOpenDebate(id) : (window.location.href = `/debate/${id}`);
+  const nav = useNavigate();
+  const goTopic = (t: string) => nav(`/discover?q=${encodeURIComponent(t)}`);
 
   return (
     <div style={{ padding: isMobile ? '20px 16px 40px' : '28px 28px 60px',
@@ -285,7 +288,7 @@ export function LobbyScreen({ onOpenDebate, onHost: _onHost }: {
       )}
 
       {/* HERO */}
-      <Hero stats={stats} onExplore={() => document.getElementById('live-arenas')?.scrollIntoView({ behavior:'smooth' })} />
+      <Hero stats={stats} onExplore={() => document.getElementById('live-arenas')?.scrollIntoView({ behavior:'smooth' })} onHowItWorks={() => nav('/support')} />
 
       {/* MAIN GRID: main column + right rail */}
       <div style={{ display:'grid',
@@ -297,7 +300,7 @@ export function LobbyScreen({ onOpenDebate, onHost: _onHost }: {
 
           {/* LIVE ARENAS */}
           <div id="live-arenas">
-            <PanelTitle action="View All Live">LIVE ARENAS</PanelTitle>
+            <PanelTitle action="View All Live" onAction={() => nav('/live')}>LIVE ARENAS</PanelTitle>
             {live === null
               ? <Card><div style={{ fontFamily:ui, fontSize:14, color:C.faint }}>Loading…</div></Card>
               : live.length === 0
@@ -318,7 +321,7 @@ export function LobbyScreen({ onOpenDebate, onHost: _onHost }: {
           <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:20 }}>
             {/* Upcoming */}
             <Card>
-              <PanelTitle action="View Calendar">UPCOMING DEBATES</PanelTitle>
+              <PanelTitle action="View Calendar" onAction={() => nav('/discover')}>UPCOMING DEBATES</PanelTitle>
               {upcoming === null || upcoming.length === 0 ? (
                 <div style={{ fontFamily:ui, fontSize:13, color:C.faint, padding:'14px 8px' }}>
                   No scheduled debates yet.
@@ -361,7 +364,7 @@ export function LobbyScreen({ onOpenDebate, onHost: _onHost }: {
             <PanelTitle>TRENDING TOPICS</PanelTitle>
             <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
               {TRENDING.map(t => (
-                <div key={t} style={{ display:'flex', alignItems:'center', gap:9, padding:'9px 6px',
+                <div key={t} onClick={() => goTopic(t)} style={{ display:'flex', alignItems:'center', gap:9, padding:'9px 6px',
                   borderRadius:10, cursor:'pointer', transition:'background .15s ease' }}
                   onMouseEnter={e => e.currentTarget.style.background = C.panel2}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -371,7 +374,7 @@ export function LobbyScreen({ onOpenDebate, onHost: _onHost }: {
                 </div>
               ))}
             </div>
-            <button style={{ width:'100%', marginTop:14, padding:'11px', borderRadius:12,
+            <button onClick={() => nav('/discover')} style={{ width:'100%', marginTop:14, padding:'11px', borderRadius:12,
               background:'transparent', border:`1px solid ${C.hair}`, color:C.dim,
               fontFamily:ui, fontSize:12.5, fontWeight:600, cursor:'pointer' }}>
               Explore All Topics
@@ -407,7 +410,7 @@ export function LobbyScreen({ onOpenDebate, onHost: _onHost }: {
                   );
                 })}
             </div>
-            <button style={{ width:'100%', marginTop:14, padding:'11px', borderRadius:12,
+            <button onClick={() => nav('/leaderboard')} style={{ width:'100%', marginTop:14, padding:'11px', borderRadius:12,
               background:'transparent', border:`1px solid ${C.hair}`, color:C.dim,
               fontFamily:ui, fontSize:12.5, fontWeight:600, cursor:'pointer' }}>
               View Full Leaderboard
