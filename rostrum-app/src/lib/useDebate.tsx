@@ -23,6 +23,9 @@ export function useDebate(debateId: string) {
   const [segments, setSegments] = useState<Segment[]>([]);
   const [remaining, setRemaining] = useState(0);
   const [results, setResults] = useState<DebateResult | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [recBusy, setRecBusy] = useState(false);
+  const [recError, setRecError] = useState<string | null>(null);
   const egress = useRef<{ rec?: string; yt?: string }>({});
 
   useEffect(() => {
@@ -84,9 +87,8 @@ export function useDebate(debateId: string) {
     await setDebateStatus(debateId, 'live');
     await setSegment(debateId, 0);
     await applySegmentMics(debateId, debaters(members), segments[0]?.side ?? null);
-    try { egress.current.rec = (await startRecording(debateId)).egressId; } catch { /* recording optional */ }
-    // YouTube streaming is controlled manually via the dock's stream button
-    // (so the host can start it during assembly, before the debate begins).
+    // Recording is now started manually by the host via the dock's Record
+    // button (independent of the YouTube stream), so it does NOT auto-start.
   }, [debateId, segments]);
 
   // host: advance the run of show + flip mics to the new speaking side
@@ -145,7 +147,29 @@ export function useDebate(debateId: string) {
     await cancelDebate(debateId);
   }, [debateId]);
 
+  // host: start/stop the MP4 recording on demand. Independent of the YouTube
+  // stream (separate egress), so toggling this never affects streaming. The
+  // egress id is kept here so endDebate() also stops it if it's still running.
+  const startRec = useCallback(async () => {
+    if (egress.current.rec || recBusy) return;
+    setRecBusy(true); setRecError(null);
+    try {
+      egress.current.rec = (await startRecording(debateId)).egressId;
+      setRecording(true);
+    } catch (e: any) {
+      setRecError(e?.message ?? 'Could not start recording.');
+    } finally { setRecBusy(false); }
+  }, [debateId, recBusy]);
+
+  const stopRec = useCallback(async () => {
+    if (!egress.current.rec) { setRecording(false); return; }
+    setRecBusy(true);
+    try { await stopEgress(debateId, egress.current.rec); } catch { /* noop */ }
+    egress.current.rec = undefined; setRecording(false); setRecBusy(false);
+  }, [debateId]);
+
   return { debate, segments, seg, segIdx, remaining, running, phase, isHost, results,
            goLive, nextSegment, toggleTimer, endDebate, cancelEvent, goToSegment, setClock,
-           togglePoll, doFinalize, doAnnounce };
+           togglePoll, doFinalize, doAnnounce,
+           recording, recBusy, recError, startRec, stopRec };
 }

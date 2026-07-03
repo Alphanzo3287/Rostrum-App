@@ -33,6 +33,12 @@ interface Props {
   streamError: string | null;
   onStreamStart: () => void;
   onStreamStop: () => void;
+  recording?: boolean;
+  recBusy?: boolean;
+  recError?: string | null;
+  onRecStart?: () => void;
+  onRecStop?: () => void;
+  hideRecord?: boolean;
   setTab: (t: string) => void;
   onLeave: () => void;
   pollOpen?: boolean;
@@ -60,6 +66,12 @@ export function RoleDock(p: Props) {
               <>
                 <Sep />
                 <StreamBtn phase={p.streamPhase} error={p.streamError} onStart={p.onStreamStart} onStop={p.onStreamStop} />
+              </>
+            )}
+            {!p.hideRecord && p.onRecStart && (
+              <>
+                <Sep />
+                <RecordBtn recording={p.recording} busy={p.recBusy} error={p.recError} onStart={p.onRecStart} onStop={p.onRecStop} />
               </>
             )}
             <Sep />
@@ -104,6 +116,12 @@ export function RoleDock(p: Props) {
         {!p.hideYouTube && (
           <>
             <StreamBtn phase={p.streamPhase} error={p.streamError} onStart={p.onStreamStart} onStop={p.onStreamStop} />
+            <Sep />
+          </>
+        )}
+        {!p.hideRecord && p.onRecStart && (
+          <>
+            <RecordBtn recording={p.recording} busy={p.recBusy} error={p.recError} onStart={p.onRecStart} onStop={p.onRecStop} />
             <Sep />
           </>
         )}
@@ -181,6 +199,26 @@ function StreamBtn({ phase, error, onStart, onStop }: {
         disabled={phase === 'connecting'}
       />
       {phase === 'error' && error && (
+        <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:10, lineHeight:1.4,
+          color:C.ember, background:`${a(C.ember,'14')}`, border:`1px solid ${a(C.ember,'40')}`,
+          borderRadius:6, padding:'5px 7px', maxWidth:320, wordBreak:'break-word' }}>
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---- record toggle (MP4 egress, independent of the YouTube stream) ---- */
+function RecordBtn({ recording, busy, error, onStart, onStop }: {
+  recording?: boolean; busy?: boolean; error?: string | null; onStart?: () => void; onStop?: () => void;
+}) {
+  const label = busy ? '…' : recording ? '⏹ Stop recording' : '⏺ Record';
+  const onClick = () => { if (busy) return; recording ? onStop?.() : onStart?.(); };
+  return (
+    <div style={{ display:'inline-flex', flexDirection:'column', alignItems:'stretch', gap:4, maxWidth:320 }}>
+      <Btn label={label} accent={C.garnet} active={!!recording} onClick={onClick} disabled={busy} />
+      {error && (
         <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:10, lineHeight:1.4,
           color:C.ember, background:`${a(C.ember,'14')}`, border:`1px solid ${a(C.ember,'40')}`,
           borderRadius:6, padding:'5px 7px', maxWidth:320, wordBreak:'break-word' }}>

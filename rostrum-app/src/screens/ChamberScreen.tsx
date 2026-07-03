@@ -369,6 +369,11 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         streamError={yt.error}
         onStreamStart={yt.start}
         onStreamStop={yt.stop}
+        recording={dz.recording}
+        recBusy={dz.recBusy}
+        recError={dz.recError}
+        onRecStart={dz.startRec}
+        onRecStop={dz.stopRec}
         setTab={setTab}
         onLeave={onLeave}
         pollOpen={!!dz.debate?.poll_open}
