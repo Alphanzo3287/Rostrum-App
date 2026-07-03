@@ -16,7 +16,7 @@ import { useYouTubeStream } from '../lib/useYouTubeStream';
 import {
   joinDebate, getBroadcastState, subscribeBroadcastState, getResults,
   getFloorStats, getTally, castVote, listParticipants, demoteToAudience, promoteToRole, setSpotlight,
-  removeFromChamber,
+  removeFromChamber, subscribeMyRemoval,
   type BroadcastState, type FloorStats,
 } from '../lib/api';
 import { demoteFromStage, promoteFromAudience } from '../lib/livekit';
@@ -83,6 +83,20 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
     if (isSpeakersCorner) { setTab(role === 'host' ? 'invite' : 'chat'); return; }
     setTab(role === 'judge' ? 'score' : role === 'host' ? 'ros' : 'vote');
   }, [role, isLecture, isLegacy, isSpeakersCorner]);
+
+  // Instant boot: the moment a host/moderator removes me, disconnect from the
+  // room and leave — so a removed person can't keep participating until they
+  // happen to refresh. (The host can never be removed, so skip for them.)
+  const meId = me?.identity;
+  useEffect(() => {
+    if (!meId || isHost) return;
+    const off = subscribeMyRemoval(debateId, meId, () => {
+      try { room.room?.disconnect(); } catch { /* noop */ }
+      try { alert('You were removed from this chamber by a host or moderator.'); } catch { /* noop */ }
+      onLeave();
+    });
+    return () => off();
+  }, [debateId, meId, isHost]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- Person menu (hover on desktop / tap on mobile) — profile, gift,
   // and, for the host or a moderator, invite/remove. Lives at the top

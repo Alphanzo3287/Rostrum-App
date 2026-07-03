@@ -579,6 +579,17 @@ export function subscribeParticipants(debateId: string, onChange: () => void) {
     .subscribe());
 }
 
+/* Fires on the removed user's own client the moment a host/moderator removes
+   them from this chamber, so they can be dropped instantly. Realtime respects
+   RLS, so a user only ever receives their own removal row. */
+export function subscribeMyRemoval(debateId: string, myId: string, onRemoved: () => void) {
+  return safeSub(() => supabase.channel(`removals:${debateId}:${uniq()}`)
+    .on('postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'chamber_removals', filter: `debate_id=eq.${debateId}` },
+      (payload: any) => { if (payload?.new?.user_id === myId) onRemoved(); })
+    .subscribe());
+}
+
 export function subscribeQuestions(debateId: string, onChange: () => void) {
   return safeSub(() => supabase.channel(`questions:${debateId}:${uniq()}`)
     .on('postgres_changes',
