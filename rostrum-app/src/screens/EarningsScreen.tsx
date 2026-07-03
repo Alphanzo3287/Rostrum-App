@@ -149,8 +149,8 @@ export function EarningsScreen({ onBack }: { onBack?: () => void }) {
         </div>
         {!progress?.cashout_unlocked ? (
           <p style={{ fontFamily: ui, fontSize: 14, color: C.dim, lineHeight: 1.55, margin: '10px 0 0' }}>
-            Reach Level 25 with at least 10 qualifying debates to unlock cash-out buy-backs.
-            {progress && ` You're currently Level ${progress.level} with ${progress.qualifying_debates} qualifying debate${progress.qualifying_debates === 1 ? '' : 's'}.`}
+            Reach Level 25 with at least 10 qualifying debates or lectures to unlock cash-out buy-backs.
+            {progress && ` You're currently Level ${progress.level} with ${progress.qualifying_debates} qualifying debate${progress.qualifying_debates === 1 ? '' : 's'} and ${progress.qualifying_lectures} lecture${progress.qualifying_lectures === 1 ? '' : 's'}.`}
           </p>
         ) : payoutState !== 'active' ? (
           <p style={{ fontFamily: ui, fontSize: 14, color: C.dim, lineHeight: 1.55, margin: '10px 0 0' }}>
@@ -169,8 +169,8 @@ export function EarningsScreen({ onBack }: { onBack?: () => void }) {
         </div>
         {!progress?.cashout_unlocked ? (
           <p style={{ fontFamily: ui, fontSize: 14, color: C.dim, lineHeight: 1.55, margin: '10px 0 0' }}>
-            Cash withdrawals unlock at Level 25 with at least 10 qualifying debates.
-            {progress && ` You're currently Level ${progress.level} with ${progress.qualifying_debates} qualifying debate${progress.qualifying_debates === 1 ? '' : 's'}.`}
+            Cash withdrawals unlock at Level 25 with at least 10 qualifying debates or lectures.
+            {progress && ` You're currently Level ${progress.level} with ${progress.qualifying_debates} qualifying debate${progress.qualifying_debates === 1 ? '' : 's'} and ${progress.qualifying_lectures} lecture${progress.qualifying_lectures === 1 ? '' : 's'}.`}
           </p>
         ) : payoutState !== 'active' ? (
           <p style={{ fontFamily: ui, fontSize: 14, color: C.dim, lineHeight: 1.55, margin: '10px 0 0' }}>

@@ -196,12 +196,12 @@ export async function hasPaidDebateEntry(debateId: string): Promise<boolean> {
 /* ---- Level / XP / progress ---- */
 export interface Progress {
   xp: number; level: number; next_level_xp: number;
-  qualifying_debates: number; verified_speaking_seconds: number;
+  qualifying_debates: number; qualifying_lectures: number; verified_speaking_seconds: number;
   cashout_unlocked: boolean;
 }
 export async function getMyProgress(): Promise<Progress> {
   const { data, error } = await supabase.rpc('get_my_progress');
   if (error) throw error;
   const row = Array.isArray(data) ? data[0] : data;
-  return row ?? { xp: 0, level: 1, next_level_xp: 300, qualifying_debates: 0, verified_speaking_seconds: 0, cashout_unlocked: false };
+  return row ?? { xp: 0, level: 1, next_level_xp: 300, qualifying_debates: 0, qualifying_lectures: 0, verified_speaking_seconds: 0, cashout_unlocked: false };
 }
