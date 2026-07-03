@@ -150,21 +150,13 @@ export function Sidebar() {
           <span style={{ color: active('/tournaments') ? C.gold : C.faint, display:'flex' }}><TournamentIcon /></span>
           <span style={{ flex:1 }}>Tournaments</span>
         </Link>
-        {/* Admin links */}
+        {/* Admin: Back Office (Analytics + Moderation + Payouts + Transactions) */}
         {isAdmin && (
-          <Link to="/admin"
+          <Link to="/backoffice"
             style={{ display:'flex', alignItems:'center', gap:12, padding:'11px 14px', borderRadius:12,
               textDecoration:'none', fontFamily:ui, fontSize:14, fontWeight:500,
-              color: active('/admin') ? C.gold : C.faint, marginTop:8 }}>
-            <span style={{ fontSize:14 }}>📊</span><span style={{ flex:1 }}>Analytics</span>
-          </Link>
-        )}
-        {isAdmin && (
-          <Link to="/moderation"
-            style={{ display:'flex', alignItems:'center', gap:12, padding:'11px 14px', borderRadius:12,
-              textDecoration:'none', fontFamily:ui, fontSize:14, fontWeight:500,
-              color: active('/moderation') ? C.garnet : C.faint }}>
-            <span style={{ fontSize:14 }}>🛡️</span><span style={{ flex:1 }}>Moderation</span>
+              color: active('/backoffice') ? C.gold : C.faint, marginTop:8 }}>
+            <span style={{ fontSize:14 }}>🗂️</span><span style={{ flex:1 }}>Back Office</span>
           </Link>
         )}
       </nav>

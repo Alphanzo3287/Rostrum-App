@@ -41,6 +41,7 @@ import { SupportScreen } from './screens/SupportScreen';
 import { ModerationScreen } from './screens/ModerationScreen';
 import { BannedScreen } from './screens/BannedScreen';
 import { AdminPortalScreen } from './screens/AdminPortalScreen';
+import { BackOfficeScreen } from './screens/BackOfficeScreen';
 import { getDebate, getMyBan } from './lib/api';
 import { hasPaidDebateEntry, startDebateEntryCheckout } from './lib/payments';
 import type { DebateRole, Side } from './lib/types';
@@ -118,6 +119,7 @@ function Gate() {
         <Route path="notifications" element={<NotificationsScreen />} />
         {isAdmin && <Route path="moderation" element={<ModerationRoute />} />}
         {isAdmin && <Route path="admin" element={<AdminPortalRoute />} />}
+        {isAdmin && <Route path="backoffice" element={<BackOfficeRoute />} />}
         <Route path="me" element={<ProfileRoute />} />
         <Route path="u/:handle" element={<ProfileRoute />} />
         <Route path="messages" element={<InboxRoute />} />
@@ -310,6 +312,9 @@ function SupportRoute() {
 }
 function AdminPortalRoute() {
   return <AdminPortalScreen />;
+}
+function BackOfficeRoute() {
+  return <BackOfficeScreen />;
 }
 function ModerationRoute() {
   return <ModerationScreen />;
