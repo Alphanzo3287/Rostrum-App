@@ -16,6 +16,7 @@ import { useTheme } from '../lib/themeContext';
 
 export function TopBar() {
   const { profile, signOut } = useAuth();
+  const isAdmin = !!(profile as any)?.is_admin;
   const nav = useNavigate();
   const isMobile = useIsTablet();
   const { mode, toggle } = useTheme();
@@ -104,6 +105,20 @@ export function TopBar() {
                     {i.label}
                   </button>
                 ))}
+                {isAdmin && (
+                  <>
+                    <div style={{ height:1, background:C.hair, margin:'4px 0' }} />
+                    <button onClick={() => { setMenuOpen(false); nav('/backoffice'); }}
+                      style={{ display:'flex', alignItems:'center', gap:9, textAlign:'left', padding:'10px 12px',
+                        borderRadius:9, background:'transparent', border:'none', cursor:'pointer',
+                        fontFamily:ui, fontSize:13, fontWeight:600, color:C.gold, transition:'all .12s' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = a(C.gold,'14'); }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                      <span style={{ fontSize:14 }}>🗂️</span> Back Office
+                    </button>
+                    <div style={{ height:1, background:C.hair, margin:'4px 0' }} />
+                  </>
+                )}
                 <button onClick={() => { setMenuOpen(false); setSecurityOpen(true); }}
                   style={{ textAlign:'left', padding:'10px 12px', borderRadius:9,
                     background:'transparent', border:'none', cursor:'pointer',

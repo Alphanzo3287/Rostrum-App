@@ -150,15 +150,6 @@ export function Sidebar() {
           <span style={{ color: active('/tournaments') ? C.gold : C.faint, display:'flex' }}><TournamentIcon /></span>
           <span style={{ flex:1 }}>Tournaments</span>
         </Link>
-        {/* Admin: Back Office (Analytics + Moderation + Payouts + Transactions) */}
-        {isAdmin && (
-          <Link to="/backoffice"
-            style={{ display:'flex', alignItems:'center', gap:12, padding:'11px 14px', borderRadius:12,
-              textDecoration:'none', fontFamily:ui, fontSize:14, fontWeight:500,
-              color: active('/backoffice') ? C.gold : C.faint, marginTop:8 }}>
-            <span style={{ fontSize:14 }}>🗂️</span><span style={{ flex:1 }}>Back Office</span>
-          </Link>
-        )}
       </nav>
 
       {/* ── D-Bucks balance card ── */}
@@ -243,6 +234,15 @@ export function Sidebar() {
           <div style={{ position:'fixed', inset:'56px 0 0 0', zIndex:99, display:'flex', flexDirection:'column',
             background:a(C.base,'F0'), backdropFilter:'blur(20px)', overflowY:'auto', padding:'12px 0' }}>
             {sidebarBody}
+            {/* Mobile-only Back Office (desktop uses the TopBar dropdown) */}
+            {isAdmin && (
+              <button onClick={() => nav('/backoffice')}
+                style={{ display:'flex', alignItems:'center', gap:10, width:'100%', textAlign:'left',
+                  borderTop:`1px solid ${C.hair}`, padding:'13px 18px', background:'transparent',
+                  border:'none', cursor:'pointer', fontFamily:ui, fontSize:14, fontWeight:600, color:C.gold }}>
+                <span style={{ fontSize:15 }}>🗂️</span> Back Office
+              </button>
+            )}
             {/* Mobile-only profile + theme + sign out (no TopBar on mobile) */}
             <div style={{ borderTop:`1px solid ${C.hair}`, padding:'14px 18px', display:'flex',
               alignItems:'center', gap:12 }}>
