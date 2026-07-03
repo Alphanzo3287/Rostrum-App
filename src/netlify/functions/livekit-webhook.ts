@@ -1,0 +1,99 @@
+// =====================================================================
+// The Rostrum · netlify/functions/livekit-webhook.ts
+// Point your LiveKit project's webhook at /.netlify/functions/livekit-webhook
+// - egress_ended           -> save the MP4 location to debates.recording_url
+// - participant_joined/left -> keep debates.viewer_count fresh
+// - track_published (audio) -> start speaking-time clock
+// - track_unpublished (audio) / participant_left -> stop clock, accumulate seconds
+// =====================================================================
+import type { Handler } from '@netlify/functions';
+import { WebhookReceiver } from 'livekit-server-sdk';
+import { supabaseAdmin } from '../../src/server/supabaseAdmin';
+
+const receiver = new WebhookReceiver(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!);
+
+export const handler: Handler = async (event) => {
+  let e: any;
+  try {
+    e = await receiver.receive(event.body || '', event.headers.authorization || event.headers.Authorization);
+  } catch {
+    return { statusCode: 401, body: 'bad signature' };
+  }
+
+  const room = e.room?.name ?? e.egressInfo?.roomName;
+
+  // ── Egress (recording) ──────────────────────────────────────────────
+  if (e.event === 'egress_ended') {
+    const loc = e.egressInfo?.fileResults?.[0]?.location ?? e.egressInfo?.file?.location;
+    if (loc && room) {
+      await supabaseAdmin.from('debates')
+        .update({ recording_url: loc }).eq('livekit_room', room);
+    }
+  }
+
+  // ── Viewer count ────────────────────────────────────────────────────
+  if (e.event === 'participant_joined' || e.event === 'participant_left') {
+    const count = e.room?.numParticipants;
+    if (room && count != null) {
+      await supabaseAdmin.from('debates')
+        .update({ viewer_count: count }).eq('livekit_room', room);
+    }
+  }
+
+  // ── Speaking time capture ───────────────────────────────────────────
+  // LiveKit identity = user UUID (set in livekit-token.ts)
+  const userId = e.participant?.identity;
+
+  if (e.event === 'track_published' && userId && room) {
+    const isAudio = e.track?.type === 'AUDIO' || e.track?.source === 'MICROPHONE';
+    if (isAudio) {
+      const debateId = await roomToDebate(room);
+      if (debateId) {
+        // Upsert the row and start the mic clock
+        await supabaseAdmin.from('debate_speaking').upsert({
+          debate_id: debateId,
+          user_id: userId,
+          mic_on_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'debate_id,user_id', ignoreDuplicates: false });
+      }
+    }
+  }
+
+  if ((e.event === 'track_unpublished' || e.event === 'participant_left') && userId && room) {
+    const isAudio = e.event === 'participant_left' || e.track?.type === 'AUDIO' || e.track?.source === 'MICROPHONE';
+    if (isAudio) {
+      const debateId = await roomToDebate(room);
+      if (debateId) await closeMicSession(debateId, userId);
+    }
+  }
+
+  return { statusCode: 200, body: 'ok' };
+};
+
+/** Resolve a LiveKit room name to a debate UUID. */
+async function roomToDebate(room: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from('debates').select('id').eq('livekit_room', room).maybeSingle();
+  return data?.id ?? null;
+}
+
+/** Close an open mic session: add elapsed seconds, clear mic_on_at. */
+async function closeMicSession(debateId: string, userId: string) {
+  const { data: row } = await supabaseAdmin
+    .from('debate_speaking')
+    .select('mic_on_at, speaking_seconds')
+    .eq('debate_id', debateId).eq('user_id', userId)
+    .maybeSingle();
+
+  if (!row?.mic_on_at) return; // mic wasn't on
+
+  const elapsed = Math.max(0, Math.floor((Date.now() - new Date(row.mic_on_at).getTime()) / 1000));
+  const newTotal = (row.speaking_seconds ?? 0) + elapsed;
+
+  await supabaseAdmin.from('debate_speaking').update({
+    speaking_seconds: newTotal,
+    mic_on_at: null,
+    updated_at: new Date().toISOString(),
+  }).eq('debate_id', debateId).eq('user_id', userId);
+}

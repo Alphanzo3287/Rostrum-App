@@ -313,6 +313,21 @@ export async function unfollow(targetId: string) {
   if (error) throw error;
 }
 
+/* ---- Blocking (reversible). Blocked pairs can't see/engage each other; a
+   host-block also hides that host's events from the blocked user. ---- */
+export async function amIBlocking(targetId: string): Promise<boolean> {
+  const { data } = await supabase.rpc('am_i_blocking', { p_user: targetId });
+  return !!data;
+}
+export async function blockUser(targetId: string) {
+  const { error } = await supabase.rpc('block_user', { p_user: targetId });
+  if (error) throw error;
+}
+export async function unblockUser(targetId: string) {
+  const { error } = await supabase.rpc('unblock_user', { p_user: targetId });
+  if (error) throw error;
+}
+
 /* ----------------------------- TEAMS ----------------------------- */
 
 export async function listTeams(): Promise<Team[]> {

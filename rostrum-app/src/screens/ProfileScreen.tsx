@@ -5,7 +5,7 @@
 // =====================================================================
 import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
-import { getProfile, getAchievements, amFollowing, follow, unfollow, getUserTeams } from '../lib/api';
+import { getProfile, getAchievements, amFollowing, follow, unfollow, getUserTeams, amIBlocking, blockUser, unblockUser } from '../lib/api';
 import { ReportModal } from '../components/ReportModal';
 import { EditProfileModal } from '../components/EditProfileModal';
 import type { Profile, Achievement, Team } from '../lib/types';
@@ -21,6 +21,7 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
   const [profile, setProfile] = useState<Profile | null>(isSelf ? me : null);
   const [achievements, setAch] = useState<(Achievement & { earned_at: string })[]>([]);
   const [following, setFollowing] = useState(false);
+  const [blocked, setBlocked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
@@ -38,6 +39,7 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
     if (!profile) return;
     getAchievements(profile.id).then(setAch);
     if (!isSelf) amFollowing(profile.id).then(setFollowing);
+    if (!isSelf) amIBlocking(profile.id).then(setBlocked).catch(() => {});
     getUserTeams(profile.id).then(setTeams).catch(() => {});
     if (!isSelf) getCreatorListing(profile.id).then(setListing).catch(() => {});
   }, [profile, isSelf]);
@@ -56,6 +58,17 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
     setBusy(true);
     try { following ? await unfollow(profile.id) : await follow(profile.id); setFollowing(f => !f); }
     catch (e: any) { alert(e?.message ?? 'Could not update'); }
+    finally { setBusy(false); }
+  }
+
+  async function toggleBlock() {
+    if (!profile) return;
+    if (!blocked && !confirm(`Block ${profile.display_name}? They won't be able to see or join events you host, and you won't see each other in rooms. You can unblock anytime.`)) return;
+    setBusy(true);
+    try {
+      blocked ? await unblockUser(profile.id) : await blockUser(profile.id);
+      setBlocked(b => !b);
+    } catch (e: any) { alert(e?.message ?? 'Could not update'); }
     finally { setBusy(false); }
   }
 
@@ -97,6 +110,11 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
                   {following ? 'Following ✓' : 'Follow'}
                 </button>
                 <ReportModal targetType="user" targetId={profile.id} label="⚑ Report" />
+                <button onClick={toggleBlock} disabled={busy}
+                  style={{ ...ghostBtn, color: blocked ? C.garnetHi : C.dim,
+                    borderColor: blocked ? a(C.garnet, '55') : undefined }}>
+                  {blocked ? 'Blocked · Unblock' : '⛔ Block'}
+                </button>
               </div>
             )}
             {isSelf && (
