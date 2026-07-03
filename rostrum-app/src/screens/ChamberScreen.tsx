@@ -32,6 +32,7 @@ import { WinnerOverlay } from '../components/WinnerOverlay';
 import { BroadcastBar } from '../components/BroadcastBar';
 import { ShareButton } from '../components/ShareSheet';
 import { C, ui, display, mono, a, ghostBtn, solidGold } from '../lib/theme';
+import { Avatar } from '../components/ui';
 import { useIsTablet, useIsMobile } from '../lib/useMediaQuery';
 import { CompetitorCard, FloorStage, HostTopRow, GalleryStrip, AudienceVoteStrip, JudgesStrip, FloorStatStrip, WaitingHall, Initials, useSideIdentity, sideLabelFor, SideIdentityModal } from '../components/hall';
 import { InteractionBar } from '../components/InteractionBar';
@@ -73,7 +74,11 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
 
   const me = room.members.find(m => m.isLocal);
   const role = (me?.role ?? 'audience') as any;
-  const isHost = role === 'host';
+  // Derive host from the debate's own host_id too, not just the live-room
+  // participant role — before "Begin Debate" the host may not yet be a
+  // connected LiveKit participant, which otherwise hid their management
+  // options (like Remove) in the waiting room.
+  const isHost = role === 'host' || (!!user?.id && dz.debate?.host_id === user.id);
   const format = dz.debate?.format;
   const isLecture = format === 'lecture';
   const isLegacy = format === 'legacy';
@@ -1151,63 +1156,82 @@ function StageActionMenu({ x, y, via, member, debateId, isSelf, canManage, onSen
     catch (e: any) { alert(e?.message ?? 'Could not remove'); setBusy(false); }
   }
 
-  const menuW = 210;
+  const menuW = 234;
   const left = typeof window !== 'undefined' ? Math.min(x, window.innerWidth - menuW - 12) : x;
-  const top = typeof window !== 'undefined' ? Math.min(y, window.innerHeight - 260) : y;
+  const top = typeof window !== 'undefined' ? Math.min(y, window.innerHeight - 320) : y;
+
+  const roleMeta: Record<string, { label: string; color: string }> = {
+    host: { label: 'Host', color: C.warning },
+    moderator: { label: 'Moderator', color: C.gold },
+    debater: { label: 'Debater', color: C.jadeHi },
+    judge: { label: 'Judge', color: C.cyan },
+    audience: { label: 'Audience', color: C.faint },
+  };
+  const rm = roleMeta[member.role] ?? roleMeta.audience;
 
   return (
     <>
       <div onClick={onClose} onContextMenu={e => { e.preventDefault(); onClose(); }}
         style={{ position:'fixed', inset:0, zIndex:205, pointerEvents: via === 'hover' ? 'none' : 'auto' }} />
       <div onMouseEnter={onHoverKeep} onMouseLeave={onHoverLeave}
-        style={{ position:'fixed', top, left, zIndex:210, width:menuW, borderRadius:12,
-        background:C.panel, border:`1px solid ${C.hairHi}`, boxShadow:'0 20px 50px rgba(0,0,0,.5)', padding:6 }}>
-        <div style={{ padding:'8px 10px 7px', fontFamily:ui, fontSize:11.5, fontWeight:700, color:C.ink,
-          borderBottom:`1px solid ${C.hair}`, marginBottom:4, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-          {isSelf ? 'You' : member.name}
+        style={{ position:'fixed', top, left, zIndex:210, width:menuW, borderRadius:16,
+          background:a(C.panel,'F2'), backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)',
+          border:`1px solid ${C.hairHi}`, boxShadow:`0 24px 64px ${a(C.base,'CC')}, 0 2px 8px ${a(C.base,'80')}`,
+          padding:7, overflow:'hidden' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10, padding:'6px 8px 10px' }}>
+          <Avatar url={member.avatar} name={member.name} size={38} />
+          <div style={{ minWidth:0 }}>
+            <div style={{ fontFamily:ui, fontSize:14, fontWeight:700, color:C.ink,
+              whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+              {isSelf ? 'You' : member.name}
+            </div>
+            <div style={{ fontFamily:ui, fontSize:10, fontWeight:800, color:rm.color,
+              textTransform:'uppercase', letterSpacing:'.08em', marginTop:2 }}>{rm.label}</div>
+          </div>
         </div>
+        <div style={{ height:1, background:C.hair, margin:'0 2px 6px' }} />
         {sent ? (
           <div style={{ padding:'9px 10px', fontFamily:ui, fontSize:12.5, color:C.jadeHi }}>✓ Invite sent — {sent}</div>
         ) : (
           <>
             {member.handle && (
-              <MenuBtn label="View profile" onClick={() => { onProfile(member.handle); onClose(); }} busy={busy} />
+              <MenuBtn icon="◎" label="View profile" onClick={() => { onProfile(member.handle); onClose(); }} busy={busy} />
             )}
             {!isSelf && (
-              <MenuBtn label="🎁 Send gift" onClick={() => { onGift(); onClose(); }} busy={busy} />
+              <MenuBtn icon="✦" label="Send gift" onClick={() => { onGift(); onClose(); }} busy={busy} />
             )}
-            {(showInvite || showDemote || isSelf) && <div style={{ height:1, background:C.hair, margin:'4px 6px' }} />}
+            {(showInvite || showDemote || isSelf) && <div style={{ height:1, background:C.hair, margin:'6px 2px' }} />}
             {isSelf && onStage && (
-              <MenuBtn label="Leave the stage" danger onClick={demote} busy={busy} />
+              <MenuBtn icon="↩" label="Leave the stage" danger onClick={demote} busy={busy} />
             )}
             {showDemote && (
-              <MenuBtn label="→ Move to audience" danger onClick={demote} busy={busy} />
+              <MenuBtn icon="↓" label="Move to audience" danger onClick={demote} busy={busy} />
             )}
             {showInvite && (format === 'legacy' ? (
               <>
-                <MenuBtn label="Invite as Speaker" onClick={() => invite('debater', null, 'Speaker')} busy={busy} />
-                <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Speaker" onClick={() => invite('debater', null, 'Speaker')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
               </>
             ) : format === 'speakers_corner' ? (
               <>
-                <MenuBtn label="Invite as Proposition" onClick={() => invite('debater', 'prop', 'Proposition')} busy={busy} />
-                <MenuBtn label="Invite as Opposition" onClick={() => invite('debater', 'opp', 'Opposition')} busy={busy} />
-                <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Proposition" onClick={() => invite('debater', 'prop', 'Proposition')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Opposition" onClick={() => invite('debater', 'opp', 'Opposition')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
               </>
             ) : format === 'lecture' ? (
-              <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
+              <MenuBtn icon="+" label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
             ) : (
               <>
-                <MenuBtn label="Invite as Proposition" onClick={() => invite('debater', 'prop', 'Proposition')} busy={busy} />
-                <MenuBtn label="Invite as Opposition" onClick={() => invite('debater', 'opp', 'Opposition')} busy={busy} />
-                <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
-                <MenuBtn label="Invite as Judge" onClick={() => invite('judge', null, 'Judge')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Proposition" onClick={() => invite('debater', 'prop', 'Proposition')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Opposition" onClick={() => invite('debater', 'opp', 'Opposition')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Judge" onClick={() => invite('judge', null, 'Judge')} busy={busy} />
               </>
             ))}
             {showRemove && (
               <>
-                <div style={{ height:1, background:C.hair, margin:'4px 6px' }} />
-                <MenuBtn label="⛔ Remove from chamber" danger onClick={remove} busy={busy} />
+                <div style={{ height:1, background:C.hair, margin:'6px 2px' }} />
+                <MenuBtn icon="⛔" label="Remove from chamber" danger onClick={remove} busy={busy} />
               </>
             )}
           </>
@@ -1216,14 +1240,17 @@ function StageActionMenu({ x, y, via, member, debateId, isSelf, canManage, onSen
     </>
   );
 }
-function MenuBtn({ label, onClick, busy, danger }: { label: string; onClick: () => void; busy: boolean; danger?: boolean }) {
+function MenuBtn({ label, icon, onClick, busy, danger }: { label: string; icon?: string; onClick: () => void; busy: boolean; danger?: boolean }) {
+  const base = danger ? C.garnetHi : C.ink;
+  const hoverBg = danger ? a(C.garnet, '16') : a(C.gold, '12');
   return (
-    <button onClick={onClick} disabled={busy} style={{ display:'block', width:'100%', textAlign:'left', padding:'9px 10px',
-      borderRadius:8, border:'none', background:'transparent', cursor: busy ? 'default' : 'pointer',
-      fontFamily:ui, fontSize:13, fontWeight:500, color: danger ? C.garnetHi : C.ink, opacity: busy ? .6 : 1 }}
-      onMouseEnter={e => { if (!busy) e.currentTarget.style.background = C.panel2; }}
+    <button onClick={onClick} disabled={busy} style={{ display:'flex', alignItems:'center', gap:10, width:'100%', textAlign:'left', padding:'9px 10px',
+      borderRadius:10, border:'none', background:'transparent', cursor: busy ? 'default' : 'pointer',
+      fontFamily:ui, fontSize:13, fontWeight:600, color: base, opacity: busy ? .6 : 1, transition:'background .12s ease' }}
+      onMouseEnter={e => { if (!busy) e.currentTarget.style.background = hoverBg; }}
       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-      {busy ? '…' : label}
+      {icon && <span style={{ fontSize:13.5, width:16, textAlign:'center', opacity:.9, flexShrink:0, color: danger ? C.garnetHi : C.dim }}>{icon}</span>}
+      <span style={{ flex:1 }}>{busy ? '…' : label}</span>
     </button>
   );
 }
