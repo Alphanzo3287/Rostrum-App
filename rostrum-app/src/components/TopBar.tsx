@@ -12,14 +12,12 @@ import { Avatar } from './ui';
 import { NotificationsBell } from './NotificationsBell';
 import { SecurityModal } from './SecurityModal';
 import { useIsTablet } from '../lib/useMediaQuery';
-import { useTheme } from '../lib/themeContext';
 
 export function TopBar() {
   const { profile, signOut } = useAuth();
   const isAdmin = !!(profile as any)?.is_admin;
   const nav = useNavigate();
   const isMobile = useIsTablet();
-  const { mode, toggle } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -93,6 +91,7 @@ export function TopBar() {
                 {[
                   { label:'My Profile', to:'/me' },
                   { label:'Wallet',     to:'/store' },
+                  { label:'Earnings',   to:'/earnings' },
                   { label:'Settings',   to:'/settings' },
                   { label:'Help',       to:'/support' },
                 ].map(i => (
@@ -126,24 +125,6 @@ export function TopBar() {
                   onMouseEnter={e => { e.currentTarget.style.background = C.panel2; e.currentTarget.style.color = C.ink; }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.dim; }}>
                   Security &amp; 2FA
-                </button>
-                <div style={{ height:1, background:C.hair, margin:'4px 0' }} />
-                {/* Theme toggle row */}
-                <button onClick={toggle}
-                  style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
-                    padding:'10px 12px', borderRadius:9, background:'transparent', border:'none',
-                    cursor:'pointer', fontFamily:ui, fontSize:13, color:C.dim, transition:'all .12s' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = C.panel2; e.currentTarget.style.color = C.ink; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.dim; }}>
-                  <span style={{ display:'flex', alignItems:'center', gap:9 }}>
-                    <span style={{ fontSize:14 }}>{mode === 'dark' ? '☀️' : '🌙'}</span>
-                    {mode === 'dark' ? 'Light mode' : 'Dark mode'}
-                  </span>
-                  <span style={{ width:34, height:18, borderRadius:999, position:'relative',
-                    background: mode === 'dark' ? C.hair : a(C.gold,'66'), transition:'background .2s' }}>
-                    <span style={{ position:'absolute', top:2, left: mode === 'dark' ? 2 : 18,
-                      width:14, height:14, borderRadius:'50%', background:C.ink, transition:'left .2s' }} />
-                  </span>
                 </button>
                 <div style={{ height:1, background:C.hair, margin:'4px 0' }} />
                 <button onClick={() => { setMenuOpen(false); signOut(); }}

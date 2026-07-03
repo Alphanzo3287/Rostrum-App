@@ -88,8 +88,6 @@ export function Sidebar() {
     { to: '/library',      label: 'Library',       icon: LibraryIcon },
     { to: '/leaderboard',  label: 'Rankings',      icon: RankingsIcon },
     { to: '/messages',     label: 'Messages',      icon: MessagesIcon,    badge: unread || undefined },
-    { to: '/store',        label: 'Wallet',        icon: WalletIcon },
-    { to: '/earnings',     label: 'Earnings',      icon: EarningsIcon },
   ];
 
   const sidebarBody = (
@@ -234,6 +232,19 @@ export function Sidebar() {
           <div style={{ position:'fixed', inset:'56px 0 0 0', zIndex:99, display:'flex', flexDirection:'column',
             background:a(C.base,'F0'), backdropFilter:'blur(20px)', overflowY:'auto', padding:'12px 0' }}>
             {sidebarBody}
+            {/* Mobile-only Wallet + Earnings (desktop uses the TopBar dropdown) */}
+            <button onClick={() => nav('/store')}
+              style={{ display:'flex', alignItems:'center', gap:12, width:'100%', textAlign:'left',
+                borderTop:`1px solid ${C.hair}`, padding:'12px 18px', background:'transparent',
+                border:'none', cursor:'pointer', fontFamily:ui, fontSize:14, fontWeight:500, color:C.dim }}>
+              <span style={{ display:'flex', color:C.faint }}><WalletIcon /></span> Wallet
+            </button>
+            <button onClick={() => nav('/earnings')}
+              style={{ display:'flex', alignItems:'center', gap:12, width:'100%', textAlign:'left',
+                padding:'12px 18px', background:'transparent',
+                border:'none', cursor:'pointer', fontFamily:ui, fontSize:14, fontWeight:500, color:C.dim }}>
+              <span style={{ display:'flex', color:C.faint }}><EarningsIcon /></span> Earnings
+            </button>
             {/* Mobile-only Back Office (desktop uses the TopBar dropdown) */}
             {isAdmin && (
               <button onClick={() => nav('/backoffice')}

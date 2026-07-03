@@ -8,9 +8,11 @@ import { useSearchParams } from 'react-router-dom';
 import { getYouTubeConnection, connectYouTube, disconnectYouTube, type YouTubeConnection } from '../lib/youtube';
 import { myOpenRooms, forceCloseRoom, type OpenRoom } from '../lib/api';
 import { C, ui, display, solidGold, a } from '../lib/theme';
+import { useTheme } from '../lib/themeContext';
 import { Scroll, ghostBtn } from '../components/ui';
 
 export function SettingsScreen({ onBack }: { onBack?: () => void }) {
+  const { mode, toggle } = useTheme();
   const [params, setParams] = useSearchParams();
   const [yt, setYt]         = useState<YouTubeConnection | null>(null);
   const [busy, setBusy]     = useState(false);
@@ -87,6 +89,30 @@ export function SettingsScreen({ onBack }: { onBack?: () => void }) {
           {banner.msg}
         </div>
       )}
+
+      {/* ── Appearance ── */}
+      <div style={{ padding:'20px 22px', borderRadius:12, border:`1px solid ${C.hair}`, background:C.panel, marginBottom:16 }}>
+        <div style={{ fontFamily:display, fontSize:17, fontWeight:700, color:C.ink, marginBottom:4 }}>Appearance</div>
+        <div style={{ fontFamily:ui, fontSize:12.5, color:C.faint, marginBottom:16, lineHeight:1.5 }}>
+          Choose how The Rostrum looks to you.
+        </div>
+        <button onClick={toggle}
+          style={{ display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%',
+            padding:'12px 14px', borderRadius:10, background:C.panel2, border:`1px solid ${C.hair}`,
+            cursor:'pointer', fontFamily:ui, fontSize:14, color:C.ink, transition:'all .12s' }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = C.hairHi; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = C.hair; }}>
+          <span style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <span style={{ fontSize:16 }}>{mode === 'dark' ? '🌙' : '☀️'}</span>
+            <span style={{ fontWeight:600 }}>{mode === 'dark' ? 'Dark mode' : 'Light mode'}</span>
+          </span>
+          <span style={{ width:40, height:22, borderRadius:999, position:'relative', flexShrink:0,
+            background: mode === 'dark' ? C.hair : a(C.gold,'88'), transition:'background .2s' }}>
+            <span style={{ position:'absolute', top:2, left: mode === 'dark' ? 2 : 20,
+              width:18, height:18, borderRadius:'50%', background:'#fff', transition:'left .2s' }} />
+          </span>
+        </button>
+      </div>
 
       {/* ── YouTube integration ── */}
       <div style={{ padding:'20px 22px', borderRadius:12, border:`1px solid ${C.hair}`, background:C.panel, marginBottom:16 }}>
