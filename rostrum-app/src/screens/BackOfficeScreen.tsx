@@ -14,16 +14,21 @@ import {
   approvePayout, declinePayout, adminTransactions,
   type FinancialSummary, type FinancialPoint, type PayoutRequest, type AdminTxn,
 } from '../lib/payments';
-import { C, ui, display, mono, solidGold, ghostBtn } from '../lib/theme';
+import {
+  adminListBugReports, adminUpdateBugStatus, adminListAbuseReports,
+  type BugReport, type AbuseReport,
+} from '../lib/reports';
+import { C, ui, display, mono, solidGold, ghostBtn, a } from '../lib/theme';
 import { Scroll, Center } from '../components/ui';
 import { AdminPortalScreen } from './AdminPortalScreen';
 import { ModerationScreen } from './ModerationScreen';
 
-type Tab = 'financials' | 'payouts' | 'transactions' | 'analytics' | 'moderation';
+type Tab = 'financials' | 'payouts' | 'transactions' | 'reports' | 'analytics' | 'moderation';
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'financials',   label: 'Financials',   icon: '📈' },
   { key: 'payouts',      label: 'Payout Requests', icon: '💸' },
   { key: 'transactions', label: 'Transactions', icon: '🧾' },
+  { key: 'reports',      label: 'Reports',      icon: '🐞' },
   { key: 'analytics',    label: 'Analytics',    icon: '📊' },
   { key: 'moderation',   label: 'Moderation',   icon: '🛡️' },
 ];
@@ -57,6 +62,7 @@ export function BackOfficeScreen() {
         {tab === 'financials' && <FinancialsPanel />}
         {tab === 'payouts' && <PayoutsPanel />}
         {tab === 'transactions' && <TransactionsPanel />}
+        {tab === 'reports' && <ReportsPanel />}
         {tab === 'analytics' && <AdminPortalScreen />}
         {tab === 'moderation' && <ModerationScreen />}
       </div>
@@ -261,6 +267,105 @@ function TransactionsPanel() {
           </div>
         )}
     </Scroll>
+  );
+}
+
+/* ---------------- Reports (bugs + abuse) ---------------- */
+const BUG_STATES = ['open', 'investigating', 'resolved', 'closed'];
+function ReportsPanel() {
+  const [sub, setSub] = useState<'bugs' | 'abuse'>('bugs');
+  const [bugs, setBugs] = useState<BugReport[]>([]);
+  const [abuse, setAbuse] = useState<AbuseReport[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [b, a] = await Promise.all([adminListBugReports(null), adminListAbuseReports(80)]);
+      setBugs(b); setAbuse(a);
+    } finally { setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function setStatus(id: string, status: string) {
+    setBusy(id);
+    try { await adminUpdateBugStatus(id, status); setBugs(bs => bs.map(b => b.id === id ? { ...b, status } : b)); }
+    finally { setBusy(null); }
+  }
+
+  const openBugs = bugs.filter(b => b.status === 'open' || b.status === 'investigating').length;
+
+  return (
+    <Scroll>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+        <Chip active={sub === 'bugs'} onClick={() => setSub('bugs')}>🐞 Bugs{openBugs ? ` · ${openBugs}` : ''}</Chip>
+        <Chip active={sub === 'abuse'} onClick={() => setSub('abuse')}>🛡️ Abuse reports</Chip>
+      </div>
+
+      {loading ? <Center><span style={{ color: C.faint, fontFamily: ui }}>Loading…</span></Center>
+        : sub === 'bugs' ? (
+          bugs.length === 0 ? <Empty label="No bug reports yet." />
+          : bugs.map(b => (
+            <div key={b.id} style={{ background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 14, padding: 16, marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontFamily: ui, fontSize: 14, color: C.ink, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{b.body}</div>
+                  <div style={{ fontFamily: mono, fontSize: 11, color: C.faint, marginTop: 6 }}>
+                    {b.reporter_handle ? `@${b.reporter_handle}` : 'unknown'} · {b.page ?? '—'} · {new Date(b.created_at).toLocaleString()}
+                  </div>
+                </div>
+                <BugBadge status={b.status} />
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+                {BUG_STATES.map(s => (
+                  <button key={s} onClick={() => setStatus(b.id, s)} disabled={busy === b.id || b.status === s}
+                    style={{ padding: '6px 11px', borderRadius: 8, cursor: b.status === s ? 'default' : 'pointer',
+                      fontFamily: ui, fontSize: 12, fontWeight: 600, textTransform: 'capitalize',
+                      border: `1px solid ${b.status === s ? C.gold : C.hair}`,
+                      background: b.status === s ? a(C.gold, '18') : 'transparent',
+                      color: b.status === s ? C.gold : C.dim, opacity: busy === b.id ? 0.5 : 1 }}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))
+        ) : (
+          abuse.length === 0 ? <Empty label="No abuse reports." />
+          : (
+            <>
+              <p style={{ fontFamily: ui, fontSize: 12.5, color: C.faint, margin: '0 0 12px' }}>
+                Awareness feed — take action from the Moderation tab.
+              </p>
+              {abuse.map(r => (
+                <div key={r.id} style={{ background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 14, padding: 14, marginBottom: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ fontFamily: ui, fontSize: 13.5, color: C.ink }}>
+                      <b style={{ textTransform: 'capitalize' }}>{r.reason?.replace(/_/g, ' ')}</b>
+                      <span style={{ color: C.faint }}> · {r.target_type}{r.target_handle ? ` @${r.target_handle}` : ''}</span>
+                    </div>
+                    <StatusBadge status={r.status} />
+                  </div>
+                  {r.body && <div style={{ fontFamily: ui, fontSize: 13, color: C.dim, marginTop: 6, lineHeight: 1.5 }}>{r.body}</div>}
+                  <div style={{ fontFamily: mono, fontSize: 10.5, color: C.faint, marginTop: 6 }}>
+                    by {r.reporter_handle ? `@${r.reporter_handle}` : 'unknown'} · {new Date(r.created_at).toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </>
+          )
+        )}
+    </Scroll>
+  );
+}
+function BugBadge({ status }: { status: string }) {
+  const c: Record<string, string> = { open: C.warning, investigating: C.cyan, resolved: C.jadeHi, closed: C.faint };
+  return (
+    <span style={{ fontFamily: ui, fontSize: 11, fontWeight: 700, textTransform: 'capitalize', whiteSpace: 'nowrap',
+      color: c[status] ?? C.faint, border: `1px solid ${c[status] ?? C.hair}`, borderRadius: 20, padding: '3px 10px' }}>
+      {status}
+    </span>
   );
 }
 

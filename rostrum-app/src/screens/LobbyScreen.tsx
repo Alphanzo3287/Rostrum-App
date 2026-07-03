@@ -13,6 +13,7 @@ import type { Debate } from '../lib/types';
 import { C, ui, display, mono, solidGold, a } from '../lib/theme';
 import { Avatar } from '../components/ui';
 import { GlobalActivityMap } from '../components/GlobalActivityMap';
+import { BugReportButton } from '../components/BugReportButton';
 import { useIsTablet } from '../lib/useMediaQuery';
 
 // ── small util ────────────────────────────────────────────────────────
@@ -418,6 +419,7 @@ export function LobbyScreen({ onOpenDebate, onHost: _onHost }: {
           </Card>
         </div>
       </div>
+      <BugReportButton />
     </div>
   );
 }
