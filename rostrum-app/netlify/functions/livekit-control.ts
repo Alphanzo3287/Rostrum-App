@@ -72,17 +72,20 @@ export const handler: Handler = async (event) => {
         return json(200, { ok: true });
       }
 
-      // start recording to MP4. LiveKit Cloud users can drop the S3 block and
-      // use built-in egress storage instead.
+      // start recording to MP4. Works with AWS S3 or any S3-compatible store
+      // (e.g. Supabase Storage) — set S3_ENDPOINT to switch to path-style.
       case 'recording_start': {
         const file = new EncodedFileOutput({
           fileType: EncodedFileType.MP4,
-          filepath: `recordings/${room}-${Date.now()}.mp4`,
+          filepath: `${room}-${Date.now()}.mp4`,
           output: { case: 's3', value: new S3Upload({
             accessKey: process.env.S3_ACCESS_KEY!,
             secret:    process.env.S3_SECRET!,
-            bucket:    process.env.S3_BUCKET!,
+            bucket:    process.env.S3_BUCKET || 'recordings',
             region:    process.env.S3_REGION!,
+            ...(process.env.S3_ENDPOINT
+              ? { endpoint: process.env.S3_ENDPOINT, forcePathStyle: true }
+              : {}),
           }) },
         });
         const info = await egress.startRoomCompositeEgress(room, { file }, { layout: 'speaker-dark' });
