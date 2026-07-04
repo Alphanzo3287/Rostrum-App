@@ -22,8 +22,35 @@ export const handler: Handler = async (event) => {
   if (!debateId) return json(400, { error: 'debateId required' });
 
   const { data: debate } = await supabaseAdmin
-    .from('debates').select('id, livekit_room, host_id').eq('id', debateId).single();
+    .from('debates').select('id, livekit_room, host_id, is_paid, price_cents').eq('id', debateId).single();
   if (!debate) return json(404, { error: 'debate not found' });
+
+  const isHost = debate.host_id === user.id;
+
+  // Access-control gate: a permanently-removed user, or someone the host has
+  // blocked, can never get a token — so they can't enter the room by any path.
+  if (!isHost) {
+    const [{ data: removed }, { data: hostBlock }] = await Promise.all([
+      supabaseAdmin.from('chamber_removals').select('user_id')
+        .eq('debate_id', debate.id).eq('user_id', user.id).maybeSingle(),
+      supabaseAdmin.from('user_blocks').select('blocker_id')
+        .eq('blocker_id', debate.host_id).eq('blocked_id', user.id).maybeSingle(),
+    ]);
+    if (removed) return json(403, { error: 'you have been removed from this chamber' });
+    if (hostBlock) return json(403, { error: "you cannot join this host's events" });
+  }
+
+  // Payment gate — the true enforcement point. For a paid debate, only the
+  // host or someone whose participant row is marked paid=true may get a
+  // token. No token = can't enter the LiveKit room, so this closes every
+  // UI path at once (immersive view, direct URL, etc.), not just the
+  // lobby card. The route-level paywall is now just friendly UX on top.
+  if (debate.is_paid && debate.price_cents && !isHost) {
+    const { data: paidRow } = await supabaseAdmin
+      .from('debate_participants').select('paid')
+      .eq('debate_id', debateId).eq('user_id', user.id).maybeSingle();
+    if (!paidRow?.paid) return json(402, { error: 'payment required to enter this debate' });
+  }
 
   // Look up the caller's seat. Spectators who haven't formally joined get an
   // audience seat (no publish) so they can still watch.
@@ -40,7 +67,6 @@ export const handler: Handler = async (event) => {
     .from('profiles').select('display_name, avatar_url, handle').eq('id', user.id).single();
 
   const room = debate.livekit_room || `debate_${debate.id}`;
-  const isHost = debate.host_id === user.id;
 
   const at = new AccessToken(API_KEY, API_SECRET, {
     identity: user.id,

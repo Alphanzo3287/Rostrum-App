@@ -38,6 +38,10 @@ export const handler: Handler = async (event) => {
 
       if (kind === 'buyback_purchase') {
         await handleBuybackPurchase(session);
+      } else if (kind === 'gift_purchase') {
+        await handleGiftPurchase(session);
+      } else if (kind === 'debate_entry') {
+        await handleDebateEntry(session);
       } else {
         // dbucks_purchase — the original Phase 3 flow.
         const userId = session.metadata?.user_id;
@@ -97,5 +101,61 @@ async function handleBuybackPurchase(session: Stripe.Checkout.Session) {
     await supabaseAdmin.from('buyback_listings')
       .update({ status: 'sold', buyer_id: buyerId, stripe_session_id: session.id, sold_at: new Date().toISOString() })
       .eq('id', listingId).eq('status', 'active');
+  }
+}
+
+/** Buy-and-send gift: credit the recipient's redeemable D-Bucks directly
+ * from treasury (no wallet hop for the buyer needed) and log it exactly
+ * like a normal in-app gift so it shows up the same way everywhere. */
+async function handleGiftPurchase(session: Stripe.Checkout.Session) {
+  const tierId = session.metadata?.tier_id;
+  const fromId = session.metadata?.from_id;
+  const toId = session.metadata?.to_id;
+  const dbucksAmount = Number(session.metadata?.dbucks_amount ?? 0);
+  const debateId = session.metadata?.debate_id || null;
+  if (!tierId || !fromId || !toId || dbucksAmount <= 0) return;
+
+  const { error } = await supabaseAdmin.rpc('dbucks_move', {
+    p_from: 'treasury',
+    p_to: `user:${toId}`,
+    p_amount: dbucksAmount,
+    p_color: 'redeemable',
+    p_reason: 'gift',
+    p_ref: { stripe_session_id: session.id, tier_id: tierId, debate_id: debateId },
+    p_idem: `stripe_gift:${session.id}`,
+  });
+  if (error && !/duplicate key|idempotency/i.test(error.message ?? '')) throw error;
+
+  if (!error) {
+    const { data: tier } = await supabaseAdmin.from('gift_tiers').select('name, amount_cents').eq('id', tierId).maybeSingle();
+    await supabaseAdmin.from('gifts').insert({
+      debate_id: debateId, from_id: fromId, to_id: toId,
+      kind: tier?.name ?? tierId, amount_cents: tier?.amount_cents ?? 0,
+    });
+    const { data: fromProfile } = await supabaseAdmin.from('profiles').select('display_name').eq('id', fromId).maybeSingle();
+    await supabaseAdmin.from('notifications').insert({
+      user_id: toId, type: 'gift',
+      title: `${fromProfile?.display_name ?? 'Someone'} sent you a gift`,
+      body: `${tier?.name ?? 'A gift'} · ${dbucksAmount} D-Bucks`,
+      link: debateId ? `/debate/${debateId}` : '/store',
+    });
+  }
+}
+
+/** PPV debate entry confirmed — grant access by marking (or creating)
+ * the participant row as paid. Money already went straight to the host
+ * via the destination charge; nothing else to move here. Update-first,
+ * insert-only-if-absent, so this never resets someone who was already
+ * seated (e.g. a debater) back down to plain audience. */
+async function handleDebateEntry(session: Stripe.Checkout.Session) {
+  const debateId = session.metadata?.debate_id;
+  const userId = session.metadata?.user_id;
+  if (!debateId || !userId) return;
+
+  const { data: updated } = await supabaseAdmin.from('debate_participants')
+    .update({ paid: true }).eq('debate_id', debateId).eq('user_id', userId).select('user_id');
+  if (!updated || updated.length === 0) {
+    await supabaseAdmin.from('debate_participants')
+      .insert({ debate_id: debateId, user_id: userId, role: 'audience', can_publish: false, paid: true });
   }
 }
