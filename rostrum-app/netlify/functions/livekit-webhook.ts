@@ -7,10 +7,12 @@
 // - track_unpublished (audio) / participant_left -> stop clock, accumulate seconds
 // =====================================================================
 import type { Handler } from '@netlify/functions';
-import { WebhookReceiver } from 'livekit-server-sdk';
+import { WebhookReceiver, RoomServiceClient } from 'livekit-server-sdk';
 import { supabaseAdmin } from '../../src/server/supabaseAdmin';
 
 const receiver = new WebhookReceiver(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!);
+const httpUrl = (process.env.LIVEKIT_URL || '').replace('wss://', 'https://').replace('ws://', 'http://');
+const rooms = new RoomServiceClient(httpUrl, process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!);
 
 export const handler: Handler = async (event) => {
   const authHeader = event.headers.authorization || event.headers.Authorization || '';
@@ -53,10 +55,15 @@ export const handler: Handler = async (event) => {
 
   // ── Viewer count ────────────────────────────────────────────────────
   if (e.event === 'participant_joined' || e.event === 'participant_left') {
-    const count = e.room?.numParticipants;
-    if (room && count != null) {
-      await supabaseAdmin.from('debates')
-        .update({ viewer_count: count }).eq('livekit_room', room);
+    if (room) {
+      // Ask LiveKit for the real participant list — more reliable than the
+      // numParticipants field, which isn't always populated on these payloads.
+      let count = e.room?.numParticipants ?? null;
+      try { count = (await rooms.listParticipants(room)).length; } catch { /* room may be gone */ }
+      if (count != null) {
+        await supabaseAdmin.from('debates').update({ viewer_count: count }).eq('livekit_room', room);
+        try { await supabaseAdmin.from('webhook_log').insert({ has_auth: true, body_len: 0, sig_ok: true, event_type: 'count_write', note: `room=${room} count=${count}` }); } catch { /* noop */ }
+      }
     }
   }
 
