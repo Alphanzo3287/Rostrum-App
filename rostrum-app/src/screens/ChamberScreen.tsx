@@ -301,6 +301,8 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         {ctxMenu && (
           <StageActionMenu x={ctxMenu.x} y={ctxMenu.y} via={ctxMenu.via} member={ctxMenu.member} debateId={debateId} format={format}
             isSelf={ctxMenu.member.identity === me?.identity} canManage={canManage}
+            featuredId={bs.stageId}
+            onSpotlight={(id) => { setBs(b => ({ ...b, stageId: id })); setSpotlight(debateId, id).catch(() => {}); }}
             onProfile={openProfile}
             onGift={() => { setGiftTarget(ctxMenu.member); closeMenuNow(); }}
             onHoverKeep={cancelMenuClose}
@@ -1140,8 +1142,9 @@ function LiveHall({
 
 /* ---- C5 · Stage Action Menu (host-only: right-click a profile to
    promote them onto the stage or move them back to the audience) ---- */
-function StageActionMenu({ x, y, via, member, debateId, isSelf, canManage, onSendInvite, onProfile, onGift, onClose, onHoverKeep, onHoverLeave, format }: {
+function StageActionMenu({ x, y, via, member, debateId, isSelf, canManage, featuredId, onSpotlight, onSendInvite, onProfile, onGift, onClose, onHoverKeep, onHoverLeave, format }: {
   x: number; y: number; via: 'hover' | 'tap'; member: RoomMember; debateId: string; isSelf: boolean; canManage: boolean;
+  featuredId?: string | null; onSpotlight?: (identity: string | null) => void;
   onSendInvite: (role: StageRole, side: StageSide) => void;
   onProfile: (handle?: string | null) => void; onGift: () => void;
   onClose: () => void; onHoverKeep?: () => void; onHoverLeave?: () => void; format?: string;
@@ -1152,6 +1155,8 @@ function StageActionMenu({ x, y, via, member, debateId, isSelf, canManage, onSen
   const showInvite = canManage && !isSelf && !onStage;
   const showDemote = canManage && !isSelf && onStage && member.role !== 'host';
   const showRemove = canManage && !isSelf && member.role !== 'host';
+  const showSpotlight = canManage && onStage && !!onSpotlight;
+  const isSpotlit = !!featuredId && featuredId === member.identity;
 
   async function demote() {
     setBusy(true);
@@ -1215,6 +1220,11 @@ function StageActionMenu({ x, y, via, member, debateId, isSelf, canManage, onSen
             )}
             {!isSelf && (
               <MenuBtn icon="✦" label="Send gift" onClick={() => { onGift(); onClose(); }} busy={busy} />
+            )}
+            {showSpotlight && (
+              <MenuBtn icon={isSpotlit ? '★' : '☆'}
+                label={isSpotlit ? 'Remove from spotlight' : (isSelf ? 'Spotlight me on screen' : 'Spotlight on screen')}
+                onClick={() => { onSpotlight!(isSpotlit ? null : member.identity); onClose(); }} busy={busy} />
             )}
             {(showInvite || showDemote || isSelf) && <div style={{ height:1, background:C.hair, margin:'6px 2px' }} />}
             {isSelf && onStage && (
