@@ -13,17 +13,32 @@ import { supabaseAdmin } from '../../src/server/supabaseAdmin';
 const receiver = new WebhookReceiver(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!);
 
 export const handler: Handler = async (event) => {
+  const authHeader = event.headers.authorization || event.headers.Authorization || '';
+  // Netlify may base64-encode the body depending on content-type; LiveKit's
+  // signature is over the RAW body, so decode first or the check fails (401).
+  const raw = event.isBase64Encoded && event.body
+    ? Buffer.from(event.body, 'base64').toString('utf8')
+    : (event.body || '');
+
   let e: any;
+  let sigOk = false;
+  let note: string | null = null;
   try {
-    // Netlify may base64-encode the body depending on content-type; LiveKit's
-    // signature is over the RAW body, so decode first or the check fails (401).
-    const raw = event.isBase64Encoded && event.body
-      ? Buffer.from(event.body, 'base64').toString('utf8')
-      : (event.body || '');
-    e = await receiver.receive(raw, event.headers.authorization || event.headers.Authorization);
-  } catch {
-    return { statusCode: 401, body: 'bad signature' };
+    e = await receiver.receive(raw, authHeader);
+    sigOk = true;
+  } catch (err: any) {
+    note = String(err?.message ?? err).slice(0, 300);
   }
+
+  // Diagnostic log (temporary): every attempt, so we can see delivery + signature.
+  try {
+    await supabaseAdmin.from('webhook_log').insert({
+      has_auth: !!authHeader, body_len: raw.length, sig_ok: sigOk,
+      event_type: sigOk ? (e?.event ?? null) : null, note,
+    });
+  } catch { /* logging must never break the webhook */ }
+
+  if (!sigOk) return { statusCode: 401, body: 'bad signature' };
 
   const room = e.room?.name ?? e.egressInfo?.roomName;
 
