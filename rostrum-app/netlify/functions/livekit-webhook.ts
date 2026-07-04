@@ -15,7 +15,12 @@ const receiver = new WebhookReceiver(process.env.LIVEKIT_API_KEY!, process.env.L
 export const handler: Handler = async (event) => {
   let e: any;
   try {
-    e = await receiver.receive(event.body || '', event.headers.authorization || event.headers.Authorization);
+    // Netlify may base64-encode the body depending on content-type; LiveKit's
+    // signature is over the RAW body, so decode first or the check fails (401).
+    const raw = event.isBase64Encoded && event.body
+      ? Buffer.from(event.body, 'base64').toString('utf8')
+      : (event.body || '');
+    e = await receiver.receive(raw, event.headers.authorization || event.headers.Authorization);
   } catch {
     return { statusCode: 401, body: 'bad signature' };
   }

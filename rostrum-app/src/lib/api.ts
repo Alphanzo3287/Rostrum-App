@@ -571,6 +571,15 @@ export function subscribeTally(debateId: string, onChange: (t: Tally) => void) {
     .subscribe());
 }
 
+/* Fires whenever any debate row changes (status flips to live/ended, viewer
+   count updates, etc.) so the lobby can refresh instantly instead of waiting
+   for the poll. */
+export function subscribeDebatesList(onChange: () => void) {
+  return safeSub(() => supabase.channel(`debates-list:${uniq()}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'debates' }, () => onChange())
+    .subscribe());
+}
+
 export function subscribeParticipants(debateId: string, onChange: () => void) {
   return safeSub(() => supabase.channel(`participants:${debateId}:${uniq()}`)
     .on('postgres_changes',
