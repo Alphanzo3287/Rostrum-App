@@ -86,8 +86,12 @@ export function useRoom(debateId: string | null): UseRoom {
       setCanPublish(cp);
 
       // dynacast pauses a track when it has no subscribers — which kills the
-      // camera when you're testing alone. Keep tracks publishing.
-      room = new Room({ adaptiveStream: true, dynacast: false });
+      // camera when you're testing alone. adaptiveStream pauses a remote track
+      // when it isn't attached to a visible element, so a participant who
+      // wasn't on-screen (e.g. the host in Oxford) has paused video that fails
+      // to resume when spotlighted — viewers see black. Disable both so any
+      // subscribed track always delivers frames.
+      room = new Room({ adaptiveStream: false, dynacast: false });
       roomRef.current = room;
 
       const resync = () => room && sync(room);
