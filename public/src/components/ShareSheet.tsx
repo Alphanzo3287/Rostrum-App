@@ -5,7 +5,7 @@
 // debate out via the system share sheet, social, messaging, or email.
 // =====================================================================
 import { useState } from 'react';
-import { C, ui, mono, display, solidGold } from '../lib/theme';
+import { C, ui, mono, display, solidGold, a } from '../lib/theme';
 
 type Target = { key: string; label: string; tint: string; href: (u: string, t: string) => string };
 
@@ -53,7 +53,7 @@ function ShareModal({ url, title, text, onClose }: { url: string; title?: string
   }
 
   return (
-    <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.62)',
+    <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:1000, background:a(C.base,'9E'),
       display:'grid', placeItems:'center', padding:18, backdropFilter:'blur(3px)' }}>
       <div onClick={e => e.stopPropagation()} style={{ width:'100%', maxWidth:420, background:C.panel,
         border:`1px solid ${C.hairHi}`, borderRadius:14, padding:'20px 20px 22px', boxShadow:'0 24px 70px rgba(0,0,0,0.6)' }}>

@@ -13,7 +13,7 @@ import {
 } from '../lib/api';
 import { rasterizeToImages } from '../lib/deck';
 import { publishBcastControl } from '../lib/livekit';
-import { C, ui } from '../lib/theme';
+import { C, ui, a } from '../lib/theme';
 
 type Role = 'host' | 'moderator' | 'debater' | 'judge' | 'audience';
 
@@ -28,9 +28,11 @@ const LAYOUTS: { key: BcastLayout; label: string; needsScreen?: boolean }[] = [
   { key: 'cinema',    label: 'Cinema', needsScreen: true },
 ];
 
-export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScreenShare }: {
+export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScreenShare, onLocalState, hidePresentSlides }: {
   debateId: string; role: Role; identity: string; members: any[]; lkRoom?: any;
   setScreenShare?: (on: boolean) => Promise<boolean>;
+  onLocalState?: (patch: Partial<BroadcastState>) => void;
+  hidePresentSlides?: boolean;
 }) {
   const [bs, setBs] = useState<BroadcastState>({ layout: 'solo', stageId: null, slidesOn: false, presenterId: null, presentType: null, presentRequest: null });
   const [busy, setBusy] = useState(false);
@@ -50,6 +52,7 @@ export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScr
   function pushLayout(layout: BcastLayout) {
     if (!isHost) return;
     setBs(b => ({ ...b, layout }));
+    onLocalState?.({ layout });
     publishBcastControl(lkRoom, { layout });
     setBroadcastState(debateId, { layout }).catch(() => {});
   }
@@ -57,6 +60,7 @@ export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScr
   async function grantPresenter(id: string | null, type: 'slides' | 'screen' = 'slides') {
     if (!isHost) return;
     setBs(b => ({ ...b, presenterId: id, presentType: id ? type : null }));
+    onLocalState?.({ presenterId: id, presentType: id ? type : null });
     publishBcastControl(lkRoom, { presenterId: id, presentType: id ? type : null });
     try { await setPresenter(debateId, id, type); } catch (e: any) { alert(e?.message ?? 'Could not set presenter'); }
   }
@@ -65,10 +69,12 @@ export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScr
     setBusy(true);
     try {
       await uploadDeck(debateId, await rasterizeToImages(files));
+      const pid = bs.presenterId ?? identity;
       // If I'm the granted presenter (or host), make my slides the screen source.
       if (isHost && !bs.presenterId) await setPresenter(debateId, identity, 'slides');
-      publishBcastControl(lkRoom, { deckChanged: true, presentType: 'slides',
-        presenterId: bs.presenterId ?? identity });
+      setBs(b => ({ ...b, presenterId: pid, presentType: 'slides' }));
+      onLocalState?.({ presenterId: pid, presentType: 'slides' });
+      publishBcastControl(lkRoom, { deckChanged: true, presentType: 'slides', presenterId: pid });
       // Nudge layout to a screen layout so it's visible.
       if (isHost) pushLayout('news');
     } catch (e: any) { alert(e?.message ?? 'Upload failed'); }
@@ -99,7 +105,7 @@ export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScr
 
   return (
     <div style={{ borderTop:`1px solid ${C.hair}`, padding:'10px 14px', display:'flex', flexDirection:'column', gap:9,
-      fontFamily:ui, background:'rgba(12,11,13,0.6)' }}>
+      fontFamily:ui, background:a(C.base,'99') }}>
 
       {/* Layout strip (host only) */}
       {isHost && (
@@ -113,7 +119,7 @@ export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScr
                 onClick={() => pushLayout(l.key)}
                 style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3, padding:'5px 7px',
                   borderRadius:7, cursor:'pointer', border:`1px solid ${on ? C.gold : C.hair}`,
-                  background: on ? `${C.gold}1f` : 'transparent', opacity: dimmed ? 0.5 : 1 }}>
+                  background: on ? `${a(C.gold,'1f')}` : 'transparent', opacity: dimmed ? 0.5 : 1 }}>
                 <LayoutGlyph kind={l.key} on={on} />
                 <span style={{ fontSize:9.5, fontWeight:600, color: on ? C.gold : C.dim }}>{l.label}</span>
               </button>
@@ -130,9 +136,11 @@ export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScr
         {/* Present button — host always; debaters only once granted */}
         {(isHost || iAmPresenter) && (
           <>
-            <Btn onClick={() => deckRef.current?.click()} disabled={busy}>
-              {busy ? 'Uploading…' : '⊞ Present slides'}
-            </Btn>
+            {!hidePresentSlides && (
+              <Btn onClick={() => deckRef.current?.click()} disabled={busy}>
+                {busy ? 'Uploading…' : '⊞ Present slides'}
+              </Btn>
+            )}
             {setScreenShare && <Btn onClick={startScreenShare}>🖵 Share screen</Btn>}
           </>
         )}
@@ -163,7 +171,7 @@ export function BroadcastBar({ debateId, role, identity, members, lkRoom, setScr
       </div>
 
       {/* Host: grant a specific debater the floor to present */}
-      {isHost && !bs.presenterId && (
+      {!hidePresentSlides && isHost && !bs.presenterId && (
         <div style={{ display:'flex', alignItems:'center', gap:7, flexWrap:'wrap' }}>
           <span style={{ fontSize:10.5, color:C.faint }}>Let present:</span>
           {members.filter(m => ['debater','moderator'].includes(m.role)).map(m => (

@@ -17,14 +17,21 @@ import {
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
 import { ScreenTile } from '../components/ScreenTile';
-import { C, ui, display, mono } from '../lib/theme';
+import { SafePanel } from '../components/SafePanel';
+import { WinnerOverlay } from '../components/WinnerOverlay';
+import { C, ui, display, mono, a } from '../lib/theme';
 
-/* ───────────── error boundary: never leave YouTube on a black screen ──── */
-class BroadcastBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
-  constructor(p: any) { super(p); this.state = { failed: false }; }
+/* ───────────── error boundary: never leave YouTube on a black screen ────
+   Resets ONLY when resetKey changes (e.g. phase/layout/presenter shifts), so
+   a transient throw recovers cleanly without an infinite catch→retry loop. */
+class BroadcastBoundary extends Component<{ children: ReactNode; resetKey: string }, { failed: boolean; key: string }> {
+  constructor(p: any) { super(p); this.state = { failed: false, key: p.resetKey }; }
   static getDerivedStateFromError() { return { failed: true }; }
+  static getDerivedStateFromProps(props: any, state: any) {
+    if (props.resetKey !== state.key) return { failed: false, key: props.resetKey };
+    return null;
+  }
   componentDidCatch(e: any) { console.error('broadcast render error:', e); }
-  componentDidUpdate() { /* auto-recover on next state change */ if (this.state.failed) this.setState({ failed: false }); }
   render() {
     if (this.state.failed) {
       return (
@@ -41,7 +48,11 @@ class BroadcastBoundary extends Component<{ children: ReactNode }, { failed: boo
 }
 
 export function BroadcastScreen() {
-  return <BroadcastBoundary><BroadcastInner /></BroadcastBoundary>;
+  // resetKey lets the boundary recover when the broadcast meaningfully changes,
+  // without retrying on every render (which would loop on a hard error).
+  const [k, setK] = useState(0);
+  useEffect(() => { const t = setInterval(() => setK(v => v + 1), 4000); return () => clearInterval(t); }, []);
+  return <BroadcastBoundary resetKey={String(k)}><BroadcastInner /></BroadcastBoundary>;
 }
 
 function BroadcastInner() {
@@ -160,6 +171,14 @@ function BroadcastInner() {
               <span style={{ fontSize:11, fontWeight:800, color:'#ff5a5a', letterSpacing:'.08em' }}>LIVE</span>
             </div>
           )}
+          {dz.debate?.poll_open && (
+            <div style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 11px', borderRadius:999,
+              background:`${a(C.jade,'18')}`, border:`1px solid ${a(C.jade,'60')}` }}>
+              <span style={{ width:7, height:7, borderRadius:'50%', background:C.jade,
+                boxShadow:`0 0 6px ${C.jade}`, animation:'pulse 1.5s infinite' }} />
+              <span style={{ fontSize:11, fontWeight:800, color:C.jadeHi, letterSpacing:'.08em' }}>VOTING</span>
+            </div>
+          )}
           {!assembling && (
             <div style={{ fontFamily:mono, fontSize:22, fontWeight:700,
               color: low ? C.garnetHi : C.ink, letterSpacing:'.04em', minWidth:78, textAlign:'right' }}>
@@ -174,14 +193,18 @@ function BroadcastInner() {
         ? <BroadcastAssembly host={host} prop={prop} opp={opp}
             mod={members.find(m => m.role === 'moderator')}
             judges={members.filter(m => m.role === 'judge')} audience={audience} />
+        : cams.length === 0 && !hasScreenSource
+        ? <BroadcastStandby motion={dz.debate?.motion} segLabel={dz.seg?.label} />
         : (
           <div style={{ flex:1, display:'flex', gap:12, padding:'4px 18px 12px', overflow:'hidden' }}>
             {/* Stage */}
             <div style={{ flex: (layout==='group'||layout==='cinema') ? '1 1 100%' : '1 1 72%',
               display:'flex', gap:12, minWidth:0 }}>
-              <Stage layout={layout} featured={featured} debateId={debateId}
-                cams={cams} presenter={presenter} screenTrack={screenTrack}
-                presentType={bs.presentType} hasScreenShare={hasScreenShare} hasSlides={hasSlides} />
+              <SafePanel resetKey={`${layout}:${bs.presenterId ?? ''}:${hasScreenSource}`} label="Stage" fill>
+                <Stage layout={layout} featured={featured} debateId={debateId}
+                  cams={cams} presenter={presenter} screenTrack={screenTrack}
+                  presentType={bs.presentType} hasScreenShare={hasScreenShare} hasSlides={hasSlides} />
+              </SafePanel>
             </div>
             {/* Name plates (hidden for full-bleed layouts) */}
             {layout!=='group' && layout!=='cinema' && (
@@ -215,6 +238,21 @@ function BroadcastInner() {
         </div>
       )}
 
+      {/* Winner reveal overlay — YouTube viewers see this live */}
+      {dz.debate?.winner_announced && dz.results && (
+        <div style={{ position:'absolute', inset:0, zIndex:100 }}>
+          <WinnerOverlay
+            winnerSide={dz.results.winner_side}
+            winMode={dz.debate.win_mode ?? 'public'}
+            peoplesChoice={dz.results.peoples_choice_side}
+            propScore={dz.results.prop_judge_total}
+            oppScore={dz.results.opp_judge_total}
+            propAudience={dz.results.prop_audience}
+            oppAudience={dz.results.opp_audience}
+          />
+        </div>
+      )}
+
       {/* footer */}
       <div style={{ flex:'0 0 auto', padding:'7px 22px', textAlign:'center',
         background:'rgba(0,0,0,0.4)', borderTop:`1px solid ${C.hair}` }}>
@@ -224,6 +262,26 @@ function BroadcastInner() {
       </div>
 
       <style>{`@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.3 } }`}</style>
+    </div>
+  );
+}
+
+/* ───────────── branded standby — shown instead of a black frame ──────── */
+function BroadcastStandby({ motion, segLabel }: { motion?: string; segLabel?: string }) {
+  return (
+    <div style={{ flex:1, display:'grid', placeItems:'center', textAlign:'center', padding:24 }}>
+      <div>
+        <div style={{ fontFamily:display, fontSize:40, fontWeight:800, color:C.gold, marginBottom:14 }}>The Rostrum</div>
+        {motion && <div style={{ fontFamily:display, fontSize:24, fontWeight:600, color:C.ink, marginBottom:10, maxWidth:760 }}>{motion}</div>}
+        <div style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'8px 16px', borderRadius:999,
+          border:`1px solid ${C.hair}`, background:'rgba(255,255,255,0.03)' }}>
+          <span style={{ width:8, height:8, borderRadius:'50%', background:C.gold,
+            animation:'pulse 1.4s ease-in-out infinite' }} />
+          <span style={{ fontFamily:ui, fontSize:13, color:C.dim, letterSpacing:'.04em' }}>
+            {segLabel ? `${segLabel} — connecting the floor…` : 'The debate is starting…'}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -294,7 +352,7 @@ function Stage({ layout, featured, debateId, cams, presenter, screenTrack, prese
         <Panel>
           {ScreenContent}
           {screenCam && (
-            <div style={{ position:'absolute', bottom:14, right:14, width:220, height:124, borderRadius:10,
+            <div style={{ position:'absolute', bottom:14, right:14, width:150, height:84, borderRadius:9,
               overflow:'hidden', border:`2px solid ${tone(screenCam.side)}`, boxShadow:'0 8px 24px rgba(0,0,0,0.55)' }}>
               <VideoTile member={screenCam} active size="tile" />
             </div>

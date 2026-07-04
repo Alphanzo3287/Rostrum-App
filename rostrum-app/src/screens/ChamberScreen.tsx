@@ -999,6 +999,9 @@ function LiveHall({
   const mod = members.find(m => m.role === 'moderator');
   const judges = members.filter(m => m.role === 'judge');
   const audience = members.filter(m => m.role === 'audience');
+  // An explicit spotlight (host/mod featured someone) takes over the floor for
+  // everyone — synced via bs.stageId, so all accounts see the same thing.
+  const spotlit = bs.stageId ? members.find(m => m.identity === bs.stageId) : undefined;
 
   const segTotal = dz.segments?.[dz.segIdx]?.duration_secs ?? 0;
   const phaseLabel = dz.seg?.label ?? 'In session';
@@ -1053,7 +1056,9 @@ function LiveHall({
       </div>
     )
     : <FloorStage roundLabel={phaseLabel} countdown={countdown} hasFloorSide={speakerSide}
-        presenting={presentingContent} presenterName={presenter?.name}>{overlays}</FloorStage>;
+        presenting={presentingContent} presenterName={presenter?.name}
+        spotlight={spotlit ? <VideoTile member={spotlit} active size="stage" /> : undefined}
+        spotlightName={spotlit?.name}>{overlays}</FloorStage>;
 
   const propCard = (
     <CompetitorCard side="prop" member={propMember} profile={sideProfiles.prop}

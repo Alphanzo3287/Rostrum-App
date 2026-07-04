@@ -4,7 +4,7 @@
 //   supabase gen types typescript --project-id <ref> > src/lib/types.ts
 // =====================================================================
 
-export type DebateFormat = 'oxford' | 'cross_exam' | 'lincoln_douglas' | 'town_hall' | 'freestyle';
+export type DebateFormat = 'oxford' | 'cross_exam' | 'lincoln_douglas' | 'town_hall' | 'freestyle' | 'lecture' | 'legacy' | 'speakers_corner';
 export type DebateStatus = 'draft' | 'scheduled' | 'assembly' | 'live' | 'ended' | 'cancelled';
 export type Visibility   = 'public' | 'unlisted' | 'private';
 export type DebateRole   = 'host' | 'moderator' | 'debater' | 'judge' | 'audience';
@@ -64,6 +64,13 @@ export interface Debate {
   segment_paused_secs: number | null;
   // joined for convenience
   host?: Pick<Profile, 'display_name' | 'handle' | 'avatar_url'>;
+  // winner system
+  win_mode?: string;
+  poll_open?: boolean;
+  winner_announced?: boolean;
+  // capacity controls (Legacy / Speakers' Corner)
+  max_stage_seats: number | null;
+  max_moderators: number | null;
 }
 
 export interface Segment { id: string; debate_id: string; idx: number; label: string; side: Side | null; duration_secs: number; }
@@ -73,6 +80,7 @@ export interface DebateResult {
   debate_id: string; winner_side: Side | null;
   prop_judge_total: number; opp_judge_total: number;
   prop_audience: number; opp_audience: number; decided_at: string;
+  peoples_choice_side?: Side | null;
 }
 export interface Question { id: string; debate_id: string; asker_id: string; body: string; status: QuestionStatus; created_at: string; }
 export interface Team {

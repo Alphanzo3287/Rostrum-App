@@ -58,7 +58,7 @@ export async function unreadTotal(): Promise<number> {
   return (data as number) ?? 0;
 }
 export function subscribeMessages(cid: string, onInsert: (m: DMessage) => void) {
-  const ch = supabase.channel(`messages:${cid}`)
+  const ch = supabase.channel(`messages:${cid}:${Math.random().toString(36).slice(2)}`)
     .on('postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${cid}` },
       (p: any) => onInsert(p.new as DMessage))

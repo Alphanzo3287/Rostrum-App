@@ -56,6 +56,7 @@ export function useRoom(debateId: string | null): UseRoom {
       const md = meta(p);
       const cam: TrackPublication | undefined = p.getTrackPublication(Track.Source.Camera);
       const mic: TrackPublication | undefined = p.getTrackPublication(Track.Source.Microphone);
+      const scr: TrackPublication | undefined = p.getTrackPublication(Track.Source.ScreenShare);
       return {
         identity: p.identity,
         name: p.name || 'Guest',
@@ -69,6 +70,7 @@ export function useRoom(debateId: string | null): UseRoom {
         camOn: !!cam && !cam.isMuted,
         videoTrack: cam?.track ?? undefined,
         audioTrack: mic?.track ?? undefined,
+        screenTrack: scr?.track ?? undefined,
       };
     }));
   }, []);
@@ -100,6 +102,7 @@ export function useRoom(debateId: string | null): UseRoom {
         .on(RoomEvent.LocalTrackPublished, resync)
         .on(RoomEvent.LocalTrackUnpublished, resync)
         .on(RoomEvent.ActiveSpeakersChanged, resync)
+        .on(RoomEvent.ParticipantMetadataChanged, resync)
         // host may flip our publish permission mid-session (segment gating)
         .on(RoomEvent.ParticipantPermissionsChanged, () => {
           if (room) setCanPublish(room.localParticipant.permissions?.canPublish ?? false);

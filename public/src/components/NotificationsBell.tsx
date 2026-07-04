@@ -59,7 +59,7 @@ export function NotificationsBell() {
         <>
           <div onClick={() => setOpen(false)} style={{ position:'fixed', inset:0, zIndex:40 }} />
           <div style={{ position:'absolute', top:40, right:0, width:330, maxHeight:430, overflowY:'auto', zIndex:50,
-            background:C.panel, border:`1px solid ${C.hairHi}`, borderRadius:12, boxShadow:'0 20px 60px rgba(0,0,0,0.55)' }}>
+            background:C.panel, border:`1px solid ${C.hairHi}`, borderRadius:12, boxShadow:'0 20px 60px rgba(0,0,0,0.35)' }}>
             <div style={{ padding:'13px 15px', borderBottom:`1px solid ${C.hair}`, position:'sticky', top:0,
               background:C.panel }}>
               <span style={{ fontFamily:display, fontSize:17, color:C.ink }}>Notifications</span>

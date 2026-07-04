@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { getDebate, getRsvp, setRsvp, clearRsvp, startDebate, subscribeDebate, type RsvpInfo } from '../lib/api';
 import type { Debate } from '../lib/types';
 import { useAuth } from '../lib/auth';
-import { C, ui, display, mono, solidGold } from '../lib/theme';
+import { C, ui, display, mono, solidGold, a } from '../lib/theme';
 import { Avatar } from '../components/ui';
 import { ShareButton } from '../components/ShareSheet';
 
@@ -76,7 +76,7 @@ export function ScheduledScreen({ debateId, onBack, onStarted }: {
 
         <div style={{ marginTop:18, borderRadius:14, overflow:'hidden', border:`1px solid ${C.hair}`, background:C.panel }}>
           <div style={{ position:'relative', height:180, background: d.thumbnail_url ? '#000'
-            : `linear-gradient(150deg, ${C.gold}26, ${C.base} 75%)` }}>
+            : `linear-gradient(150deg, ${a(C.gold,'26')}, ${C.base} 75%)` }}>
             {d.thumbnail_url && <img src={d.thumbnail_url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />}
             <span style={{ position:'absolute', top:14, left:14, fontFamily:ui, fontSize:10.5, fontWeight:700,
               letterSpacing:'1.5px', textTransform:'uppercase', color:C.base, background:C.gold, padding:'4px 10px', borderRadius:4 }}>

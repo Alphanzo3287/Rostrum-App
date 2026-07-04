@@ -3,13 +3,14 @@
 // Browse + create teams; open one to manage its roster. Admin controls
 // (add by @handle, promote/demote, remove) show only for owner/admin.
 // =====================================================================
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../lib/auth';
 import {
-  listTeams, createTeam, listTeamMembers, addTeamMember, setTeamRole, removeTeamMember, getProfile,
+  listTeams, createTeam, listTeamMembers, setTeamRole, removeTeamMember, getProfile,
+  inviteToTeam, listMyTeamInvites, acceptTeamInvite, declineTeamInvite, uploadTeamCrest, type TeamInvite,
 } from '../lib/api';
 import type { Team, TeamMember, Profile, TeamRole } from '../lib/types';
-import { C, ui, display, mono, solidGold, field } from '../lib/theme';
+import { C, ui, display, mono, solidGold, field, a } from '../lib/theme';
 import { Avatar, Scroll, Empty, ghostBtn } from '../components/ui';
 
 const COLORS = ['#2E9E86', '#B23A55', '#D9B45C', '#5B7CFA', '#C0653A', '#7A4BB0'];
@@ -20,11 +21,38 @@ export function TeamsScreen({ onBack, onOpenProfile }: {
   const { profile: me } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
   const [sel, setSel] = useState<Team | null>(null);
+  const [invites, setInvites] = useState<TeamInvite[]>([]);
   const refresh = () => listTeams().then(setTeams);
-  useEffect(() => { refresh(); }, []);
+  const refreshInvites = () => listMyTeamInvites().then(setInvites).catch(() => {});
+  useEffect(() => { refresh(); refreshInvites(); }, []);
 
   return (
     <Scroll title="Teams" onBack={onBack} maxWidth={1040}>
+      {invites.length > 0 && (
+        <div style={{ marginBottom:18, padding:'16px 18px', borderRadius:14, background:a(C.gold,'0F'), border:`1px solid ${a(C.gold,'44')}` }}>
+          <div style={{ fontFamily:ui, fontSize:11, fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', color:C.goldHi, marginBottom:10 }}>
+            Team invites</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {invites.map(inv => (
+              <div key={inv.id} style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+                <span style={{ width:34, height:34, borderRadius:8, display:'grid', placeItems:'center', flexShrink:0,
+                  background:`${inv.team?.color ?? C.gold}22`, border:`1px solid ${inv.team?.color ?? C.gold}66`,
+                  color:inv.team?.color ?? C.gold, fontFamily:display, fontWeight:700, fontSize:12 }}>{inv.team?.tag ?? '?'}</span>
+                <div style={{ flex:1, minWidth:160 }}>
+                  <div style={{ fontFamily:ui, fontSize:13.5, color:C.ink }}>
+                    <strong>{inv.team?.name ?? 'A team'}</strong></div>
+                  <div style={{ fontFamily:ui, fontSize:11.5, color:C.faint }}>
+                    Invited by {inv.inviter?.display_name ?? 'someone'}</div>
+                </div>
+                <button onClick={async () => { try { await acceptTeamInvite(inv.id); await Promise.all([refresh(), refreshInvites()]); } catch (e: any) { alert(e?.message ?? 'Could not accept'); } }}
+                  style={{ ...solidGold, padding:'7px 14px', fontSize:12.5 }}>Accept</button>
+                <button onClick={async () => { try { await declineTeamInvite(inv.id); await refreshInvites(); } catch (e: any) { alert(e?.message ?? 'Could not decline'); } }}
+                  style={{ ...ghostBtn, padding:'7px 14px', fontSize:12.5 }}>Decline</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div style={{ display:'grid', gridTemplateColumns:'minmax(0,1fr) minmax(0,1.3fr)', gap:18, alignItems:'start' }}>
         {/* left: list + create */}
         <div>
@@ -98,11 +126,21 @@ function Roster({ team, meId, onOpenProfile, onChanged }: {
   const [members, setMembers] = useState<(TeamMember & { profile: Profile })[]>([]);
   const [handle, setHandle] = useState('');
   const [busy, setBusy] = useState(false);
+  const [crestUrl, setCrestUrl] = useState(team.crest_url);
+  const [crestBusy, setCrestBusy] = useState(false);
+  const crestRef = useRef<HTMLInputElement>(null);
   const load = () => listTeamMembers(team.id).then(setMembers);
   useEffect(() => { load(); }, [team.id]);
 
   const myRole = members.find(m => m.user_id === meId)?.role;
   const canAdmin = myRole === 'owner' || myRole === 'admin';
+
+  async function changeCrest(file: File) {
+    setCrestBusy(true);
+    try { setCrestUrl(await uploadTeamCrest(team.id, file)); }
+    catch (e: any) { alert(e?.message ?? 'Could not upload logo'); }
+    finally { setCrestBusy(false); if (crestRef.current) crestRef.current.value = ''; }
+  }
 
   async function add() {
     const h = handle.replace(/^@/, '').trim();
@@ -111,9 +149,10 @@ function Roster({ team, meId, onOpenProfile, onChanged }: {
     try {
       const p = await getProfile(h);
       if (!p) throw new Error(`No debater @${h}`);
-      await addTeamMember(team.id, p.id);
-      setHandle(''); await load(); onChanged();
-    } catch (e: any) { alert(e?.message ?? 'Could not add'); }
+      await inviteToTeam(team.id, p.id);
+      setHandle('');
+      alert(`Invite sent to @${h}.`);
+    } catch (e: any) { alert(e?.message ?? 'Could not invite'); }
     finally { setBusy(false); }
   }
   async function cycleRole(m: TeamMember) {
@@ -127,19 +166,32 @@ function Roster({ team, meId, onOpenProfile, onChanged }: {
   return (
     <div style={{ padding:'20px 20px', borderRadius:12, border:`1px solid ${C.hair}`, background:C.panel }}>
       <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-        <span style={{ width:46, height:46, borderRadius:9, display:'grid', placeItems:'center', flexShrink:0,
-          background:`${team.color}22`, border:`1px solid ${team.color}66`, color:team.color, fontFamily:display, fontWeight:700 }}>{team.tag}</span>
-        <div>
+        {crestUrl ? (
+          <img src={crestUrl} alt="" style={{ width:46, height:46, borderRadius:9, objectFit:'cover', flexShrink:0,
+            border:`1px solid ${team.color}66` }} />
+        ) : (
+          <span style={{ width:46, height:46, borderRadius:9, display:'grid', placeItems:'center', flexShrink:0,
+            background:`${team.color}22`, border:`1px solid ${team.color}66`, color:team.color, fontFamily:display, fontWeight:700 }}>{team.tag}</span>
+        )}
+        <div style={{ flex:1 }}>
           <div style={{ fontFamily:display, fontSize:22, fontWeight:600, color:C.ink }}>{team.name}</div>
           <div style={{ fontFamily:mono, fontSize:12, color:C.faint }}>{team.wins}W {team.losses}L · {team.member_count} members</div>
         </div>
+        {canAdmin && (
+          <>
+            <input ref={crestRef} type="file" accept="image/*" style={{ display:'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) changeCrest(f); }} />
+            <button onClick={() => crestRef.current?.click()} disabled={crestBusy}
+              style={{ ...ghostBtn, fontSize:12, padding:'7px 12px' }}>{crestBusy ? '…' : (crestUrl ? 'Change logo' : '+ Add logo')}</button>
+          </>
+        )}
       </div>
 
       {canAdmin && (
         <div style={{ display:'flex', gap:8, marginBottom:16 }}>
           <input value={handle} onChange={e => setHandle(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()}
-            placeholder="Add by @handle" style={{ ...field, fontSize:13 }} />
-          <button onClick={add} disabled={busy} style={{ ...solidGold, padding:'0 14px' }}>{busy ? '…' : 'Add'}</button>
+            placeholder="Invite by @handle" style={{ ...field, fontSize:13 }} />
+          <button onClick={add} disabled={busy} style={{ ...solidGold, padding:'0 14px' }}>{busy ? '…' : 'Invite'}</button>
         </div>
       )}
 
@@ -154,7 +206,7 @@ function Roster({ team, meId, onOpenProfile, onChanged }: {
             {canAdmin && m.role !== 'owner' && (
               <>
                 <button onClick={() => cycleRole(m)} style={{ ...miniBtn }}>{m.role === 'admin' ? 'Make member' : 'Make admin'}</button>
-                <button onClick={() => remove(m)} style={{ ...miniBtn, color:C.garnetHi, borderColor:`${C.garnet}66` }}>Remove</button>
+                <button onClick={() => remove(m)} style={{ ...miniBtn, color:C.garnetHi, borderColor:`${a(C.garnet,'66')}` }}>Remove</button>
               </>
             )}
           </div>
