@@ -1058,7 +1058,7 @@ function LiveHall({
     : <FloorStage roundLabel={phaseLabel} countdown={countdown} hasFloorSide={speakerSide}
         presenting={presentingContent} presenterName={presenter?.name}
         spotlight={spotlit ? <VideoTile member={spotlit} active size="stage" /> : undefined}
-        spotlightName={spotlit?.name}>{overlays}</FloorStage>;
+        spotlightName={spotlit ? `${spotlit.name} · cam:${spotlit.camOn ? 'ON' : 'off'} · trk:${spotlit.videoTrack ? 'yes' : 'NO'} · ${spotlit.role}` : undefined}>{overlays}</FloorStage>;
 
   const propCard = (
     <CompetitorCard side="prop" member={propMember} profile={sideProfiles.prop}
