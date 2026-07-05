@@ -191,8 +191,8 @@ export function FloorStage({ roundLabel, countdown, hasFloorSide, assembling, ch
 
   if (!presenting && spotlight) {
     return (
-      <div style={{ position: 'relative', borderRadius: 18, overflow: 'hidden', minHeight: 0,
-        display: 'flex', border: `1px solid ${C.hair}`, background: '#000' }}>
+      <div style={{ position: 'relative', borderRadius: 18, overflow: 'hidden',
+        width: '100%', aspectRatio: '16 / 9', border: `1px solid ${C.hair}`, background: '#000' }}>
         <div style={{ position: 'absolute', inset: 0 }}>{spotlight}</div>
         <span style={{ position: 'absolute', top: 10, left: 10, zIndex: 2, padding: '4px 11px', borderRadius: 999,
           background: a('#000000', 'A6'), border: `1px solid ${C.hairHi}`,
@@ -207,8 +207,8 @@ export function FloorStage({ roundLabel, countdown, hasFloorSide, assembling, ch
 
   if (presenting) {
     return (
-      <div style={{ position: 'relative', borderRadius: 18, overflow: 'hidden', minHeight: 0,
-        display: 'flex', border: `1px solid ${C.hair}`, background: '#000' }}>
+      <div style={{ position: 'relative', borderRadius: 18, overflow: 'hidden',
+        width: '100%', aspectRatio: '16 / 9', border: `1px solid ${C.hair}`, background: '#000' }}>
         <div style={{ position: 'absolute', inset: 0 }}>{presenting}</div>
         <span style={{ position: 'absolute', top: 10, left: 10, zIndex: 2, padding: '4px 11px', borderRadius: 999,
           background: a('#000000', 'A6'), border: `1px solid ${C.hairHi}`,

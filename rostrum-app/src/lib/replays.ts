@@ -30,7 +30,7 @@ export async function myReplays(): Promise<ReplayItem[]> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
   const { data, error } = await supabase.from('debates')
-    .select('id, title, format, status, created_at, recording_visibility, host_id')
+    .select('id, title:motion, format, status, created_at, recording_visibility, host_id')
     .eq('host_id', user.id).not('recording_url', 'is', null)
     .order('created_at', { ascending: false });
   if (error) throw error;
@@ -40,7 +40,7 @@ export async function myReplays(): Promise<ReplayItem[]> {
 /** A user's PUBLIC replays — for their profile. */
 export async function publicReplaysOf(hostId: string): Promise<ReplayItem[]> {
   const { data, error } = await supabase.from('debates')
-    .select('id, title, format, status, created_at, recording_visibility, host_id')
+    .select('id, title:motion, format, status, created_at, recording_visibility, host_id')
     .eq('host_id', hostId).eq('recording_visibility', 'public')
     .not('recording_url', 'is', null)
     .order('created_at', { ascending: false }).limit(24);

@@ -51,7 +51,7 @@ export const handler: Handler = async (event) => {
   if (!action || !debateId) return json(400, { error: 'action and debateId required' });
 
   const { data: debate } = await supabaseAdmin.from('debates')
-    .select('id, host_id, title, recording_url, recording_visibility')
+    .select('id, host_id, title:motion, recording_url, recording_visibility')
     .eq('id', debateId).maybeSingle();
   if (!debate) return json(404, { error: 'debate not found' });
 
