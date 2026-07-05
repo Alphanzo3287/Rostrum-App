@@ -42,6 +42,8 @@ import { ModerationScreen } from './screens/ModerationScreen';
 import { BannedScreen } from './screens/BannedScreen';
 import { AdminPortalScreen } from './screens/AdminPortalScreen';
 import { BackOfficeScreen } from './screens/BackOfficeScreen';
+import { LibraryScreen } from './screens/LibraryScreen';
+import { ReplayScreen } from './screens/ReplayScreen';
 import { getDebate, getMyBan } from './lib/api';
 import { hasPaidDebateEntry, startDebateEntryCheckout } from './lib/payments';
 import type { DebateRole, Side } from './lib/types';
@@ -115,7 +117,8 @@ function Gate() {
         <Route path="communities" element={<ComingSoonRoute title="Communities" subtitle="Find your tribe. Join debate communities by topic, school, or interest." />} />
         <Route path="discover" element={<DiscoverScreen />} />
         <Route path="live" element={<ComingSoonRoute title="Live Arenas" subtitle="All live debates, all the time. Watch what's happening right now." />} />
-        <Route path="library" element={<ComingSoonRoute title="Library" subtitle="Your saved debates, watched history, and personal collections." />} />
+        <Route path="library" element={<LibraryScreen />} />
+        <Route path="replay/:id" element={<ReplayScreen />} />
         <Route path="notifications" element={<NotificationsScreen />} />
         {isAdmin && <Route path="moderation" element={<ModerationRoute />} />}
         {isAdmin && <Route path="admin" element={<AdminPortalRoute />} />}

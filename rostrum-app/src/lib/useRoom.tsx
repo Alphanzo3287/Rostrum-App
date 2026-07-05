@@ -52,6 +52,15 @@ export function useRoom(debateId: string | null): UseRoom {
 
   const sync = useCallback((room: Room) => {
     const all: Participant[] = [room.localParticipant, ...room.remoteParticipants.values()];
+    // Belt-and-braces: explicitly subscribe to every remote camera/mic
+    // publication. autoSubscribe should do this, but a publication that
+    // slipped through (e.g. published before permissions settled) stays
+    // unsubscribed forever — the spotlighted host renders black for viewers.
+    for (const p of room.remoteParticipants.values()) {
+      for (const pub of p.trackPublications.values()) {
+        try { if (!pub.isSubscribed && (pub as any).setSubscribed) (pub as any).setSubscribed(true); } catch { /* noop */ }
+      }
+    }
     setMembers(all.map((p) => {
       const md = meta(p);
       const cam: TrackPublication | undefined = p.getTrackPublication(Track.Source.Camera);

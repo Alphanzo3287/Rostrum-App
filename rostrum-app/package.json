@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.680.0",
+    "@aws-sdk/s3-request-presigner": "^3.680.0",
     "@supabase/supabase-js": "^2.45.4",
     "livekit-client": "^2.5.7",
     "pdfjs-dist": "^4.7.76",
