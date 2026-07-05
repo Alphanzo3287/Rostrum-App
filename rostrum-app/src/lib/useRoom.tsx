@@ -101,6 +101,8 @@ export function useRoom(debateId: string | null): UseRoom {
         .on(RoomEvent.ParticipantDisconnected, resync)
         .on(RoomEvent.TrackSubscribed, (_t: RemoteTrack) => resync())
         .on(RoomEvent.TrackUnsubscribed, resync)
+        .on(RoomEvent.TrackPublished, resync)
+        .on(RoomEvent.TrackUnpublished, resync)
         .on(RoomEvent.TrackMuted, resync)
         .on(RoomEvent.TrackUnmuted, resync)
         .on(RoomEvent.LocalTrackPublished, resync)

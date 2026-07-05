@@ -25,12 +25,15 @@ export function VideoTile({ member, active, size = 'tile' }: {
   const vref = useRef<HTMLVideoElement>(null);
   const aref = useRef<HTMLAudioElement>(null);
 
-  // attach / detach the camera track
+  // attach / detach the camera track. Must depend on camOn too: the <video>
+  // element only exists while camOn is true, so if the camera turns on AFTER
+  // the track is already known (e.g. a host who wasn't on stage, then gets
+  // spotlighted), the element mounts and we need to re-run to attach to it.
   useEffect(() => {
     const el = vref.current;
     const t = member.videoTrack;
     if (el && t) { t.attach(el); return () => { t.detach(el); }; }
-  }, [member.videoTrack]);
+  }, [member.videoTrack, member.camOn]);
 
   // attach remote audio (skip our own to avoid echo)
   useEffect(() => {
