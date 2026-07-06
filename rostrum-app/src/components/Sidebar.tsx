@@ -32,6 +32,7 @@ const BellIcon = () => <Icon d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.
 const MessagesIcon = () => <Icon d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z" />;
 const WalletIcon = () => <Icon d="M21 12V7H5a2 2 0 0 1 0-4h14v4M3 5v14a2 2 0 0 0 2 2h16v-5M18 12a2 2 0 0 0 0 4h4v-4z" />;
 const StoreIcon = () => <Icon d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0" />;
+const AnalyticsIcon = () => <Icon d="M3 3v18h18M7 15l4-4 3 3 5-6" />;
 const MenuIcon = () => <Icon d="M3 6h18M3 12h18M3 18h18" size={20} />;
 const CloseIcon = () => <Icon d="M18 6L6 18M6 6l12 12" size={20} />;
 const TeamsIcon = () => <Icon d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75M18 8l1.5 1.5L23 6" />;
@@ -88,6 +89,7 @@ export function Sidebar() {
     { to: '/communities',  label: 'Communities',   icon: CommunityIcon },
     { to: '/teams',        label: 'Teams',         icon: TeamsIcon },
     { to: '/library',      label: 'Library',       icon: LibraryIcon },
+    ...(isPro(profile) ? [{ to: '/analytics', label: 'Analytics', icon: AnalyticsIcon }] as NavItem[] : []),
     { to: '/leaderboard',  label: 'Rankings',      icon: RankingsIcon },
     { to: '/messages',     label: 'Messages',      icon: MessagesIcon,    badge: unread || undefined },
     { to: '/store',        label: 'Store',         icon: StoreIcon },

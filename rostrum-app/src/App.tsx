@@ -49,6 +49,7 @@ import { BackOfficeScreen } from './screens/BackOfficeScreen';
 import { LibraryScreen } from './screens/LibraryScreen';
 import { ReplayScreen } from './screens/ReplayScreen';
 import { AnalyticsScreen } from './screens/AnalyticsScreen';
+import { AnalyticsHubScreen } from './screens/AnalyticsHubScreen';
 import { getDebate, getMyBan } from './lib/api';
 import { hasPaidDebateEntry, startDebateEntryCheckout } from './lib/payments';
 import type { DebateRole, Side } from './lib/types';
@@ -145,6 +146,7 @@ function Gate() {
         <Route path="library" element={<LibraryScreen />} />
         <Route path="replay/:id" element={<ReplayScreen />} />
         <Route path="debate/:id/analytics" element={<AnalyticsScreen />} />
+        <Route path="analytics" element={<AnalyticsHubScreen />} />
         <Route path="notifications" element={<NotificationsScreen />} />
         {isAdmin && <Route path="moderation" element={<ModerationRoute />} />}
         {isAdmin && <Route path="admin" element={<AdminPortalRoute />} />}

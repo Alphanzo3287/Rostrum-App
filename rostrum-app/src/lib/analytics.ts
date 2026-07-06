@@ -27,3 +27,28 @@ export async function getDebateAnalytics(debateId: string): Promise<DebateAnalyt
   if (error) throw error;
   return data as DebateAnalytics;
 }
+
+export interface HostSummary {
+  debates_hosted: number; total_attendees: number; total_votes: number;
+  total_gift_cents: number; peak_single: number;
+}
+export async function getHostAnalyticsSummary(): Promise<HostSummary> {
+  const { data, error } = await supabase.rpc('get_host_analytics_summary');
+  if (error) throw error;
+  return data as HostSummary;
+}
+
+export interface HostedDebate {
+  id: string; motion: string | null; format: string | null; status: string;
+  created_at: string; viewer_count: number | null;
+}
+/** Every debate the current user has hosted (recorded or not), newest first. */
+export async function myHostedDebates(): Promise<HostedDebate[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await supabase.from('debates')
+    .select('id, motion, format, status, created_at, viewer_count')
+    .eq('host_id', user.id).order('created_at', { ascending: false }).limit(100);
+  if (error) throw error;
+  return (data as HostedDebate[]) ?? [];
+}
