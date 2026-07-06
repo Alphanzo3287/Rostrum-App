@@ -915,7 +915,7 @@ export async function declineTeamInvite(inviteId: string): Promise<void> {
 
 /* ─────────────────── PROFILE EDITING ─────────────────── */
 export async function updateProfile(patch: {
-  display_name?: string; handle?: string; bio?: string | null; topics?: string[]; socials?: Partial<import('./types').Socials>;
+  display_name?: string; handle?: string; bio?: string | null; topics?: string[]; socials?: Partial<import('./types').Socials>; profile_accent?: string | null;
 }): Promise<Profile> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('not signed in');

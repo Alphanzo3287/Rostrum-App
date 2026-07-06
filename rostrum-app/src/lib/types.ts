@@ -36,6 +36,7 @@ export interface Profile {
   onboarded_at?: string | null;
   terms_accepted_at?: string | null;
   pro_until?: string | null;
+  profile_accent?: string | null;
 }
 
 export interface Debate {

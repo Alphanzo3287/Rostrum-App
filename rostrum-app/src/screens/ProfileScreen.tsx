@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { getProfile, getAchievements, amFollowing, follow, unfollow, getUserTeams, amIBlocking, blockUser, unblockUser } from '../lib/api';
 import { publicReplaysOf, type ReplayItem } from '../lib/replays';
-import { isPro } from '../lib/pro';
+import { isPro, coverGradient } from '../lib/pro';
 import { ProBadge } from '../components/ProBadge';
 import { ReportModal } from '../components/ReportModal';
 import { EditProfileModal } from '../components/EditProfileModal';
@@ -91,7 +91,7 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
         background:C.panel, marginBottom:22 }}>
         {/* cover band */}
         <div style={{ height:120, position:'relative',
-          background:`linear-gradient(120deg, ${a(C.gold,'5C')}, ${a(C.cyan,'38')}, ${a(C.jade,'24')})` }}>
+          background: coverGradient(profile.profile_accent) }}>
           <div style={{ position:'absolute', inset:0, opacity:0.25,
             background:`radial-gradient(circle at 20% 50%, ${a('#FFFFFF','40')}, transparent 50%)` }} />
         </div>
