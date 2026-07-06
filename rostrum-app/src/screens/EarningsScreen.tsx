@@ -7,6 +7,8 @@
 // =====================================================================
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useAuth } from '../lib/auth';
+import { isPro } from '../lib/pro';
 import {
   getMyEarnings, getCreatorAccount, getPlatformConfig, startPayoutOnboarding, refreshPayoutStatus,
   getMyProgress, getMyWallet, getMyListing, createBuybackListing, cancelBuybackListing,
@@ -192,12 +194,16 @@ export function EarningsScreen({ onBack }: { onBack?: () => void }) {
 function WithdrawCard({ redeemable, withdrawals, money, onChanged }: {
   redeemable: number; withdrawals: Withdrawal[]; money: (c: number) => string; onChanged: () => void;
 }) {
+  const { profile } = useAuth();
+  const pro = isPro(profile);
+  const feeRate = pro ? 0.10 : 0.15;
+  const feePctLabel = pro ? '10' : '15';
   const [dbucks, setDbucks] = useState<number>(Math.max(WITHDRAW_MIN_DBUCKS, 0));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [done, setDone] = useState<string | null>(null);
 
-  const fee = Math.round(dbucks * 0.15);
+  const fee = Math.round(dbucks * feeRate);
   const net = dbucks - fee;
   const belowMin = dbucks < WITHDRAW_MIN_DBUCKS;
   const overBalance = dbucks > redeemable;
@@ -219,7 +225,9 @@ function WithdrawCard({ redeemable, withdrawals, money, onChanged }: {
     <div style={{ marginTop: 12 }}>
       <p style={{ fontFamily: ui, fontSize: 13.5, color: C.dim, lineHeight: 1.5, margin: '0 0 12px' }}>
         You have <span style={{ color: C.gold, fontFamily: mono }}>{redeemable.toLocaleString()}</span> cashable D-Bucks
-        ({money(redeemable)}). Withdraw to your connected bank account — The Rostrum keeps 15%, and you receive the rest.
+        ({money(redeemable)}). Withdraw to your connected bank account — The Rostrum keeps {feePctLabel}%, and you receive the rest.
+        {pro && <span style={{ color: C.jadeHi }}> Your Pro membership lowers this from 15% to 10%.</span>}
+        {!pro && <span style={{ color: C.gold }}> Rostrum Pro lowers this to 10%.</span>}
       </p>
 
       <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontFamily: ui, fontSize: 11.5, fontWeight: 600, color: C.dim, maxWidth: 260 }}>
@@ -230,7 +238,7 @@ function WithdrawCard({ redeemable, withdrawals, money, onChanged }: {
 
       <div style={{ display: 'flex', gap: 18, margin: '12px 0', flexWrap: 'wrap' }}>
         <Mini label="You withdraw" value={money(dbucks)} />
-        <Mini label="Platform fee (15%)" value={`− ${money(fee)}`} />
+        <Mini label={`Platform fee (${feePctLabel}%)`} value={`− ${money(fee)}`} />
         <Mini label="You receive" value={money(net)} />
       </div>
 

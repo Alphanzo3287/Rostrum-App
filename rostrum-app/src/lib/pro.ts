@@ -10,8 +10,8 @@ import type { Profile } from './types';
 export type ProPlanId = 'monthly' | 'annual';
 
 export const PRO_PRICING: Record<ProPlanId, { label: string; price: string; per: string; note?: string }> = {
-  monthly: { label: 'Monthly', price: '$9.99', per: '/month' },
-  annual:  { label: 'Annual',  price: '$99',   per: '/year', note: '2 months free' },
+  monthly: { label: 'Monthly', price: '$15', per: '/month' },
+  annual:  { label: 'Annual',  price: '$150', per: '/year', note: '2 months free' },
 };
 
 /** True if this profile currently has an active Pro membership. */
