@@ -107,6 +107,7 @@ export function LibraryScreen() {
 
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <Btn onClick={() => nav(`/replay/${item.id}`)} disabled={isBusy || expired}>▶ Watch</Btn>
+                <Btn onClick={() => nav(`/debate/${item.id}/analytics`)} disabled={isBusy}>📊 Analytics</Btn>
                 <Btn onClick={() => toggleVis(item)} disabled={isBusy || expired}>
                   {isPublic ? 'Make private' : 'Make public'}
                 </Btn>

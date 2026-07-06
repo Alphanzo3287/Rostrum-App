@@ -62,6 +62,11 @@ export const handler: Handler = async (event) => {
       try { count = (await rooms.listParticipants(room)).length; } catch { /* room may be gone */ }
       if (count != null) {
         await supabaseAdmin.from('debates').update({ viewer_count: count }).eq('livekit_room', room);
+        // Time-series snapshot for the analytics drop-off chart.
+        try {
+          const { data: d } = await supabaseAdmin.from('debates').select('id').eq('livekit_room', room).maybeSingle();
+          if (d?.id) await supabaseAdmin.from('debate_viewer_snapshots').insert({ debate_id: d.id, count });
+        } catch { /* snapshot is best-effort */ }
         try { await supabaseAdmin.from('webhook_log').insert({ has_auth: true, body_len: 0, sig_ok: true, event_type: 'count_write', note: `room=${room} count=${count}` }); } catch { /* noop */ }
       }
     }
