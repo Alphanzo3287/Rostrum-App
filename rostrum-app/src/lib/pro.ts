@@ -43,3 +43,11 @@ export async function openBillingPortal(): Promise<void> {
   if (!res.ok || !out.url) throw new Error(out?.error ?? 'Could not open billing portal');
   window.location.href = out.url as string;
 }
+
+/** Claim the monthly Pro stipend if eligible. Idempotent (once per calendar
+ *  month, server-enforced); returns the D-Bucks granted, or 0 if not due. */
+export async function claimProStipend(): Promise<number> {
+  const { data, error } = await supabase.rpc('claim_pro_stipend');
+  if (error) return 0;
+  return Number(data ?? 0);
+}
