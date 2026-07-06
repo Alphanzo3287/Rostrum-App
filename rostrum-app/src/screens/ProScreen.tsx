@@ -6,8 +6,8 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { isPro, subscribeToPro, PRO_PRICING, type ProPlanId } from '../lib/pro';
-import { C, ui, display, a, solidGold } from '../lib/theme';
+import { isPro, subscribeToPro, openBillingPortal, PRO_PRICING, type ProPlanId } from '../lib/pro';
+import { C, ui, display, a, solidGold, ghostBtn } from '../lib/theme';
 
 type Row = { label: string; free: string | boolean; pro: string | boolean };
 
@@ -48,6 +48,7 @@ export function ProScreen() {
   const [params] = useSearchParams();
   const [plan, setPlan] = useState<ProPlanId>('annual');
   const [busy, setBusy] = useState(false);
+  const [portalBusy, setPortalBusy] = useState(false);
   const [err, setErr] = useState('');
 
   const alreadyPro = isPro(profile);
@@ -57,6 +58,12 @@ export function ProScreen() {
     setBusy(true); setErr('');
     try { await subscribeToPro(plan); }
     catch (e: any) { setErr(e?.message ?? 'Could not start checkout'); setBusy(false); }
+  }
+
+  async function manage() {
+    setPortalBusy(true); setErr('');
+    try { await openBillingPortal(); }
+    catch (e: any) { setErr(e?.message ?? 'Could not open billing portal'); setPortalBusy(false); }
   }
 
   return (
@@ -84,6 +91,30 @@ export function ProScreen() {
           background: a(C.jade, '16'), border: `1px solid ${a(C.jade, '50')}`,
           fontFamily: ui, fontSize: 13.5, color: C.jadeHi }}>
           🎉 Welcome to Rostrum Pro! Your membership is being activated — perks appear within a moment.
+        </div>
+      )}
+
+      {/* Manage membership (Pro members) */}
+      {alreadyPro && (
+        <div style={{ maxWidth: 480, margin: '0 auto 30px', padding: '20px 22px', borderRadius: 16,
+          background: C.panel, border: `1px solid ${a(C.gold, '33')}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 15 }}>👑</span>
+            <span style={{ fontFamily: display, fontSize: 16, fontWeight: 700, color: C.ink }}>Your membership</span>
+          </div>
+          <p style={{ fontFamily: ui, fontSize: 13, color: C.dim, margin: '0 0 16px', lineHeight: 1.5 }}>
+            {profile?.pro_until
+              ? <>Active — your plan renews on <b style={{ color: C.ink }}>{new Date(profile.pro_until).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</b>.</>
+              : 'Your Pro membership is active.'}
+          </p>
+          {err && <p style={{ fontFamily: ui, fontSize: 12.5, color: C.garnetHi, margin: '0 0 12px' }}>{err}</p>}
+          <button onClick={manage} disabled={portalBusy}
+            style={{ ...ghostBtn, width: '100%', opacity: portalBusy ? 0.6 : 1 }}>
+            {portalBusy ? 'Opening…' : 'Manage plan · update card · cancel'}
+          </button>
+          <p style={{ fontFamily: ui, fontSize: 11, color: C.faint, textAlign: 'center', margin: '10px 0 0' }}>
+            Cancel anytime — you keep Pro until the end of your paid period, then it simply lapses.
+          </p>
         </div>
       )}
 

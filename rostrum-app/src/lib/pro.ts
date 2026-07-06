@@ -31,3 +31,15 @@ export async function subscribeToPro(plan: ProPlanId): Promise<void> {
   if (!res.ok || !out.url) throw new Error(out?.error ?? 'Could not start checkout');
   window.location.href = out.url as string;
 }
+
+/** Open Stripe's hosted billing portal (update card, view invoices, cancel). */
+export async function openBillingPortal(): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch('/.netlify/functions/stripe-billing-portal', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token ?? ''}` },
+  });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok || !out.url) throw new Error(out?.error ?? 'Could not open billing portal');
+  window.location.href = out.url as string;
+}
