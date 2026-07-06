@@ -19,6 +19,9 @@ import { WelcomeTour } from './components/WelcomeTour';
 import { AuthScreen } from './screens/AuthScreen';
 import { MfaChallengeScreen, ResetPasswordScreen } from './components/authGates';
 import { OnboardScreen } from './screens/OnboardScreen';
+import { AcceptTermsScreen } from './screens/AcceptTermsScreen';
+import { TermsScreen } from './screens/TermsScreen';
+import { PrivacyScreen } from './screens/PrivacyScreen';
 import { LobbyScreen } from './screens/LobbyScreen';
 import { CreateDebateScreen } from './screens/CreateDebateScreen';
 import { ChamberScreen } from './screens/ChamberScreen';
@@ -63,7 +66,7 @@ export default function App() {
 
 /* Decide auth → onboarding → ban → app, then hand off to the router. */
 function Gate() {
-  const { session, profile, loading, recoveryMode, mfaRequired } = useAuth();
+  const { session, profile, loading, recoveryMode, mfaRequired, refreshProfile } = useAuth();
   const [justSignedUp, setJustSignedUp] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
 
@@ -83,6 +86,15 @@ function Gate() {
     );
   }
 
+  if (typeof window !== 'undefined' && (window.location.pathname === '/terms' || window.location.pathname === '/privacy')) {
+    return (
+      <Routes>
+        <Route path="terms" element={<TermsScreen />} />
+        <Route path="privacy" element={<PrivacyScreen />} />
+      </Routes>
+    );
+  }
+
   if (loading) return <Splash />;
   // Arrived from a password-reset email → let them set a new password
   // before anything else, even though a (recovery) session exists.
@@ -97,7 +109,16 @@ function Gate() {
   }
   if (isBanned) return <BannedScreen />;
 
-  const needsOnboard = justSignedUp || (profile != null && !profile.bio && profile.topics.length === 0);
+  // Terms/Privacy acceptance comes first, once, right after signup — before
+  // the tutorial. Gated on a real timestamp, not inferred from profile fields.
+  if (profile != null && !profile.terms_accepted_at) {
+    return <AcceptTermsScreen onDone={async () => { await refreshProfile(); }} />;
+  }
+
+  // Tutorial: previously inferred from an empty bio/topics, which meant
+  // anyone who skipped those fields saw it again on every single login.
+  // Now gated on a real "seen it" timestamp set once onboarding finishes.
+  const needsOnboard = justSignedUp && profile != null && !profile.onboarded_at;
   if (needsOnboard) return <OnboardScreen onDone={() => setJustSignedUp(false)} />;
 
   const isAdmin = !!(profile as any)?.is_admin;

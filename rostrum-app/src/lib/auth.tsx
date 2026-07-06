@@ -27,6 +27,7 @@ interface AuthCtx {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   completeOnboarding: (i: OnboardInput) => Promise<void>;
+  skipOnboarding: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   resetPasswordForEmail: (email: string) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
@@ -141,9 +142,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ...(i.socials ? { socials: i.socials } : {}),
       ...(i.topics ? { topics: i.topics } : {}),
       ...(avatar_url ? { avatar_url } : {}),
+      onboarded_at: new Date().toISOString(),
     };
     const { error } = await supabase.from('profiles').update(patch).eq('id', uid);
     if (error) throw error;
+    await loadProfile(uid);
+  };
+
+  /** Skip the tutorial without filling anything in — still marks it seen so
+   *  it never shows again on future logins (this was the original bug). */
+  const skipOnboarding = async () => {
+    const uid = session?.user.id;
+    if (!uid) return;
+    await supabase.rpc('mark_onboarded');
     await loadProfile(uid);
   };
 
@@ -152,7 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <Ctx.Provider value={{
       user: session?.user ?? null, session, profile, loading, recoveryMode, mfaRequired,
-      signUp, signIn, signOut, completeOnboarding, refreshProfile,
+      signUp, signIn, signOut, completeOnboarding, skipOnboarding, refreshProfile,
       resetPasswordForEmail, updatePassword, refreshAuthLevel,
     }}>
       {children}
