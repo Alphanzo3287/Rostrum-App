@@ -36,6 +36,7 @@ import { TournamentsScreen } from './screens/TournamentsScreen';
 import { DiscoverScreen } from './screens/DiscoverScreen';
 import { NotificationsScreen } from './screens/NotificationsScreen';
 import { StoreScreen } from './screens/StoreScreen';
+import { ProScreen } from './screens/ProScreen';
 import { EarningsScreen } from './screens/EarningsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { WatchScreen } from './screens/WatchScreen';
@@ -132,6 +133,7 @@ function Gate() {
         <Route path="teams" element={<TeamsRoute />} />
         <Route path="tournaments" element={<TournamentsScreen />} />
         <Route path="store" element={<StoreRoute />} />
+        <Route path="pro" element={<ProScreen />} />
         <Route path="earnings" element={<EarningsRoute />} />
         <Route path="settings" element={<SettingsRoute />} />
         <Route path="support" element={<SupportRoute />} />

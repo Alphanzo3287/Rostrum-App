@@ -35,6 +35,7 @@ export interface Profile {
   created_at: string;
   onboarded_at?: string | null;
   terms_accepted_at?: string | null;
+  pro_until?: string | null;
 }
 
 export interface Debate {

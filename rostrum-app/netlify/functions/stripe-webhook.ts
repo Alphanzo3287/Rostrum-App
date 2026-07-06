@@ -42,6 +42,8 @@ export const handler: Handler = async (event) => {
         await handleGiftPurchase(session);
       } else if (kind === 'debate_entry') {
         await handleDebateEntry(session);
+      } else if (kind === 'pro_subscription') {
+        await handleProCheckout(session);
       } else {
         // dbucks_purchase — the original Phase 3 flow.
         const userId = session.metadata?.user_id;
@@ -64,6 +66,19 @@ export const handler: Handler = async (event) => {
         }
       }
     }
+
+    // ── Rostrum Pro subscription lifecycle ──────────────────────────────
+    // Renewals, upgrades, cancellations and lapses all arrive as
+    // customer.subscription.* events (not checkout.session.completed), so we
+    // keep pro_until in sync from the authoritative subscription object.
+    if (stripeEvent.type === 'customer.subscription.updated' ||
+        stripeEvent.type === 'customer.subscription.created') {
+      await syncProSubscription(stripeEvent.data.object as Stripe.Subscription);
+    }
+    if (stripeEvent.type === 'customer.subscription.deleted') {
+      await lapseProSubscription(stripeEvent.data.object as Stripe.Subscription);
+    }
+
     return { statusCode: 200, body: 'ok' };
   } catch (err: any) {
     console.error('stripe-webhook processing error:', err?.message ?? err);
@@ -71,6 +86,51 @@ export const handler: Handler = async (event) => {
     return { statusCode: 500, body: 'processing error' };
   }
 };
+
+/** First payment for Pro confirmed. Store the Stripe customer + subscription
+ * ids on the profile so the customer.subscription.* events (and the future
+ * billing portal) can find the user. pro_until itself is set authoritatively
+ * by syncProSubscription from the subscription's current_period_end. */
+async function handleProCheckout(session: Stripe.Checkout.Session) {
+  const userId = session.metadata?.user_id;
+  if (!userId) return;
+  await supabaseAdmin.from('profiles').update({
+    stripe_customer_id: (session.customer as string) ?? null,
+    pro_subscription_id: (session.subscription as string) ?? null,
+  }).eq('id', userId);
+  // The subscription.created event usually arrives around the same time and
+  // sets pro_until; but retrieve-and-set here too so access is instant.
+  if (session.subscription) {
+    const sub = await stripe.subscriptions.retrieve(session.subscription as string);
+    await syncProSubscription(sub);
+  }
+}
+
+/** Set pro_until from the subscription's paid-through date when it's active
+ * (or trialing); clear it if the subscription is in a non-paying state. */
+async function syncProSubscription(sub: Stripe.Subscription) {
+  const userId = sub.metadata?.user_id;
+  if (sub.metadata?.kind !== 'pro_subscription' || !userId) return;
+
+  const active = sub.status === 'active' || sub.status === 'trialing';
+  const proUntil = active && sub.current_period_end
+    ? new Date(sub.current_period_end * 1000).toISOString()
+    : null;
+
+  await supabaseAdmin.from('profiles').update({
+    pro_until: proUntil,
+    pro_subscription_id: sub.id,
+    stripe_customer_id: (sub.customer as string) ?? null,
+  }).eq('id', userId);
+}
+
+/** Subscription fully ended — let Pro lapse immediately. */
+async function lapseProSubscription(sub: Stripe.Subscription) {
+  const userId = sub.metadata?.user_id;
+  if (!userId) return;
+  await supabaseAdmin.from('profiles')
+    .update({ pro_until: null, pro_subscription_id: null }).eq('id', userId);
+}
 
 /** Phase 4: payment for a creator's buyback listing confirmed. Retire the
  * D-Bucks from the creator's wallet back to treasury, and mark the

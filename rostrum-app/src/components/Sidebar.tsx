@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import { isPro } from '../lib/pro';
 import { unreadTotal, subscribeInbox } from '../screens/MessagesScreen';
 import { C, ui, display, mono, solidGold, a } from '../lib/theme';
 import { Avatar } from './ui';
@@ -173,6 +174,22 @@ export function Sidebar() {
       </div>
 
       {/* ── Rostrum Pro upsell ── */}
+      {isPro(profile) ? (
+        <div style={{ margin:'0 12px 14px', padding:'14px 16px', borderRadius:16,
+          background: `linear-gradient(160deg, ${a(C.gold,'2E')}, ${a(C.cyan,'12')})`,
+          border: `1px solid ${a(C.gold,'40')}`, display:'flex', alignItems:'center', gap:11, cursor:'pointer' }}
+          onClick={() => nav('/pro')}>
+          <div style={{ width:34, height:34, borderRadius:10, flexShrink:0,
+            background: `linear-gradient(135deg, ${C.gold}, ${C.cyan})`,
+            display:'grid', placeItems:'center', color:'#FFFFFF' }}>
+            <CrownIcon size={18} />
+          </div>
+          <div>
+            <div style={{ fontFamily:display, fontSize:14, fontWeight:700, color:C.ink }}>Pro member</div>
+            <div style={{ fontFamily:ui, fontSize:11, color:C.dim }}>Perks active · manage plan</div>
+          </div>
+        </div>
+      ) : (
       <div style={{ margin:'0 12px 14px', padding:'16px 16px 14px', borderRadius:16,
         background: `linear-gradient(160deg, ${a(C.gold,'38')}, ${a(C.cyan,'14')}, ${a(C.gold,'07')})`,
         border: `1px solid ${a(C.gold,'33')}`,
@@ -190,11 +207,12 @@ export function Sidebar() {
         <div style={{ fontFamily:ui, fontSize:11.5, color:C.dim, lineHeight:1.4, marginBottom:12 }}>
           Unlock exclusive perks and grow your influence.
         </div>
-        <button onClick={() => alert('Rostrum Pro is coming soon!')}
+        <button onClick={() => nav('/pro')}
           style={{ ...solidGold, padding:'8px 14px', fontSize:12, width:'100%', borderRadius:10 }}>
           Upgrade Now
         </button>
       </div>
+      )}
     </>
   );
 

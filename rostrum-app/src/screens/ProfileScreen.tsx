@@ -8,6 +8,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { getProfile, getAchievements, amFollowing, follow, unfollow, getUserTeams, amIBlocking, blockUser, unblockUser } from '../lib/api';
 import { publicReplaysOf, type ReplayItem } from '../lib/replays';
+import { isPro } from '../lib/pro';
+import { ProBadge } from '../components/ProBadge';
 import { ReportModal } from '../components/ReportModal';
 import { EditProfileModal } from '../components/EditProfileModal';
 import type { Profile, Achievement, Team } from '../lib/types';
@@ -102,6 +104,7 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
             <div style={{ flex:1, minWidth:220, paddingBottom:4 }}>
               <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
                 <h2 style={{ fontFamily:display, fontSize:30, fontWeight:700, color:C.ink, margin:0, letterSpacing:'-.02em' }}>{profile.display_name}</h2>
+                {isPro(profile) && <ProBadge />}
                 <RankBadge rank={profile.rank} level={profile.level} />
               </div>
               <div style={{ fontFamily:mono, fontSize:13, color:C.faint, marginTop:4 }}>@{profile.handle}</div>
