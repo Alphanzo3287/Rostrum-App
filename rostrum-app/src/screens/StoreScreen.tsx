@@ -54,6 +54,32 @@ export function StoreScreen({ onBack }: { onBack?: () => void }) {
         </div>
       }>
 
+      {/* ---- Wallet breakdown: cashable vs spend-only ---- */}
+      {wallet && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:26 }}>
+          <div style={{ padding:'16px 18px', borderRadius:16, border:`1px solid ${a(C.jade,'44')}`, background:a(C.jade,'0E') }}>
+            <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:7 }}>
+              <span style={{ fontSize:14 }}>💵</span>
+              <span style={{ fontFamily:ui, fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.07em', color:C.jadeHi }}>Cashable</span>
+            </div>
+            <div style={{ fontFamily:mono, fontSize:26, fontWeight:700, color:C.ink }}>{wallet.redeemable.toLocaleString()}</div>
+            <div style={{ fontFamily:ui, fontSize:11.5, color:C.faint, marginTop:5, lineHeight:1.45 }}>
+              Earned D-Bucks you can withdraw to your bank once cash-out is unlocked.
+            </div>
+          </div>
+          <div style={{ padding:'16px 18px', borderRadius:16, border:`1px solid ${a(C.gold,'44')}`, background:a(C.gold,'0E') }}>
+            <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:7 }}>
+              <span style={{ fontSize:14 }}>🎁</span>
+              <span style={{ fontFamily:ui, fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.07em', color:C.gold }}>Rewards</span>
+            </div>
+            <div style={{ fontFamily:mono, fontSize:26, fontWeight:700, color:C.ink }}>{wallet.promo.toLocaleString()}</div>
+            <div style={{ fontFamily:ui, fontSize:11.5, color:C.faint, marginTop:5, lineHeight:1.45 }}>
+              Bonus D-Bucks — spend on gifts & event entry to support creators. Not cashable.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ---- Gifts section ---- */}
       <SectionTitle>Gifts</SectionTitle>
       <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint, marginBottom:14, lineHeight:1.5 }}>

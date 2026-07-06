@@ -19,6 +19,7 @@ import {
   type BugReport, type AbuseReport,
 } from '../lib/reports';
 import { C, ui, display, mono, solidGold, ghostBtn, a } from '../lib/theme';
+import { supabase } from '../lib/supabaseClient';
 import { Scroll, Center } from '../components/ui';
 import { AdminPortalScreen } from './AdminPortalScreen';
 import { ModerationScreen } from './ModerationScreen';
@@ -74,6 +75,7 @@ export function BackOfficeScreen() {
 function FinancialsPanel() {
   const [sum, setSum] = useState<FinancialSummary | null>(null);
   const [series, setSeries] = useState<FinancialPoint[]>([]);
+  const [treasury, setTreasury] = useState<{ balance_redeemable: number; balance_promo: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -81,6 +83,9 @@ function FinancialsPanel() {
       try {
         const [s, t] = await Promise.all([adminFinancialSummary(), adminFinancialTimeseries(30)]);
         setSum(s); setSeries(t);
+        supabase.rpc('admin_treasury_balances').then(({ data }) => {
+          if (data && data[0]) setTreasury(data[0]);
+        });
       } finally { setLoading(false); }
     })();
   }, []);
@@ -103,6 +108,21 @@ function FinancialsPanel() {
             <Stat label="Platform fees kept" value={money(sum.platform_fees_cents)} color={C.cyan} />
             <Stat label="D-Bucks in circulation" value={sum.circulating_dbucks.toLocaleString()} sub={money(sum.circulating_dbucks)} />
           </div>
+
+          {treasury && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+              <div style={{ padding: '15px 18px', borderRadius: 14, border: `1px solid ${a(C.jade, '40')}`, background: a(C.jade, '0C') }}>
+                <div style={{ fontFamily: ui, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em', color: C.jadeHi, marginBottom: 6 }}>Treasury · Redeemable reserve</div>
+                <div style={{ fontFamily: mono, fontSize: 22, fontWeight: 700, color: C.ink }}>{treasury.balance_redeemable.toLocaleString()}</div>
+                <div style={{ fontFamily: ui, fontSize: 11, color: C.faint, marginTop: 4 }}>Minting capacity for cashable D-Bucks (purchases).</div>
+              </div>
+              <div style={{ padding: '15px 18px', borderRadius: 14, border: `1px solid ${a(C.gold, '40')}`, background: a(C.gold, '0C') }}>
+                <div style={{ fontFamily: ui, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em', color: C.gold, marginBottom: 6 }}>Treasury · Promo reserve</div>
+                <div style={{ fontFamily: mono, fontSize: 22, fontWeight: 700, color: C.ink }}>{treasury.balance_promo.toLocaleString()}</div>
+                <div style={{ fontFamily: ui, fontSize: 11, color: C.faint, marginTop: 4 }}>Minting capacity for spend-only D-Bucks (bonuses, gifts, stipend).</div>
+              </div>
+            </div>
+          )}
 
           <Panel title="Revenue vs. payouts · last 30 days">
             <ResponsiveContainer width="100%" height={240}>

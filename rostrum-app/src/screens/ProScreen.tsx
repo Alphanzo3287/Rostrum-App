@@ -37,7 +37,7 @@ const FEATURES: { group: string; rows: Row[] }[] = [
       { label: 'Pro badge on profile & in rooms', free: false, pro: true },
       { label: 'Profile customization & priority visibility', free: false, pro: true },
       { label: 'Cash-out platform fee', free: '15%', pro: '10%' },
-      { label: 'Monthly D-Bucks stipend', free: false, pro: '500 / mo' },
+      { label: 'Monthly D-Bucks to gift & support debaters', free: false, pro: '500 / mo' },
       { label: 'Priority support & early access', free: false, pro: true },
     ],
   },

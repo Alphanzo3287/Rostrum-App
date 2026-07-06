@@ -75,8 +75,8 @@ export function Sidebar() {
     return () => { on = false; off(); window.removeEventListener('rostrum:unread', load); };
   }, []);
 
-  const [dbucks, setDbucks] = useState<number | null>(null);
-  useEffect(() => { getMyWallet().then(w => setDbucks(w.total)).catch(() => {}); }, []);
+  const [wallet, setWallet] = useState<{ promo: number; redeemable: number; total: number } | null>(null);
+  useEffect(() => { getMyWallet().then(setWallet).catch(() => {}); }, []);
 
   const isAdmin = !!(profile as any)?.is_admin;
   const active = (to: string) => to === '/' ? pathname === '/' : pathname.startsWith(to);
@@ -162,9 +162,15 @@ export function Sidebar() {
           <div style={{ fontFamily:ui, fontSize:11, fontWeight:600, color:C.faint,
             textTransform:'uppercase', letterSpacing:'.1em' }}>D-Bucks Balance</div>
         </div>
-        <div style={{ fontFamily:ui, fontSize:24, fontWeight:700, color:C.ink, marginBottom:10, fontVariantNumeric:'tabular-nums' }}>
-          {dbucks !== null ? dbucks.toLocaleString() : '—'}
+        <div style={{ fontFamily:ui, fontSize:24, fontWeight:700, color:C.ink, marginBottom:6, fontVariantNumeric:'tabular-nums' }}>
+          {wallet !== null ? wallet.total.toLocaleString() : '—'}
         </div>
+        {wallet !== null && (wallet.redeemable > 0 || wallet.promo > 0) && (
+          <div style={{ display:'flex', gap:12, marginBottom:10, fontFamily:ui, fontSize:10.5 }}>
+            <span style={{ color:C.jadeHi }}>💵 {wallet.redeemable.toLocaleString()} cashable</span>
+            <span style={{ color:C.gold }}>🎁 {wallet.promo.toLocaleString()} rewards</span>
+          </div>
+        )}
         <button onClick={() => nav('/store')}
           style={{ width:'100%', padding:'8px 12px', borderRadius:10,
             background:'transparent', border:`1px solid ${C.hair}`, color:C.dim,
