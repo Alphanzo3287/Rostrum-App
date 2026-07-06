@@ -37,6 +37,7 @@ export interface Profile {
   terms_accepted_at?: string | null;
   pro_until?: string | null;
   profile_accent?: string | null;
+  tour_seen_at?: string | null;
 }
 
 export interface Debate {
