@@ -321,7 +321,7 @@ function SeatPill({ member, label, tone, glow, onProfile, onContextMenu, bind }:
         <span style={{ fontFamily: ui, fontSize: 9, letterSpacing: '.1em', textTransform: 'uppercase', color: tone }}>{label}</span>
         <span style={{ fontFamily: ui, fontSize: 12.5, fontWeight: 600, color: member ? C.ink : C.faint, maxWidth: 120,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {member ? member.name.split(' ')[0] : 'Open seat'}</span>
+          {member ? member.name.split(' ')[0] : 'Open seat'}{member?.pro ? ' 👑' : ''}</span>
       </span>
     </span>
   );

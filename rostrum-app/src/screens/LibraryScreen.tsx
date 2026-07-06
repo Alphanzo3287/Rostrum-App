@@ -5,7 +5,9 @@
 // =====================================================================
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { myReplays, setReplayVisibility, deleteReplay, type ReplayItem } from '../lib/replays';
+import { myReplays, setReplayVisibility, deleteReplay, isReplayExpired, REPLAY_RETENTION_DAYS, type ReplayItem } from '../lib/replays';
+import { useAuth } from '../lib/auth';
+import { isPro } from '../lib/pro';
 import { C, ui, display, a } from '../lib/theme';
 
 const FORMAT_LABEL: Record<string, string> = {
@@ -14,6 +16,8 @@ const FORMAT_LABEL: Record<string, string> = {
 
 export function LibraryScreen() {
   const nav = useNavigate();
+  const { profile } = useAuth();
+  const pro = isPro(profile);
   const [items, setItems] = useState<ReplayItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -72,27 +76,38 @@ export function LibraryScreen() {
         items.map(item => {
           const isPublic = item.recording_visibility === 'public';
           const isBusy = busy === item.id;
+          const expired = isReplayExpired(item.created_at, pro);
           return (
             <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-              background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 14, padding: '15px 17px', marginBottom: 12 }}>
+              background: C.panel, border: `1px solid ${expired ? a(C.warning, '3A') : C.hair}`, borderRadius: 14,
+              padding: '15px 17px', marginBottom: 12, opacity: expired ? 0.82 : 1 }}>
               <div style={{ flex: 1, minWidth: 220 }}>
                 <div style={{ fontFamily: ui, fontSize: 14.5, fontWeight: 700, color: C.ink }}>{item.title}</div>
                 <div style={{ fontFamily: ui, fontSize: 11.5, color: C.faint, marginTop: 3 }}>
                   {FORMAT_LABEL[item.format ?? ''] ?? item.format} · {new Date(item.created_at).toLocaleDateString()}
+                  {expired && <span style={{ color: C.warning }}> · expired after {REPLAY_RETENTION_DAYS} days</span>}
                 </div>
               </div>
 
-              <span style={{ fontFamily: ui, fontSize: 11, fontWeight: 800, letterSpacing: '.06em',
-                padding: '4px 11px', borderRadius: 999, textTransform: 'uppercase',
-                color: isPublic ? C.jadeHi : C.warning,
-                border: `1px solid ${isPublic ? a(C.jade, '66') : a(C.warning, '55')}`,
-                background: isPublic ? a(C.jade, '14') : a(C.warning, '10') }}>
-                {isPublic ? 'Public' : 'Private'}
-              </span>
+              {expired ? (
+                <button onClick={() => nav('/pro')} style={{ fontFamily: ui, fontSize: 11.5, fontWeight: 700,
+                  padding: '7px 13px', borderRadius: 999, cursor: 'pointer', color: C.gold,
+                  border: `1px solid ${a(C.gold, '66')}`, background: a(C.gold, '12') }}>
+                  👑 Upgrade to restore
+                </button>
+              ) : (
+                <span style={{ fontFamily: ui, fontSize: 11, fontWeight: 800, letterSpacing: '.06em',
+                  padding: '4px 11px', borderRadius: 999, textTransform: 'uppercase',
+                  color: isPublic ? C.jadeHi : C.warning,
+                  border: `1px solid ${isPublic ? a(C.jade, '66') : a(C.warning, '55')}`,
+                  background: isPublic ? a(C.jade, '14') : a(C.warning, '10') }}>
+                  {isPublic ? 'Public' : 'Private'}
+                </span>
+              )}
 
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <Btn onClick={() => nav(`/replay/${item.id}`)} disabled={isBusy}>▶ Watch</Btn>
-                <Btn onClick={() => toggleVis(item)} disabled={isBusy}>
+                <Btn onClick={() => nav(`/replay/${item.id}`)} disabled={isBusy || expired}>▶ Watch</Btn>
+                <Btn onClick={() => toggleVis(item)} disabled={isBusy || expired}>
                   {isPublic ? 'Make private' : 'Make public'}
                 </Btn>
                 <Btn danger onClick={() => remove(item)} disabled={isBusy}>Delete</Btn>

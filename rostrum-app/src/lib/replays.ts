@@ -13,6 +13,15 @@ export interface ReplayAccess {
   playUrl: string; downloadUrl: string; visibility: 'private' | 'public'; title: string | null;
 }
 
+/** Free hosts keep replays this long; Rostrum Pro keeps them forever. */
+export const REPLAY_RETENTION_DAYS = 7;
+
+/** Has this replay passed the free-tier retention window? */
+export function isReplayExpired(createdAt: string, hostIsPro: boolean): boolean {
+  if (hostIsPro) return false;
+  return Date.now() - new Date(createdAt).getTime() > REPLAY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+}
+
 async function authedPost<T = any>(body: unknown): Promise<T> {
   const { data: { session } } = await supabase.auth.getSession();
   const res = await fetch('/.netlify/functions/replay', {
@@ -37,15 +46,20 @@ export async function myReplays(): Promise<ReplayItem[]> {
   return (data as ReplayItem[]) ?? [];
 }
 
-/** A user's PUBLIC replays — for their profile. */
+/** A user's PUBLIC replays — for their profile. Expired free-tier replays are
+ *  hidden; a Pro host's replays never expire. */
 export async function publicReplaysOf(hostId: string): Promise<ReplayItem[]> {
+  const { data: host } = await supabase.from('profiles').select('pro_until').eq('id', hostId).maybeSingle();
+  const hostIsPro = !!host?.pro_until && new Date(host.pro_until) > new Date();
+
   const { data, error } = await supabase.from('debates')
     .select('id, title:motion, format, status, created_at, recording_visibility, host_id')
     .eq('host_id', hostId).eq('recording_visibility', 'public')
     .not('recording_url', 'is', null)
     .order('created_at', { ascending: false }).limit(24);
   if (error) throw error;
-  return (data as ReplayItem[]) ?? [];
+  const rows = (data as ReplayItem[]) ?? [];
+  return rows.filter(r => !isReplayExpired(r.created_at, hostIsPro));
 }
 
 export const getReplayAccess = (debateId: string) =>

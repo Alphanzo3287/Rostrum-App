@@ -17,6 +17,7 @@ export interface RoomMember {
   role: string;            // host | moderator | debater | judge | audience
   side: 'prop' | 'opp' | null;
   avatar: string | null;
+  pro?: boolean;           // Rostrum Pro member (from token metadata)
   isLocal: boolean;
   isSpeaking: boolean;
   micOn: boolean;
@@ -73,6 +74,7 @@ export function useRoom(debateId: string | null): UseRoom {
         role: md.role ?? 'audience',
         side: md.side ?? null,
         avatar: md.avatar ?? null,
+        pro: !!md.pro,
         isLocal: p === room.localParticipant,
         isSpeaking: p.isSpeaking,
         micOn: !!mic && !mic.isMuted,
