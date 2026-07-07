@@ -28,6 +28,7 @@ export interface TournamentEntrant {
   seed: number | null;
   eliminated: boolean;
   profile?: { display_name: string; handle: string; avatar_url: string | null };
+  team?: { name: string; tag: string | null; crest_url: string | null };
 }
 
 export async function listTournaments(): Promise<Tournament[]> {
@@ -45,7 +46,7 @@ export async function getTournament(id: string): Promise<Tournament | null> {
 
 export async function tournamentEntrants(id: string): Promise<TournamentEntrant[]> {
   const { data, error } = await supabase.from('tournament_entrants')
-    .select('id, user_id, team_id, seed, eliminated, profile:profiles(display_name, handle, avatar_url)')
+    .select('id, user_id, team_id, seed, eliminated, profile:profiles(display_name, handle, avatar_url), team:teams(name, tag, crest_url)')
     .eq('tournament_id', id).order('registered_at', { ascending: true });
   if (error) throw error;
   return (data ?? []) as any as TournamentEntrant[];
@@ -60,15 +61,37 @@ export async function isRegistered(id: string): Promise<boolean> {
 }
 
 export async function createTournament(input: {
-  title: string; description?: string; debateFormat: string; size: number; startsAt?: string | null;
+  title: string; description?: string; debateFormat: string; size: number; startsAt?: string | null; kind?: 'individual' | 'team';
 }): Promise<Tournament> {
   const { data, error } = await supabase.rpc('create_tournament', {
     p_title: input.title, p_description: input.description ?? null,
     p_debate_format: input.debateFormat, p_size: input.size, p_starts_at: input.startsAt ?? null,
+    p_kind: input.kind ?? 'individual',
   });
   if (error) throw error;
   return data as Tournament;
 }
+
+/** Teams the current user owns — eligible to register for team tournaments. */
+export async function myOwnedTeams(): Promise<{ id: string; name: string }[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await supabase.from('teams').select('id, name').eq('owner_id', user.id).order('name');
+  if (error) throw error;
+  return (data ?? []) as { id: string; name: string }[];
+}
+
+/** Which of my owned teams (if any) is registered in this tournament. */
+export async function myRegisteredTeam(tournamentId: string): Promise<string | null> {
+  const teams = await myOwnedTeams();
+  if (teams.length === 0) return null;
+  const { data } = await supabase.from('tournament_entrants')
+    .select('team_id').eq('tournament_id', tournamentId).in('team_id', teams.map(t => t.id));
+  return (data && data[0]?.team_id) ?? null;
+}
+
+export const registerTeam = (tid: string, teamId: string) => supabase.rpc('register_team_for_tournament', { p_tournament: tid, p_team: teamId }).then(r => { if (r.error) throw r.error; });
+export const withdrawTeam = (tid: string, teamId: string) => supabase.rpc('withdraw_team_from_tournament', { p_tournament: tid, p_team: teamId }).then(r => { if (r.error) throw r.error; });
 
 export const registerForTournament = (id: string) => supabase.rpc('register_for_tournament', { p_tournament: id }).then(r => { if (r.error) throw r.error; });
 export const withdrawFromTournament = (id: string) => supabase.rpc('withdraw_from_tournament', { p_tournament: id }).then(r => { if (r.error) throw r.error; });
@@ -91,10 +114,10 @@ export interface BracketMatch {
 export async function getBracket(tournamentId: string): Promise<{ rounds: number; matches: BracketMatch[] }> {
   const [mRes, eRes] = await Promise.all([
     supabase.from('tournament_matches').select('*').eq('tournament_id', tournamentId).order('round').order('slot'),
-    supabase.from('tournament_entrants').select('id, seed, profile:profiles(display_name)').eq('tournament_id', tournamentId),
+    supabase.from('tournament_entrants').select('id, seed, profile:profiles(display_name), team:teams(name)').eq('tournament_id', tournamentId),
   ]);
   const emap = new Map<string, BracketSlot>();
-  for (const e of (eRes.data ?? []) as any[]) emap.set(e.id, { name: e.profile?.display_name ?? 'Entrant', seed: e.seed });
+  for (const e of (eRes.data ?? []) as any[]) emap.set(e.id, { name: e.profile?.display_name ?? e.team?.name ?? 'Entrant', seed: e.seed });
   const matches: BracketMatch[] = (mRes.data ?? []).map((m: any) => ({
     id: m.id, round: m.round, slot: m.slot, status: m.status,
     entrant_a: m.entrant_a, entrant_b: m.entrant_b, winner_entrant: m.winner_entrant, debate_id: m.debate_id,

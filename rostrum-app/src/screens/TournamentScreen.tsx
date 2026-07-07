@@ -9,11 +9,12 @@ import { useAuth } from '../lib/auth';
 import {
   getTournament, tournamentEntrants, isRegistered, registerForTournament,
   withdrawFromTournament, deleteTournament, startTournament, getBracket, startMatch,
+  myOwnedTeams, myRegisteredTeam, registerTeam, withdrawTeam,
   type Tournament, type TournamentEntrant, type BracketMatch,
 } from '../lib/tournaments';
 import { BracketView } from '../components/BracketView';
 import { Avatar } from '../components/ui';
-import { C, ui, display, mono, a, solidGold, ghostBtn } from '../lib/theme';
+import { C, ui, display, mono, a, solidGold, ghostBtn, field } from '../lib/theme';
 
 const FORMAT_LABEL: Record<string, string> = { oxford: 'Oxford', lecture: 'Lecture', legacy: 'Legacy', speakers_corner: "Speaker's Corner" };
 
@@ -24,12 +25,16 @@ export function TournamentScreen() {
   const [t, setT] = useState<Tournament | null>(null);
   const [entrants, setEntrants] = useState<TournamentEntrant[]>([]);
   const [registered, setRegistered] = useState(false);
+  const [myTeams, setMyTeams] = useState<{ id: string; name: string }[]>([]);
+  const [regTeamId, setRegTeamId] = useState<string | null>(null);
+  const [pickTeam, setPickTeam] = useState<string>('');
   const [bracket, setBracket] = useState<{ rounds: number; matches: BracketMatch[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
   const canManage = !!t && !!user && (t.created_by === user.id || !!(profile as any)?.is_admin);
+  const isTeam = t?.kind === 'team';
 
   const refresh = () => {
     if (!id) return;
@@ -37,10 +42,25 @@ export function TournamentScreen() {
       .then(([tt, e, r]) => {
         setT(tt); setEntrants(e); setRegistered(r);
         if (tt && tt.status !== 'registration') getBracket(id).then(setBracket).catch(() => {});
+        if (tt?.kind === 'team') {
+          myOwnedTeams().then(ts => { setMyTeams(ts); if (ts[0]) setPickTeam(p => p || ts[0].id); }).catch(() => {});
+          myRegisteredTeam(id).then(setRegTeamId).catch(() => {});
+        }
       })
       .catch(() => {}).finally(() => setLoading(false));
   };
   useEffect(refresh, [id]);
+
+  async function toggleTeamRegister() {
+    if (!id) return;
+    setBusy(true); setErr('');
+    try {
+      if (regTeamId) await withdrawTeam(id, regTeamId);
+      else if (pickTeam) await registerTeam(id, pickTeam);
+      refresh();
+    } catch (e: any) { setErr(e?.message ?? 'Something went wrong'); }
+    finally { setBusy(false); }
+  }
 
   async function start() {
     if (!id) return;
@@ -92,16 +112,36 @@ export function TournamentScreen() {
           </div>
           <h1 style={{ fontFamily: display, fontSize: 28, fontWeight: 700, color: C.ink, margin: 0, lineHeight: 1.15 }}>{t.title}</h1>
           <div style={{ fontFamily: mono, fontSize: 12.5, color: C.faint, marginTop: 8 }}>
-            {FORMAT_LABEL[t.debate_format] ?? t.debate_format} · single elimination · {t.size}-player bracket
+            {FORMAT_LABEL[t.debate_format] ?? t.debate_format} · single elimination · {t.size}-{isTeam ? 'team' : 'player'} bracket
             {t.starts_at && <> · starts {new Date(t.starts_at).toLocaleString()}</>}
           </div>
         </div>
-        {open && !canManage && (
+        {open && !canManage && !isTeam && (
           <button onClick={toggleRegister} disabled={busy || (!registered && spotsLeft <= 0)}
             style={{ ...(registered ? ghostBtn : solidGold), padding: '11px 24px', fontSize: 14,
               opacity: (busy || (!registered && spotsLeft <= 0)) ? 0.6 : 1 }}>
             {registered ? 'Withdraw' : spotsLeft <= 0 ? 'Full' : 'Register'}
           </button>
+        )}
+        {open && !canManage && isTeam && (
+          regTeamId ? (
+            <button onClick={toggleTeamRegister} disabled={busy} style={{ ...ghostBtn, padding: '11px 24px', fontSize: 14, opacity: busy ? 0.6 : 1 }}>Withdraw team</button>
+          ) : myTeams.length === 0 ? (
+            <span style={{ fontFamily: ui, fontSize: 12.5, color: C.faint }}>Own a team to enter</span>
+          ) : (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {myTeams.length > 1 && (
+                <select value={pickTeam} onChange={e => setPickTeam(e.target.value)}
+                  style={{ ...field, width: 'auto', padding: '9px 10px' }}>
+                  {myTeams.map(tm => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
+                </select>
+              )}
+              <button onClick={toggleTeamRegister} disabled={busy || spotsLeft <= 0 || !pickTeam}
+                style={{ ...solidGold, padding: '11px 22px', fontSize: 14, opacity: (busy || spotsLeft <= 0 || !pickTeam) ? 0.5 : 1 }}>
+                {spotsLeft <= 0 ? 'Full' : 'Register team'}
+              </button>
+            </div>
+          )
         )}
         {open && canManage && (
           <button onClick={start} disabled={busy || entrants.length < 2}
@@ -139,8 +179,8 @@ export function TournamentScreen() {
                 <button key={e.id} onClick={() => e.profile?.handle && nav(`/u/${e.profile.handle}`)}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 12, padding: '10px 12px', cursor: 'pointer', textAlign: 'left' }}>
                   <span style={{ fontFamily: mono, fontSize: 12, color: C.faint, width: 18 }}>{i + 1}</span>
-                  <Avatar url={e.profile?.avatar_url ?? null} name={e.profile?.display_name ?? '?'} size={30} />
-                  <span style={{ fontFamily: ui, fontSize: 13.5, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.profile?.display_name ?? 'Entrant'}</span>
+                  <Avatar url={e.profile?.avatar_url ?? e.team?.crest_url ?? null} name={e.profile?.display_name ?? e.team?.name ?? '?'} size={30} />
+                  <span style={{ fontFamily: ui, fontSize: 13.5, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.profile?.display_name ?? e.team?.name ?? 'Entrant'}</span>
                 </button>
               ))}
             </div>
