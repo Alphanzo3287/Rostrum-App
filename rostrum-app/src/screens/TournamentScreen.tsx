@@ -9,7 +9,7 @@ import { useAuth } from '../lib/auth';
 import {
   getTournament, tournamentEntrants, isRegistered, registerForTournament,
   withdrawFromTournament, deleteTournament, startTournament, getBracket, startMatch,
-  myOwnedTeams, myRegisteredTeam, registerTeam, withdrawTeam,
+  myOwnedTeams, myRegisteredTeam, registerTeam, withdrawTeam, setEntrantSeeds,
   type Tournament, type TournamentEntrant, type BracketMatch,
 } from '../lib/tournaments';
 import { BracketView } from '../components/BracketView';
@@ -76,6 +76,33 @@ export function TournamentScreen() {
     catch (e: any) { setErr(e?.message ?? 'Could not start match'); }
   }
 
+  // ── host seeding arrangement ──
+  const [seedOrder, setSeedOrder] = useState<string[]>([]);
+  const [showSeeding, setShowSeeding] = useState(false);
+  useEffect(() => {
+    const sorted = [...entrants].sort((a, b) => (a.seed ?? 9999) - (b.seed ?? 9999));
+    setSeedOrder(sorted.map(e => e.id));
+  }, [entrants]);
+  const nameOf = (eid: string) => {
+    const e = entrants.find(x => x.id === eid);
+    return e?.profile?.display_name ?? e?.team?.name ?? 'Entrant';
+  };
+  function move(idx: number, dir: -1 | 1) {
+    setSeedOrder(o => {
+      const n = [...o]; const j = idx + dir;
+      if (j < 0 || j >= n.length) return o;
+      [n[idx], n[j]] = [n[j], n[idx]];
+      return n;
+    });
+  }
+  async function saveSeeding() {
+    if (!id) return;
+    setBusy(true); setErr('');
+    try { await setEntrantSeeds(id, seedOrder); setShowSeeding(false); refresh(); }
+    catch (e: any) { setErr(e?.message ?? 'Could not save seeding'); }
+    finally { setBusy(false); }
+  }
+
   async function toggleRegister() {
     if (!id) return;
     setBusy(true); setErr('');
@@ -116,43 +143,86 @@ export function TournamentScreen() {
             {t.starts_at && <> · starts {new Date(t.starts_at).toLocaleString()}</>}
           </div>
         </div>
-        {open && !canManage && !isTeam && (
-          <button onClick={toggleRegister} disabled={busy || (!registered && spotsLeft <= 0)}
-            style={{ ...(registered ? ghostBtn : solidGold), padding: '11px 24px', fontSize: 14,
-              opacity: (busy || (!registered && spotsLeft <= 0)) ? 0.6 : 1 }}>
-            {registered ? 'Withdraw' : spotsLeft <= 0 ? 'Full' : 'Register'}
-          </button>
-        )}
-        {open && !canManage && isTeam && (
-          regTeamId ? (
-            <button onClick={toggleTeamRegister} disabled={busy} style={{ ...ghostBtn, padding: '11px 24px', fontSize: 14, opacity: busy ? 0.6 : 1 }}>Withdraw team</button>
-          ) : myTeams.length === 0 ? (
-            <span style={{ fontFamily: ui, fontSize: 12.5, color: C.faint }}>Own a team to enter</span>
-          ) : (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              {myTeams.length > 1 && (
-                <select value={pickTeam} onChange={e => setPickTeam(e.target.value)}
-                  style={{ ...field, width: 'auto', padding: '9px 10px' }}>
-                  {myTeams.map(tm => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
-                </select>
-              )}
-              <button onClick={toggleTeamRegister} disabled={busy || spotsLeft <= 0 || !pickTeam}
-                style={{ ...solidGold, padding: '11px 22px', fontSize: 14, opacity: (busy || spotsLeft <= 0 || !pickTeam) ? 0.5 : 1 }}>
-                {spotsLeft <= 0 ? 'Full' : 'Register team'}
+        {open && (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            {!isTeam && (
+              <button onClick={toggleRegister} disabled={busy || (!registered && spotsLeft <= 0)}
+                style={{ ...(registered ? ghostBtn : solidGold), padding: '11px 22px', fontSize: 14,
+                  opacity: (busy || (!registered && spotsLeft <= 0)) ? 0.6 : 1 }}>
+                {registered ? 'Withdraw' : spotsLeft <= 0 ? 'Full' : 'Register'}
               </button>
-            </div>
-          )
-        )}
-        {open && canManage && (
-          <button onClick={start} disabled={busy || entrants.length < 2}
-            style={{ ...solidGold, padding: '11px 24px', fontSize: 14, opacity: (busy || entrants.length < 2) ? 0.5 : 1 }}>
-            Start tournament
-          </button>
+            )}
+            {isTeam && (
+              regTeamId ? (
+                <button onClick={toggleTeamRegister} disabled={busy} style={{ ...ghostBtn, padding: '11px 22px', fontSize: 14, opacity: busy ? 0.6 : 1 }}>Withdraw team</button>
+              ) : myTeams.length === 0 ? (
+                <span style={{ fontFamily: ui, fontSize: 12.5, color: C.faint }}>Own a team to enter</span>
+              ) : (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  {myTeams.length > 1 && (
+                    <select value={pickTeam} onChange={e => setPickTeam(e.target.value)} style={{ ...field, width: 'auto', padding: '9px 10px' }}>
+                      {myTeams.map(tm => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
+                    </select>
+                  )}
+                  <button onClick={toggleTeamRegister} disabled={busy || spotsLeft <= 0 || !pickTeam}
+                    style={{ ...solidGold, padding: '11px 20px', fontSize: 14, opacity: (busy || spotsLeft <= 0 || !pickTeam) ? 0.5 : 1 }}>
+                    {spotsLeft <= 0 ? 'Full' : 'Register team'}
+                  </button>
+                </div>
+              )
+            )}
+            {canManage && (
+              <button onClick={start} disabled={busy || entrants.length < 2}
+                style={{ ...solidGold, padding: '11px 22px', fontSize: 14, opacity: (busy || entrants.length < 2) ? 0.5 : 1 }}>
+                Start tournament
+              </button>
+            )}
+          </div>
         )}
       </div>
 
       {t.description && <p style={{ fontFamily: ui, fontSize: 14.5, color: C.dim, lineHeight: 1.6, margin: '16px 0 0', maxWidth: 640 }}>{t.description}</p>}
       {err && <div style={{ fontFamily: ui, fontSize: 12.5, color: C.garnetHi, marginTop: 12 }}>{err}</div>}
+
+      {/* host: arrange matchups */}
+      {open && canManage && entrants.length >= 2 && (
+        <div style={{ marginTop: 18, borderRadius: 14, background: C.panel, border: `1px solid ${C.hair}`, overflow: 'hidden' }}>
+          <button onClick={() => setShowSeeding(v => !v)}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+              background: 'transparent', border: 'none', cursor: 'pointer', padding: '14px 16px', textAlign: 'left' }}>
+            <div>
+              <div style={{ fontFamily: display, fontSize: 15, fontWeight: 700, color: C.ink }}>Arrange matchups</div>
+              <div style={{ fontFamily: ui, fontSize: 11.5, color: C.faint, marginTop: 2 }}>
+                Set who faces whom in round one. Leave as-is to seed automatically by rank.
+              </div>
+            </div>
+            <span style={{ fontFamily: ui, fontSize: 12, color: C.gold, fontWeight: 700 }}>{showSeeding ? 'Hide' : 'Arrange'}</span>
+          </button>
+
+          {showSeeding && (
+            <div style={{ padding: '4px 16px 16px' }}>
+              {Array.from({ length: Math.ceil(seedOrder.length / 2) }, (_, pair) => {
+                const aIdx = pair * 2, bIdx = pair * 2 + 1;
+                return (
+                  <div key={pair} style={{ marginBottom: 12 }}>
+                    <div style={{ fontFamily: ui, fontSize: 10, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 6 }}>Match {pair + 1}</div>
+                    {[aIdx, bIdx].map(idx => idx < seedOrder.length && (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', marginBottom: 5,
+                        borderRadius: 8, background: C.panel2, border: `1px solid ${C.hair}` }}>
+                        <span style={{ fontFamily: mono, fontSize: 11, color: C.faint, width: 16 }}>{idx + 1}</span>
+                        <span style={{ flex: 1, fontFamily: ui, fontSize: 13, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(seedOrder[idx])}</span>
+                        <button onClick={() => move(idx, -1)} disabled={idx === 0} style={arrowBtn(idx === 0)}>↑</button>
+                        <button onClick={() => move(idx, 1)} disabled={idx === seedOrder.length - 1} style={arrowBtn(idx === seedOrder.length - 1)}>↓</button>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+              <button onClick={saveSeeding} disabled={busy} style={{ ...solidGold, padding: '9px 18px', fontSize: 13, opacity: busy ? 0.6 : 1 }}>Save matchups</button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* registration progress (registration phase only) */}
       {open && (
@@ -219,4 +289,12 @@ export function TournamentScreen() {
       )}
     </div>
   );
+}
+
+function arrowBtn(disabled: boolean): React.CSSProperties {
+  return {
+    width: 26, height: 26, borderRadius: 6, cursor: disabled ? 'default' : 'pointer',
+    background: 'transparent', border: `1px solid ${C.hair}`, color: disabled ? C.faint : C.dim,
+    fontFamily: ui, fontSize: 12, opacity: disabled ? 0.4 : 1, flexShrink: 0,
+  };
 }

@@ -92,6 +92,7 @@ export async function myRegisteredTeam(tournamentId: string): Promise<string | n
 
 export const registerTeam = (tid: string, teamId: string) => supabase.rpc('register_team_for_tournament', { p_tournament: tid, p_team: teamId }).then(r => { if (r.error) throw r.error; });
 export const withdrawTeam = (tid: string, teamId: string) => supabase.rpc('withdraw_team_from_tournament', { p_tournament: tid, p_team: teamId }).then(r => { if (r.error) throw r.error; });
+export const setEntrantSeeds = (tid: string, orderedIds: string[]) => supabase.rpc('set_entrant_seeds', { p_tournament: tid, p_ids: orderedIds }).then(r => { if (r.error) throw r.error; });
 
 export const registerForTournament = (id: string) => supabase.rpc('register_for_tournament', { p_tournament: id }).then(r => { if (r.error) throw r.error; });
 export const withdrawFromTournament = (id: string) => supabase.rpc('withdraw_from_tournament', { p_tournament: id }).then(r => { if (r.error) throw r.error; });
