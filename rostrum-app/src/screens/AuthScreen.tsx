@@ -152,8 +152,8 @@ export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; not
               </>
             ) : (
               <>
-                <Labeled label="Email">
-                  <input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"
+                <Labeled label="email" lower>
+                  <input value={email} onChange={e => setEmail(e.target.value)} placeholder="email"
                     style={field} onFocus={focusField} onBlur={blurField}
                     onKeyDown={e => { if (e.key === 'Enter') sendReset(); }} />
                 </Labeled>
@@ -196,8 +196,8 @@ export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; not
                 style={field} onFocus={focusField} onBlur={blurField} />
             </Labeled>
           )}
-          <Labeled label="Email">
-            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"
+          <Labeled label="email" lower>
+            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="email"
               style={field} onFocus={focusField} onBlur={blurField} />
           </Labeled>
           <Labeled label="Password">
@@ -265,11 +265,11 @@ export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; not
   );
 }
 
-function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
+function Labeled({ label, children, lower }: { label: string; children: React.ReactNode; lower?: boolean }) {
   return (
     <label style={{ display:'block', marginBottom:16 }}>
       <span style={{ fontFamily:ui, fontSize:11.5, fontWeight:700, letterSpacing:'.06em',
-        textTransform:'uppercase', color:C.dim }}>{label}</span>
+        textTransform: lower ? 'none' : 'uppercase', color:C.dim }}>{label}</span>
       <div style={{ marginTop:8 }}>{children}</div>
     </label>
   );
