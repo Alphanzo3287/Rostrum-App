@@ -153,7 +153,7 @@ export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; not
             ) : (
               <>
                 <Labeled label="Email">
-                  <input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@email.com"
+                  <input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"
                     style={field} onFocus={focusField} onBlur={blurField}
                     onKeyDown={e => { if (e.key === 'Enter') sendReset(); }} />
                 </Labeled>
@@ -192,12 +192,12 @@ export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; not
 
           {mode === 'signup' && (
             <Labeled label="Display name">
-              <input value={name} onChange={e => setName(e.target.value)} placeholder="Marcus Cole"
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name"
                 style={field} onFocus={focusField} onBlur={blurField} />
             </Labeled>
           )}
           <Labeled label="Email">
-            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@email.com"
+            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"
               style={field} onFocus={focusField} onBlur={blurField} />
           </Labeled>
           <Labeled label="Password">
