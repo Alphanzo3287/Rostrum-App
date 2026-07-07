@@ -21,6 +21,8 @@ import {
 } from '../lib/api';
 import { demoteFromStage, promoteFromAudience } from '../lib/livekit';
 import { useStageInvites, type StageRole, type StageSide } from '../lib/stageInvites';
+import { getDebateReward, type DebateReward } from '../lib/rewards';
+import { DebateRewardCard } from '../components/DebateRewardCard';
 import { GiftModal } from '../components/GiftModal';
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
@@ -69,8 +71,20 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   // make sure a participant row exists (token also upserts audience as a fallback)
   useEffect(() => { joinDebate(debateId).catch(() => {}); }, [debateId]);
 
-  // when the host finalizes, everyone is routed to results
-  useEffect(() => { if (dz.phase === 'ended') onEnded(); }, [dz.phase, onEnded]);
+  // When the debate ends, show the XP reward card first (if this user earned
+  // anything), then route to results on "Continue". Audience members who earned
+  // nothing skip straight through.
+  const [reward, setReward] = useState<DebateReward | null>(null);
+  const [rewardChecked, setRewardChecked] = useState(false);
+  useEffect(() => {
+    if (dz.phase !== 'ended') return;
+    let alive = true;
+    getDebateReward(debateId)
+      .then(r => { if (!alive) return; if (r && r.xp_awarded > 0) setReward(r); else onEnded(); })
+      .catch(() => { if (alive) onEnded(); })
+      .finally(() => { if (alive) setRewardChecked(true); });
+    return () => { alive = false; };
+  }, [dz.phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const me = room.members.find(m => m.isLocal);
   const role = (me?.role ?? 'audience') as any;
@@ -214,6 +228,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
 
   return (
     <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', background:C.base }}>
+      {reward && <DebateRewardCard reward={reward} onContinue={() => { setReward(null); onEnded(); }} />}
       {/* ---- tally bar ---- */}
       <div style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 20px',
         borderBottom:`1px solid ${C.hair}`, background:a(C.base,'CC'), backdropFilter:'blur(20px)' }}>
