@@ -50,6 +50,8 @@ import { LibraryScreen } from './screens/LibraryScreen';
 import { ReplayScreen } from './screens/ReplayScreen';
 import { AnalyticsScreen } from './screens/AnalyticsScreen';
 import { AnalyticsHubScreen } from './screens/AnalyticsHubScreen';
+import { CommunitiesScreen } from './screens/CommunitiesScreen';
+import { CommunityScreen } from './screens/CommunityScreen';
 import { getDebate, getMyBan } from './lib/api';
 import { hasPaidDebateEntry, startDebateEntryCheckout } from './lib/payments';
 import type { DebateRole, Side } from './lib/types';
@@ -140,7 +142,8 @@ function Gate() {
         <Route path="earnings" element={<EarningsRoute />} />
         <Route path="settings" element={<SettingsRoute />} />
         <Route path="support" element={<SupportRoute />} />
-        <Route path="communities" element={<ComingSoonRoute title="Communities" subtitle="Find your tribe. Join debate communities by topic, school, or interest." />} />
+        <Route path="communities" element={<CommunitiesScreen />} />
+        <Route path="community/:id" element={<CommunityScreen />} />
         <Route path="discover" element={<DiscoverScreen />} />
         <Route path="live" element={<ComingSoonRoute title="Live Arenas" subtitle="All live debates, all the time. Watch what's happening right now." />} />
         <Route path="library" element={<LibraryScreen />} />
