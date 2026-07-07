@@ -97,6 +97,7 @@ export interface CreateDebateInput {
   thumbnailFile?: File | null;
   maxStageSeats?: number | null;
   maxModerators?: number | null;
+  communityId?: string | null;
 }
 
 export async function createDebate(input: CreateDebateInput): Promise<Debate> {
@@ -120,6 +121,7 @@ export async function createDebate(input: CreateDebateInput): Promise<Debate> {
     status: input.scheduledAt ? 'scheduled' : 'assembly',
     max_stage_seats: input.maxStageSeats ?? null,
     max_moderators: input.maxModerators ?? null,
+    community_id: input.communityId ?? null,
   }).select().single();
   if (error) throw error;
   const d = debate as Debate;
@@ -571,6 +573,15 @@ export function subscribeTally(debateId: string, onChange: (t: Tally) => void) {
     .subscribe());
 }
 
+/* Fires whenever any debate row changes (status flips to live/ended, viewer
+   count updates, etc.) so the lobby can refresh instantly instead of waiting
+   for the poll. */
+export function subscribeDebatesList(onChange: () => void) {
+  return safeSub(() => supabase.channel(`debates-list:${uniq()}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'debates' }, () => onChange())
+    .subscribe());
+}
+
 export function subscribeParticipants(debateId: string, onChange: () => void) {
   return safeSub(() => supabase.channel(`participants:${debateId}:${uniq()}`)
     .on('postgres_changes',
@@ -906,7 +917,7 @@ export async function declineTeamInvite(inviteId: string): Promise<void> {
 
 /* ─────────────────── PROFILE EDITING ─────────────────── */
 export async function updateProfile(patch: {
-  display_name?: string; handle?: string; bio?: string | null; topics?: string[]; socials?: Partial<import('./types').Socials>;
+  display_name?: string; handle?: string; bio?: string | null; topics?: string[]; socials?: Partial<import('./types').Socials>; profile_accent?: string | null;
 }): Promise<Profile> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('not signed in');

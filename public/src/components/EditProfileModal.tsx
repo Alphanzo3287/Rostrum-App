@@ -3,7 +3,9 @@
 // Self-serve profile editing: display name, handle, bio, topics, socials.
 // =====================================================================
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { updateProfile } from '../lib/api';
+import { isPro, PRO_ACCENTS } from '../lib/pro';
 import type { Profile } from '../lib/types';
 import { C, ui, display, a, solidGold, field } from '../lib/theme';
 
@@ -20,8 +22,11 @@ export function EditProfileModal({ profile, onClose, onSaved }: {
   const [bio, setBio] = useState(profile.bio ?? '');
   const [topics, setTopics] = useState((profile.topics ?? []).join(', '));
   const [socials, setSocials] = useState<Record<string, string>>({ ...(profile.socials ?? {}) } as any);
+  const [accent, setAccent] = useState<string>(profile.profile_accent ?? '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const pro = isPro(profile);
+  const nav = useNavigate();
 
   async function save() {
     const name = displayName.trim();
@@ -36,6 +41,8 @@ export function EditProfileModal({ profile, onClose, onSaved }: {
         display_name: name, handle: h, bio: bio.trim() || null,
         topics: topics.split(',').map(t => t.trim()).filter(Boolean),
         socials: cleanSocials,
+        // Only Pro members can set an accent; always safe to send (RLS is per-user).
+        ...(pro ? { profile_accent: accent || null } : {}),
       });
       onSaved(updated);
     } catch (e: any) { setErr(e?.message ?? 'Could not save changes.'); }
@@ -79,6 +86,37 @@ export function EditProfileModal({ profile, onClose, onSaved }: {
                   placeholder={`${label} URL`} style={{ ...field, fontSize:13 }} />
               ))}
             </div>
+          </div>
+
+          <div>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+              <span style={{ fontFamily:ui, fontSize:11.5, fontWeight:600, color:C.dim }}>Profile accent</span>
+              <span style={{ fontFamily:ui, fontSize:9.5, fontWeight:800, letterSpacing:'.06em', textTransform:'uppercase',
+                color:C.gold, padding:'2px 7px', borderRadius:999, border:`1px solid ${a(C.gold,'55')}` }}>👑 Pro</span>
+            </div>
+            {pro ? (
+              <div style={{ display:'flex', gap:9, flexWrap:'wrap' }}>
+                {PRO_ACCENTS.map(opt => {
+                  const on = (accent || '') === opt.hex;
+                  const swatch = opt.hex
+                    ? `linear-gradient(135deg, ${opt.hex}, ${a(opt.hex,'80')})`
+                    : `linear-gradient(135deg, ${C.gold}, ${C.cyan}, ${C.jade})`;
+                  return (
+                    <button key={opt.id} type="button" title={opt.label} onClick={() => setAccent(opt.hex)}
+                      style={{ width:34, height:34, borderRadius:'50%', cursor:'pointer', background:swatch,
+                        border: on ? `2.5px solid ${C.ink}` : `2px solid ${C.hair}`,
+                        boxShadow: on ? `0 0 0 2px ${a(C.gold,'55')}` : 'none' }} />
+                  );
+                })}
+              </div>
+            ) : (
+              <div onClick={() => { onClose(); nav('/pro'); }}
+                style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, padding:'11px 13px',
+                  borderRadius:10, cursor:'pointer', background:a(C.gold,'0C'), border:`1px solid ${a(C.gold,'33')}` }}>
+                <span style={{ fontFamily:ui, fontSize:12.5, color:C.dim }}>Customize your profile color with Rostrum Pro.</span>
+                <span style={{ fontFamily:ui, fontSize:12, fontWeight:700, color:C.gold, whiteSpace:'nowrap' }}>Upgrade →</span>
+              </div>
+            )}
           </div>
 
           {err && <div style={{ fontFamily:ui, fontSize:12.5, color:C.garnetHi }}>{err}</div>}

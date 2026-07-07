@@ -4,8 +4,12 @@
 // Record + points + followers, achievements, wallet (self), follow (others).
 // =====================================================================
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { getProfile, getAchievements, amFollowing, follow, unfollow, getUserTeams, amIBlocking, blockUser, unblockUser } from '../lib/api';
+import { publicReplaysOf, type ReplayItem } from '../lib/replays';
+import { isPro, coverGradient } from '../lib/pro';
+import { ProBadge } from '../components/ProBadge';
 import { ReportModal } from '../components/ReportModal';
 import { EditProfileModal } from '../components/EditProfileModal';
 import type { Profile, Achievement, Team } from '../lib/types';
@@ -29,6 +33,8 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
   const [teams, setTeams] = useState<Team[]>([]);
   const [listing, setListing] = useState<BuybackListing | null>(null);
   const [buyBusy, setBuyBusy] = useState(false);
+  const [replays, setReplays] = useState<ReplayItem[]>([]);
+  const nav = useNavigate();
 
   useEffect(() => {
     if (isSelf) setProfile(me);
@@ -38,6 +44,7 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
   useEffect(() => {
     if (!profile) return;
     getAchievements(profile.id).then(setAch);
+    publicReplaysOf(profile.id).then(setReplays).catch(() => {});
     if (!isSelf) amFollowing(profile.id).then(setFollowing);
     if (!isSelf) amIBlocking(profile.id).then(setBlocked).catch(() => {});
     getUserTeams(profile.id).then(setTeams).catch(() => {});
@@ -84,7 +91,7 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
         background:C.panel, marginBottom:22 }}>
         {/* cover band */}
         <div style={{ height:120, position:'relative',
-          background:`linear-gradient(120deg, ${a(C.gold,'5C')}, ${a(C.cyan,'38')}, ${a(C.jade,'24')})` }}>
+          background: coverGradient(profile.profile_accent) }}>
           <div style={{ position:'absolute', inset:0, opacity:0.25,
             background:`radial-gradient(circle at 20% 50%, ${a('#FFFFFF','40')}, transparent 50%)` }} />
         </div>
@@ -97,6 +104,7 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
             <div style={{ flex:1, minWidth:220, paddingBottom:4 }}>
               <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
                 <h2 style={{ fontFamily:display, fontSize:30, fontWeight:700, color:C.ink, margin:0, letterSpacing:'-.02em' }}>{profile.display_name}</h2>
+                {isPro(profile) && <ProBadge />}
                 <RankBadge rank={profile.rank} level={profile.level} />
               </div>
               <div style={{ fontFamily:mono, fontSize:13, color:C.faint, marginTop:4 }}>@{profile.handle}</div>
@@ -241,6 +249,26 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
                   <div style={{ fontSize:26 }}>{a.icon}</div>
                   <div style={{ fontFamily:ui, fontSize:14, fontWeight:600, color:C.ink, marginTop:8 }}>{a.name}</div>
                   <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginTop:3, lineHeight:1.4 }}>{a.description}</div>
+                </div>
+              ))}
+            </div>}
+      </Section>
+
+      {/* replays — the host's public library */}
+      <Section title={`Replays · ${replays.length}`}>
+        {replays.length === 0
+          ? <Empty>{isSelf ? 'No public replays yet — make one public from your Library.' : 'No public replays yet.'}</Empty>
+          : <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(230px,1fr))', gap:12 }}>
+              {replays.map(r => (
+                <div key={r.id} onClick={() => nav(`/replay/${r.id}`)}
+                  style={{ padding:16, borderRadius:18, border:`1px solid ${C.hair}`, background:C.panel, cursor:'pointer' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = C.hairHi; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = C.hair; }}>
+                  <div style={{ fontSize:22 }}>🎬</div>
+                  <div style={{ fontFamily:ui, fontSize:14, fontWeight:600, color:C.ink, marginTop:8, lineHeight:1.35 }}>{r.title}</div>
+                  <div style={{ fontFamily:ui, fontSize:11.5, color:C.faint, marginTop:5 }}>
+                    ▶ Watch replay · {new Date(r.created_at).toLocaleDateString()}
+                  </div>
                 </div>
               ))}
             </div>}

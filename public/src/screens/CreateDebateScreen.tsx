@@ -6,6 +6,7 @@
 // =====================================================================
 import { useState, useEffect } from 'react';
 import { createDebate } from '../lib/api';
+import { myCommunities } from '../lib/communities';
 import { createYouTubeBroadcast, getYouTubeConnection, type YouTubeConnection } from '../lib/youtube';
 import type { DebateFormat, Side, Visibility } from '../lib/types';
 import { C, ui, display, mono, solidGold, field, a } from '../lib/theme';
@@ -77,6 +78,8 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
   const [teamSize, setTeamSize] = useState(1);           // speakers_corner: 1v1..5v5
   const [maxStageSeats, setMaxStageSeats] = useState<number | ''>('');  // legacy: blank = uncapped
   const [maxModerators, setMaxModerators] = useState<number | ''>('');  // legacy: blank = uncapped
+  const [community, setCommunity] = useState<string>('');                // optional: host in a community
+  const [myComms, setMyComms] = useState<{ id: string; name: string }[]>([]);
   const [ytEnabled, setYtEnabled] = useState(false);
   const [ytTitle, setYtTitle] = useState('');
   const [ytDesc, setYtDesc] = useState('');
@@ -86,6 +89,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => { getYouTubeConnection().then(setYtConn).catch(() => {}); }, []);
+  useEffect(() => { myCommunities().then(cs => setMyComms(cs.map(c => ({ id: c.id, name: c.name })))).catch(() => {}); }, []);
 
   const pickFormat = (f: DebateFormat) => {
     setFormat(f); setSegs(FORMATS[f]);
@@ -116,6 +120,7 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
         maxStageSeats: format === 'legacy' ? (maxStageSeats === '' ? null : maxStageSeats)
           : format === 'speakers_corner' ? teamSize * 2 : null,
         maxModerators: format === 'legacy' ? (maxModerators === '' ? null : maxModerators) : null,
+        communityId: community || null,
       });
       // If YouTube is connected and enabled, create the broadcast automatically.
       if (ytEnabled && ytConn?.connected) {
@@ -176,6 +181,18 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
               <Chip on={vis === 'unlisted'} onClick={() => setVis('unlisted')}>Unlisted · link only</Chip>
               <Chip on={vis === 'private'} onClick={() => setVis('private')}>Private · invite only</Chip>
             </div>
+
+            {myComms.length > 0 && (
+              <>
+                <Label>Community <span style={{ color:C.faint, fontWeight:400, textTransform:'none', letterSpacing:0 }}>· optional</span></Label>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:8, marginBottom:22 }}>
+                  <Chip on={community === ''} onClick={() => setCommunity('')}>None</Chip>
+                  {myComms.map(c => (
+                    <Chip key={c.id} on={community === c.id} onClick={() => setCommunity(c.id)}>{c.name}</Chip>
+                  ))}
+                </div>
+              </>
+            )}
 
             <Label>When</Label>
             <div style={{ display:'flex', gap:8, marginTop:8 }}>

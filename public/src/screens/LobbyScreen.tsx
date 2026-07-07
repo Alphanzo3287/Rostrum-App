@@ -6,7 +6,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  listLiveDebates, listUpcomingDebates, getPlatformStats, getTopDebaters,
+  listLiveDebates, listUpcomingDebates, getPlatformStats, getTopDebaters, subscribeDebatesList,
   type PlatformStats, type TopDebater,
 } from '../lib/api';
 import type { Debate } from '../lib/types';
@@ -261,16 +261,19 @@ export function LobbyScreen({ onOpenDebate, onHost: _onHost }: {
 
   useEffect(() => {
     let alive = true;
+    let debounce: ReturnType<typeof setTimeout> | undefined;
     const pull = () => listLiveDebates().then(d => { if (alive) setLive(d); }).catch(e => { if (alive) setErr(e?.message ?? 'Could not load debates'); });
+    const pullSoon = () => { clearTimeout(debounce); debounce = setTimeout(pull, 700); };
     pull();
     listUpcomingDebates().then(d => { if (alive) setUpcoming(d); }).catch(() => {});
     getPlatformStats().then(s => { if (alive) setStats(s); }).catch(() => {});
     getTopDebaters(5).then(d => { if (alive) setDebaters(d); }).catch(() => {});
-    // Safety-net refresh so a debate going live shows up here without a
-    // manual reload — matches the same polling-fallback pattern used
-    // throughout the debate room (useDebate, floor_stats, etc).
+    // Instant updates: refresh the moment any debate goes live / ends / its
+    // viewer count changes. The 15s interval stays as a safety net in case the
+    // realtime socket drops.
+    const off = subscribeDebatesList(pullSoon);
     const iv = setInterval(pull, 15000);
-    return () => { alive = false; clearInterval(iv); };
+    return () => { alive = false; clearTimeout(debounce); clearInterval(iv); off(); };
   }, []);
 
   const open = (id: string) => onOpenDebate ? onOpenDebate(id) : (window.location.href = `/debate/${id}`);

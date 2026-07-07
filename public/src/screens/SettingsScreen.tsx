@@ -197,6 +197,15 @@ export function SettingsScreen({ onBack }: { onBack?: () => void }) {
               </div>}
         <button onClick={loadRooms} style={{ ...ghostBtn, marginTop:14, fontSize:12 }}>Refresh</button>
       </div>
+
+      {/* ── Legal ── */}
+      <div style={{ padding:'20px 22px', borderRadius:12, border:`1px solid ${C.hair}`, background:C.panel, marginTop:16 }}>
+        <div style={{ fontFamily:display, fontSize:17, fontWeight:700, color:C.ink, marginBottom:14 }}>Legal</div>
+        <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+          <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ ...ghostBtn, textDecoration:'none', display:'inline-block' }}>Terms of Service</a>
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ ...ghostBtn, textDecoration:'none', display:'inline-block' }}>Privacy Policy</a>
+        </div>
+      </div>
     </Scroll>
   );
 }
