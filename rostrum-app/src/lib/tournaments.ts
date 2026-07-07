@@ -74,12 +74,17 @@ export const registerForTournament = (id: string) => supabase.rpc('register_for_
 export const withdrawFromTournament = (id: string) => supabase.rpc('withdraw_from_tournament', { p_tournament: id }).then(r => { if (r.error) throw r.error; });
 export const deleteTournament = (id: string) => supabase.rpc('delete_tournament', { p_tournament: id }).then(r => { if (r.error) throw r.error; });
 export const startTournament = (id: string) => supabase.rpc('start_tournament', { p_tournament: id }).then(r => { if (r.error) throw r.error; });
+export async function startMatch(matchId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('start_tournament_match', { p_match: matchId });
+  if (error) throw error;
+  return data as string;   // the created debate id
+}
 
 export interface BracketSlot { name: string; seed: number | null }
 export interface BracketMatch {
   id: string; round: number; slot: number; status: string;
   a: BracketSlot | null; b: BracketSlot | null; winner_entrant: string | null;
-  entrant_a: string | null; entrant_b: string | null;
+  entrant_a: string | null; entrant_b: string | null; debate_id: string | null;
 }
 
 /** The full bracket: every match with resolved entrant names, plus round count. */
@@ -92,7 +97,7 @@ export async function getBracket(tournamentId: string): Promise<{ rounds: number
   for (const e of (eRes.data ?? []) as any[]) emap.set(e.id, { name: e.profile?.display_name ?? 'Entrant', seed: e.seed });
   const matches: BracketMatch[] = (mRes.data ?? []).map((m: any) => ({
     id: m.id, round: m.round, slot: m.slot, status: m.status,
-    entrant_a: m.entrant_a, entrant_b: m.entrant_b, winner_entrant: m.winner_entrant,
+    entrant_a: m.entrant_a, entrant_b: m.entrant_b, winner_entrant: m.winner_entrant, debate_id: m.debate_id,
     a: m.entrant_a ? emap.get(m.entrant_a) ?? null : null,
     b: m.entrant_b ? emap.get(m.entrant_b) ?? null : null,
   }));

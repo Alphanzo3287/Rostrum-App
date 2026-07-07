@@ -8,7 +8,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import {
   getTournament, tournamentEntrants, isRegistered, registerForTournament,
-  withdrawFromTournament, deleteTournament, startTournament, getBracket,
+  withdrawFromTournament, deleteTournament, startTournament, getBracket, startMatch,
   type Tournament, type TournamentEntrant, type BracketMatch,
 } from '../lib/tournaments';
 import { BracketView } from '../components/BracketView';
@@ -49,6 +49,11 @@ export function TournamentScreen() {
     try { await startTournament(id); refresh(); }
     catch (e: any) { setErr(e?.message ?? 'Could not start'); }
     finally { setBusy(false); }
+  }
+
+  async function beginMatch(matchId: string) {
+    try { const debateId = await startMatch(matchId); nav(`/debate/${debateId}`); }
+    catch (e: any) { setErr(e?.message ?? 'Could not start match'); }
   }
 
   async function toggleRegister() {
@@ -160,7 +165,8 @@ export function TournamentScreen() {
       {!open && bracket && bracket.matches.length > 0 && (
         <div style={{ marginTop: 26 }}>
           <div style={{ fontFamily: ui, fontSize: 12, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, marginBottom: 14 }}>Bracket</div>
-          <BracketView rounds={bracket.rounds} matches={bracket.matches} />
+          <BracketView rounds={bracket.rounds} matches={bracket.matches}
+            canManage={canManage} onStart={beginMatch} onWatch={(dId) => nav(`/debate/${dId}`)} />
         </div>
       )}
 
