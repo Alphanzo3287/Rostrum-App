@@ -162,6 +162,24 @@ export async function cancelBuybackListing(listingId: string): Promise<void> {
 export const startBuybackCheckout = (listingId: string) => authedPost<{ url: string }>('stripe-buyback-checkout', { listingId });
 export const getBuybackDownloadUrl = (listingId: string) => authedPost<{ url: string }>('buyback-download', { listingId });
 
+/* ---- Cash-out: convert redeemable D-Bucks to a real payout ---- */
+export interface Withdrawal {
+  id: string; dbucks_amount: number; gross_cents: number; fee_cents: number; net_cents: number;
+  status: 'pending' | 'paid' | 'failed'; created_at: string; paid_at: string | null;
+}
+export const WITHDRAW_MIN_DBUCKS = 5000; // $50.00
+export const WITHDRAW_FEE_BPS = 1500;    // 15% kept at cash-out
+
+export const requestWithdrawal = (dbucks: number) =>
+  authedPost<{ ok: boolean; net_cents: number; fee_cents: number; gross_cents: number }>('stripe-withdraw', { dbucks });
+
+export async function getMyWithdrawals(): Promise<Withdrawal[]> {
+  const { data } = await supabase.from('withdrawals')
+    .select('id, dbucks_amount, gross_cents, fee_cents, net_cents, status, created_at, paid_at')
+    .order('created_at', { ascending: false }).limit(20);
+  return (data as Withdrawal[]) ?? [];
+}
+
 /* ---- Buy & send a gift directly with real money (no wallet top-up step) ---- */
 export const startGiftCheckout = (tierId: string, toUserId: string, debateId?: string) =>
   authedPost<{ url: string }>('stripe-gift-checkout', { tierId, toUserId, debateId });
@@ -178,12 +196,56 @@ export async function hasPaidDebateEntry(debateId: string): Promise<boolean> {
 /* ---- Level / XP / progress ---- */
 export interface Progress {
   xp: number; level: number; next_level_xp: number;
-  qualifying_debates: number; verified_speaking_seconds: number;
+  qualifying_debates: number; qualifying_lectures: number; verified_speaking_seconds: number;
   cashout_unlocked: boolean;
 }
 export async function getMyProgress(): Promise<Progress> {
   const { data, error } = await supabase.rpc('get_my_progress');
   if (error) throw error;
   const row = Array.isArray(data) ? data[0] : data;
-  return row ?? { xp: 0, level: 1, next_level_xp: 300, qualifying_debates: 0, verified_speaking_seconds: 0, cashout_unlocked: false };
+  return row ?? { xp: 0, level: 1, next_level_xp: 300, qualifying_debates: 0, qualifying_lectures: 0, verified_speaking_seconds: 0, cashout_unlocked: false };
+}
+
+/* ============ Back Office (admin) ============ */
+export interface PayoutRequest {
+  id: string; user_id: string; display_name: string; handle: string;
+  dbucks_amount: number; gross_cents: number; fee_cents: number; net_cents: number;
+  status: 'requested' | 'paid' | 'declined' | 'failed' | 'pending';
+  created_at: string; paid_at: string | null; cashable_redeemable: number;
+}
+export interface AdminTxn {
+  id: string; created_at: string; category: string; from_label: string; to_label: string;
+  dbucks: number; amount_cents: number; reason: string;
+}
+export interface FinancialSummary {
+  gift_revenue_cents: number; payouts_paid_cents: number; payouts_pending_cents: number;
+  platform_fees_cents: number; pending_count: number; circulating_dbucks: number;
+}
+export interface FinancialPoint { day: string; gift_cents: number; payout_cents: number; }
+
+export async function adminListPayoutRequests(status: string | null = 'requested'): Promise<PayoutRequest[]> {
+  const { data, error } = await supabase.rpc('admin_list_payout_requests', { p_status: status });
+  if (error) throw error;
+  return (data as PayoutRequest[]) ?? [];
+}
+export const approvePayout = (id: string) =>
+  authedPost<{ ok: boolean; status: string }>('stripe-withdraw-approve', { withdrawalId: id, action: 'approve' });
+export const declinePayout = (id: string, reason?: string) =>
+  authedPost<{ ok: boolean; status: string }>('stripe-withdraw-approve', { withdrawalId: id, action: 'decline', reason });
+
+export async function adminTransactions(limit = 100): Promise<AdminTxn[]> {
+  const { data, error } = await supabase.rpc('admin_transactions', { p_limit: limit });
+  if (error) throw error;
+  return (data as AdminTxn[]) ?? [];
+}
+export async function adminFinancialSummary(): Promise<FinancialSummary> {
+  const { data, error } = await supabase.rpc('admin_financial_summary');
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ?? { gift_revenue_cents: 0, payouts_paid_cents: 0, payouts_pending_cents: 0, platform_fees_cents: 0, pending_count: 0, circulating_dbucks: 0 };
+}
+export async function adminFinancialTimeseries(days = 30): Promise<FinancialPoint[]> {
+  const { data, error } = await supabase.rpc('admin_financial_timeseries', { p_days: days });
+  if (error) throw error;
+  return (data as FinancialPoint[]) ?? [];
 }

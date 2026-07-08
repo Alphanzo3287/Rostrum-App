@@ -1,38 +1,150 @@
 // =====================================================================
 // The Rostrum · src/screens/TournamentsScreen.tsx
-// Placeholder for the Tournaments feature (replaces the Notifications
-// sidebar slot per request). There's no tournament backend yet — brackets,
-// registration, and multi-round scheduling are a real feature to design,
-// not something to fake with placeholder data. This is an honest "on the
-// roadmap" page, matching the existing Rostrum Pro coming-soon pattern.
+// Browse & create single-elimination tournaments. Route: /tournaments
 // =====================================================================
-import { C, ui, display, a, solidGold } from '../lib/theme';
-import { Scroll } from '../components/ui';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { listTournaments, createTournament, type Tournament } from '../lib/tournaments';
+import { C, ui, display, mono, a, solidGold, ghostBtn, field } from '../lib/theme';
 
-export function TournamentsScreen({ onBack }: { onBack?: () => void }) {
+const STATUS_LABEL: Record<string, { label: string; color: string }> = {
+  registration: { label: 'Registration open', color: '#4FC2A7' },
+  live: { label: 'In progress', color: '#E86A6A' },
+  completed: { label: 'Completed', color: '#8A93A0' },
+};
+const FORMAT_LABEL: Record<string, string> = { oxford: 'Oxford', lecture: 'Lecture', legacy: 'Legacy', speakers_corner: "Speaker's Corner" };
+
+export function TournamentsScreen() {
+  const nav = useNavigate();
+  const [list, setList] = useState<Tournament[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+
+  const load = () => { listTournaments().then(setList).catch(() => {}).finally(() => setLoading(false)); };
+  useEffect(load, []);
+
   return (
-    <Scroll title="Tournaments" onBack={onBack} maxWidth={720}>
-      <div style={{ textAlign:'center', padding:'56px 24px', borderRadius:20,
-        background:C.panel, border:`1px solid ${C.hair}` }}>
-        <div style={{ width:64, height:64, margin:'0 auto 18px', borderRadius:16, display:'grid', placeItems:'center',
-          background:`linear-gradient(135deg, ${C.gold}, ${C.cyan})`, boxShadow:`0 10px 30px ${a(C.gold,'4D')}` }}>
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8"
-            strokeLinecap="round" strokeLinejoin="round">
-            <path d="M6 3h12M6 3v4a6 6 0 0 0 12 0V3M6 3H3v2a4 4 0 0 0 4 4M18 3h3v2a4 4 0 0 1-4 4M9 13h6M12 13v5m-4 4h8" />
-          </svg>
+    <div style={{ maxWidth: 900, margin: '0 auto', padding: '26px 20px 70px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 6 }}>
+        <div>
+          <h1 style={{ fontFamily: display, fontSize: 28, fontWeight: 700, color: C.ink, margin: 0 }}>Tournaments</h1>
+          <p style={{ fontFamily: ui, fontSize: 13.5, color: C.faint, margin: '4px 0 0' }}>
+            Single-elimination brackets. Register, compete, and climb to the championship.
+          </p>
         </div>
-        <h2 style={{ fontFamily:display, fontSize:26, fontWeight:700, color:C.ink, margin:'0 0 10px' }}>
-          Bracketed tournaments are coming
-        </h2>
-        <p style={{ fontFamily:ui, fontSize:14.5, color:C.dim, lineHeight:1.6, maxWidth:460, margin:'0 auto 24px' }}>
-          Multi-round brackets, team registration, and scheduled elimination rounds are on the
-          roadmap. We didn't want to ship a page full of fake matchups in the meantime —
-          this space is reserved for when it's real.
-        </p>
-        <button onClick={() => alert('Thanks — we\'ll let you know when tournaments launch!')} style={solidGold}>
-          Notify me when it's ready
-        </button>
+        <button onClick={() => setCreating(true)} style={{ ...solidGold, padding: '10px 18px', fontSize: 13.5, whiteSpace: 'nowrap' }}>+ Create</button>
       </div>
-    </Scroll>
+
+      {loading ? (
+        <div style={{ fontFamily: ui, fontSize: 14, color: C.faint, marginTop: 30 }}>Loading…</div>
+      ) : list.length === 0 ? (
+        <div style={{ marginTop: 24, padding: '40px 22px', borderRadius: 16, textAlign: 'center', background: C.panel, border: `1px solid ${C.hair}` }}>
+          <div style={{ fontFamily: ui, fontSize: 14, color: C.faint, marginBottom: 16 }}>No tournaments yet — host the first one.</div>
+          <button onClick={() => setCreating(true)} style={{ ...solidGold, padding: '10px 20px', fontSize: 13.5 }}>Create a tournament</button>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, marginTop: 24 }}>
+          {list.map(t => {
+            const st = STATUS_LABEL[t.status] ?? STATUS_LABEL.completed;
+            return (
+              <button key={t.id} onClick={() => nav(`/tournament/${t.id}`)}
+                style={{ textAlign: 'left', cursor: 'pointer', border: `1px solid ${C.hair}`, borderRadius: 16, background: C.panel, padding: '16px 18px' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = C.hairHi; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = C.hair; }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: st.color }} />
+                  <span style={{ fontFamily: ui, fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: st.color }}>{st.label}</span>
+                </div>
+                <div style={{ fontFamily: display, fontSize: 17, fontWeight: 700, color: C.ink, lineHeight: 1.2 }}>{t.title}</div>
+                <div style={{ fontFamily: mono, fontSize: 11.5, color: C.faint, marginTop: 8 }}>
+                  {FORMAT_LABEL[t.debate_format] ?? t.debate_format} · {t.size}-{t.kind === 'team' ? 'team' : 'player'} bracket
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {creating && <CreateTournamentModal onClose={() => setCreating(false)} onCreated={(t) => { setCreating(false); nav(`/tournament/${t.id}`); }} />}
+    </div>
+  );
+}
+
+function CreateTournamentModal({ onClose, onCreated }: { onClose: () => void; onCreated: (t: Tournament) => void }) {
+  const [title, setTitle] = useState('');
+  const [desc, setDesc] = useState('');
+  const [kind, setKind] = useState<'individual' | 'team'>('individual');
+  const [format, setFormat] = useState('oxford');
+  const [size, setSize] = useState(8);
+  const [startsAt, setStartsAt] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function submit() {
+    if (!title.trim()) { setErr('Give your tournament a title.'); return; }
+    setBusy(true); setErr('');
+    try {
+      const t = await createTournament({
+        title: title.trim(), description: desc.trim() || undefined,
+        debateFormat: format, size, startsAt: startsAt ? new Date(startsAt).toISOString() : null, kind,
+      });
+      onCreated(t);
+    } catch (e: any) { setErr(e?.message ?? 'Could not create tournament'); setBusy(false); }
+  }
+
+  const Chip = ({ on, children, onClick }: { on: boolean; children: React.ReactNode; onClick: () => void }) => (
+    <button type="button" onClick={onClick} style={{ padding: '8px 14px', borderRadius: 8, cursor: 'pointer',
+      fontFamily: ui, fontSize: 13, fontWeight: 600,
+      background: on ? a(C.gold, '1F') : C.panel2, color: on ? C.gold : C.dim,
+      border: `1px solid ${on ? a(C.gold, '66') : C.hair}` }}>{children}</button>
+  );
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'grid', placeItems: 'center', padding: 18, background: a(C.base, 'C0'), backdropFilter: 'blur(4px)' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 480, maxWidth: '100%', maxHeight: '88vh', overflowY: 'auto', borderRadius: 16, background: C.panel, border: `1px solid ${C.hairHi}`, padding: '24px 24px 20px' }}>
+        <h2 style={{ fontFamily: display, fontSize: 21, fontWeight: 700, color: C.ink, margin: '0 0 16px' }}>Create a tournament</h2>
+
+        <L label="Title"><input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Spring Championship" style={field} maxLength={100} /></L>
+        <L label="Description"><textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="What's this tournament about?" rows={2} style={{ ...field, resize: 'vertical' }} maxLength={400} /></L>
+
+        <L label="Type">
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Chip on={kind === 'individual'} onClick={() => setKind('individual')}>Individual</Chip>
+            <Chip on={kind === 'team'} onClick={() => setKind('team')}>Team</Chip>
+          </div>
+        </L>
+        <L label="Debate format">
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {['oxford', 'legacy', 'speakers_corner'].map(f => <Chip key={f} on={format === f} onClick={() => setFormat(f)}>{FORMAT_LABEL[f]}</Chip>)}
+          </div>
+        </L>
+        <L label="Bracket size">
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {[4, 8, 16, 32].map(s => <Chip key={s} on={size === s} onClick={() => setSize(s)}>{s} {kind === 'team' ? 'teams' : 'players'}</Chip>)}
+          </div>
+        </L>
+        <L label="Start time (optional)"><input type="datetime-local" value={startsAt} onChange={e => setStartsAt(e.target.value)} style={field} /></L>
+
+        {err && <div style={{ fontFamily: ui, fontSize: 12.5, color: C.garnetHi, marginBottom: 12 }}>{err}</div>}
+        <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+          <button onClick={onClose} style={{ ...ghostBtn, flex: 1 }}>Cancel</button>
+          <button onClick={submit} disabled={busy} style={{ ...solidGold, flex: 2, opacity: busy ? 0.6 : 1 }}>{busy ? 'Creating…' : 'Create tournament'}</button>
+        </div>
+        {kind === 'team' && (
+          <div style={{ fontFamily: ui, fontSize: 11.5, color: C.faint, marginTop: 12, lineHeight: 1.5 }}>
+            Team owners register their team; all members debate together each round.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function L({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: 'block', marginBottom: 14 }}>
+      <span style={{ fontFamily: ui, fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.dim }}>{label}</span>
+      <div style={{ marginTop: 7 }}>{children}</div>
+    </label>
   );
 }

@@ -17,7 +17,11 @@ import { useIsTablet } from './lib/useMediaQuery';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { WelcomeTour } from './components/WelcomeTour';
 import { AuthScreen } from './screens/AuthScreen';
+import { MfaChallengeScreen, ResetPasswordScreen } from './components/authGates';
 import { OnboardScreen } from './screens/OnboardScreen';
+import { AcceptTermsScreen } from './screens/AcceptTermsScreen';
+import { TermsScreen } from './screens/TermsScreen';
+import { PrivacyScreen } from './screens/PrivacyScreen';
 import { LobbyScreen } from './screens/LobbyScreen';
 import { CreateDebateScreen } from './screens/CreateDebateScreen';
 import { ChamberScreen } from './screens/ChamberScreen';
@@ -29,9 +33,11 @@ import { ProfileScreen } from './screens/ProfileScreen';
 import { LeaderboardScreen } from './screens/LeaderboardScreen';
 import { TeamsScreen } from './screens/TeamsScreen';
 import { TournamentsScreen } from './screens/TournamentsScreen';
+import { TournamentScreen } from './screens/TournamentScreen';
 import { DiscoverScreen } from './screens/DiscoverScreen';
 import { NotificationsScreen } from './screens/NotificationsScreen';
 import { StoreScreen } from './screens/StoreScreen';
+import { ProScreen } from './screens/ProScreen';
 import { EarningsScreen } from './screens/EarningsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { WatchScreen } from './screens/WatchScreen';
@@ -40,10 +46,18 @@ import { SupportScreen } from './screens/SupportScreen';
 import { ModerationScreen } from './screens/ModerationScreen';
 import { BannedScreen } from './screens/BannedScreen';
 import { AdminPortalScreen } from './screens/AdminPortalScreen';
+import { BackOfficeScreen } from './screens/BackOfficeScreen';
+import { LibraryScreen } from './screens/LibraryScreen';
+import { ReplayScreen } from './screens/ReplayScreen';
+import { AnalyticsScreen } from './screens/AnalyticsScreen';
+import { AnalyticsHubScreen } from './screens/AnalyticsHubScreen';
+import { CommunitiesScreen } from './screens/CommunitiesScreen';
+import { CommunityScreen } from './screens/CommunityScreen';
 import { getDebate, getMyBan } from './lib/api';
 import { hasPaidDebateEntry, startDebateEntryCheckout } from './lib/payments';
 import type { DebateRole, Side } from './lib/types';
 import { C, ui, display, solidGold, ghostBtn, a } from './lib/theme';
+import { isPro, claimProStipend } from './lib/pro';
 
 export default function App() {
   return (
@@ -59,7 +73,7 @@ export default function App() {
 
 /* Decide auth → onboarding → ban → app, then hand off to the router. */
 function Gate() {
-  const { session, profile, loading } = useAuth();
+  const { session, profile, loading, recoveryMode, mfaRequired, refreshProfile } = useAuth();
   const [justSignedUp, setJustSignedUp] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
 
@@ -79,7 +93,21 @@ function Gate() {
     );
   }
 
+  if (typeof window !== 'undefined' && (window.location.pathname === '/terms' || window.location.pathname === '/privacy')) {
+    return (
+      <Routes>
+        <Route path="terms" element={<TermsScreen />} />
+        <Route path="privacy" element={<PrivacyScreen />} />
+      </Routes>
+    );
+  }
+
   if (loading) return <Splash />;
+  // Arrived from a password-reset email → let them set a new password
+  // before anything else, even though a (recovery) session exists.
+  if (recoveryMode) return <ResetPasswordScreen />;
+  // Signed in with a password but the account has 2FA → require the code.
+  if (session && mfaRequired) return <MfaChallengeScreen />;
   if (!session) {
     const returningFromStripe = typeof window !== 'undefined'
       && /[?&](purchase|onboarding)=/.test(window.location.search);
@@ -88,7 +116,16 @@ function Gate() {
   }
   if (isBanned) return <BannedScreen />;
 
-  const needsOnboard = justSignedUp || (profile != null && !profile.bio && profile.topics.length === 0);
+  // Terms/Privacy acceptance comes first, once, right after signup — before
+  // the tutorial. Gated on a real timestamp, not inferred from profile fields.
+  if (profile != null && !profile.terms_accepted_at) {
+    return <AcceptTermsScreen onDone={async () => { await refreshProfile(); }} />;
+  }
+
+  // Tutorial: previously inferred from an empty bio/topics, which meant
+  // anyone who skipped those fields saw it again on every single login.
+  // Now gated on a real "seen it" timestamp set once onboarding finishes.
+  const needsOnboard = justSignedUp && profile != null && !profile.onboarded_at;
   if (needsOnboard) return <OnboardScreen onDone={() => setJustSignedUp(false)} />;
 
   const isAdmin = !!(profile as any)?.is_admin;
@@ -101,17 +138,24 @@ function Gate() {
         <Route path="leaderboard" element={<LeaderboardRoute />} />
         <Route path="teams" element={<TeamsRoute />} />
         <Route path="tournaments" element={<TournamentsScreen />} />
+        <Route path="tournament/:id" element={<TournamentScreen />} />
         <Route path="store" element={<StoreRoute />} />
+        <Route path="pro" element={<ProScreen />} />
         <Route path="earnings" element={<EarningsRoute />} />
         <Route path="settings" element={<SettingsRoute />} />
         <Route path="support" element={<SupportRoute />} />
-        <Route path="communities" element={<ComingSoonRoute title="Communities" subtitle="Find your tribe. Join debate communities by topic, school, or interest." />} />
+        <Route path="communities" element={<CommunitiesScreen />} />
+        <Route path="community/:id" element={<CommunityScreen />} />
         <Route path="discover" element={<DiscoverScreen />} />
         <Route path="live" element={<ComingSoonRoute title="Live Arenas" subtitle="All live debates, all the time. Watch what's happening right now." />} />
-        <Route path="library" element={<ComingSoonRoute title="Library" subtitle="Your saved debates, watched history, and personal collections." />} />
+        <Route path="library" element={<LibraryScreen />} />
+        <Route path="replay/:id" element={<ReplayScreen />} />
+        <Route path="debate/:id/analytics" element={<AnalyticsScreen />} />
+        <Route path="analytics" element={<AnalyticsHubScreen />} />
         <Route path="notifications" element={<NotificationsScreen />} />
         {isAdmin && <Route path="moderation" element={<ModerationRoute />} />}
         {isAdmin && <Route path="admin" element={<AdminPortalRoute />} />}
+        {isAdmin && <Route path="backoffice" element={<BackOfficeRoute />} />}
         <Route path="me" element={<ProfileRoute />} />
         <Route path="u/:handle" element={<ProfileRoute />} />
         <Route path="messages" element={<InboxRoute />} />
@@ -131,6 +175,21 @@ function Gate() {
 
 function Shell() {
   const isMobile = useIsTablet();
+  const { profile, refreshProfile } = useAuth();
+  const [stipend, setStipend] = useState<number | null>(null);
+
+  // Grant the monthly Pro stipend once per session-load if it's due. The RPC
+  // is idempotent (once per calendar month), so calling on every mount is safe.
+  useEffect(() => {
+    if (!isPro(profile)) return;
+    let alive = true;
+    claimProStipend().then(amt => {
+      if (alive && amt > 0) { setStipend(amt); refreshProfile(); setTimeout(() => alive && setStipend(null), 6000); }
+    }).catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id, profile?.pro_until]);
+
   return (
     <div style={{ position:'absolute', inset:0, display:'flex', flexDirection: isMobile ? 'column' : 'row', overflow:'hidden' }}>
       <Sidebar />
@@ -141,6 +200,15 @@ function Shell() {
         </div>
       </div>
       <WelcomeTour />
+      {stipend != null && (
+        <div style={{ position:'fixed', bottom:22, left:'50%', transform:'translateX(-50%)', zIndex:9999,
+          display:'flex', alignItems:'center', gap:10, padding:'12px 18px', borderRadius:12,
+          background:'#141118', border:`1px solid ${a(C.gold,'55')}`, boxShadow:`0 12px 40px ${a('#000000','66')}`,
+          fontFamily:ui, fontSize:13.5, color:C.ink }}>
+          <span style={{ fontSize:16 }}>👑</span>
+          Your monthly Pro stipend of <b style={{ color:C.gold }}>{stipend.toLocaleString()} D-Bucks</b> was added.
+        </div>
+      )}
     </div>
   );
 }
@@ -304,6 +372,9 @@ function SupportRoute() {
 }
 function AdminPortalRoute() {
   return <AdminPortalScreen />;
+}
+function BackOfficeRoute() {
+  return <BackOfficeScreen />;
 }
 function ModerationRoute() {
   return <ModerationScreen />;

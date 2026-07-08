@@ -11,7 +11,7 @@ import { C, ui, display, solidGold, field } from '../lib/theme';
 const TOPICS = ['Politics', 'Philosophy', 'Technology', 'Justice', 'Religion', 'Economics', 'Science', 'Culture'];
 
 export function OnboardScreen({ onDone }: { onDone: () => void }) {
-  const { completeOnboarding } = useAuth();
+  const { completeOnboarding, skipOnboarding } = useAuth();
   const [displayName, setName] = useState('');
   const [handle, setHandle] = useState('');
   const [bio, setBio] = useState('');
@@ -40,6 +40,12 @@ export function OnboardScreen({ onDone }: { onDone: () => void }) {
     } catch (e: any) {
       setErr(e?.message ?? 'Could not save your profile');
     } finally { setBusy(false); }
+  }
+
+  async function skip() {
+    setBusy(true);
+    try { await skipOnboarding(); onDone(); }
+    catch (e: any) { setErr(e?.message ?? 'Could not continue'); setBusy(false); }
   }
 
   return (
@@ -86,6 +92,10 @@ export function OnboardScreen({ onDone }: { onDone: () => void }) {
         {err && <p style={{ fontFamily:ui, fontSize:12.5, color:C.garnetHi, margin:'0 0 12px' }}>{err}</p>}
         <button onClick={finish} disabled={busy} style={{ ...solidGold, width:'100%', opacity: busy ? 0.6 : 1 }}>
           {busy ? 'Saving…' : 'Enter the Rostrum'}
+        </button>
+        <button onClick={skip} disabled={busy} style={{ display:'block', margin:'14px auto 0', background:'transparent',
+          border:'none', cursor:'pointer', fontFamily:ui, fontSize:12.5, color:C.faint, textDecoration:'underline' }}>
+          Skip for now
         </button>
       </div>
     </div>

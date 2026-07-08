@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import { isPro } from '../lib/pro';
 import { unreadTotal, subscribeInbox } from '../screens/MessagesScreen';
 import { C, ui, display, mono, solidGold, a } from '../lib/theme';
 import { Avatar } from './ui';
@@ -30,6 +31,8 @@ const RankingsIcon = () => <Icon d="M3 21h18M5 21V10l4-4 4 4v11M13 21V14l4-4 4 4
 const BellIcon = () => <Icon d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0" />;
 const MessagesIcon = () => <Icon d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z" />;
 const WalletIcon = () => <Icon d="M21 12V7H5a2 2 0 0 1 0-4h14v4M3 5v14a2 2 0 0 0 2 2h16v-5M18 12a2 2 0 0 0 0 4h4v-4z" />;
+const StoreIcon = () => <Icon d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0" />;
+const AnalyticsIcon = () => <Icon d="M3 3v18h18M7 15l4-4 3 3 5-6" />;
 const MenuIcon = () => <Icon d="M3 6h18M3 12h18M3 18h18" size={20} />;
 const CloseIcon = () => <Icon d="M18 6L6 18M6 6l12 12" size={20} />;
 const TeamsIcon = () => <Icon d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75M18 8l1.5 1.5L23 6" />;
@@ -73,8 +76,8 @@ export function Sidebar() {
     return () => { on = false; off(); window.removeEventListener('rostrum:unread', load); };
   }, []);
 
-  const [dbucks, setDbucks] = useState<number | null>(null);
-  useEffect(() => { getMyWallet().then(w => setDbucks(w.total)).catch(() => {}); }, []);
+  const [wallet, setWallet] = useState<{ promo: number; redeemable: number; total: number } | null>(null);
+  useEffect(() => { getMyWallet().then(setWallet).catch(() => {}); }, []);
 
   const isAdmin = !!(profile as any)?.is_admin;
   const active = (to: string) => to === '/' ? pathname === '/' : pathname.startsWith(to);
@@ -86,10 +89,10 @@ export function Sidebar() {
     { to: '/communities',  label: 'Communities',   icon: CommunityIcon },
     { to: '/teams',        label: 'Teams',         icon: TeamsIcon },
     { to: '/library',      label: 'Library',       icon: LibraryIcon },
+    ...(isPro(profile) ? [{ to: '/analytics', label: 'Analytics', icon: AnalyticsIcon }] as NavItem[] : []),
     { to: '/leaderboard',  label: 'Rankings',      icon: RankingsIcon },
     { to: '/messages',     label: 'Messages',      icon: MessagesIcon,    badge: unread || undefined },
-    { to: '/store',        label: 'Wallet',        icon: WalletIcon },
-    { to: '/earnings',     label: 'Earnings',      icon: EarningsIcon },
+    { to: '/store',        label: 'Store',         icon: StoreIcon },
   ];
 
   const sidebarBody = (
@@ -150,23 +153,6 @@ export function Sidebar() {
           <span style={{ color: active('/tournaments') ? C.gold : C.faint, display:'flex' }}><TournamentIcon /></span>
           <span style={{ flex:1 }}>Tournaments</span>
         </Link>
-        {/* Admin links */}
-        {isAdmin && (
-          <Link to="/admin"
-            style={{ display:'flex', alignItems:'center', gap:12, padding:'11px 14px', borderRadius:12,
-              textDecoration:'none', fontFamily:ui, fontSize:14, fontWeight:500,
-              color: active('/admin') ? C.gold : C.faint, marginTop:8 }}>
-            <span style={{ fontSize:14 }}>📊</span><span style={{ flex:1 }}>Analytics</span>
-          </Link>
-        )}
-        {isAdmin && (
-          <Link to="/moderation"
-            style={{ display:'flex', alignItems:'center', gap:12, padding:'11px 14px', borderRadius:12,
-              textDecoration:'none', fontFamily:ui, fontSize:14, fontWeight:500,
-              color: active('/moderation') ? C.garnet : C.faint }}>
-            <span style={{ fontSize:14 }}>🛡️</span><span style={{ flex:1 }}>Moderation</span>
-          </Link>
-        )}
       </nav>
 
       {/* ── D-Bucks balance card ── */}
@@ -178,9 +164,15 @@ export function Sidebar() {
           <div style={{ fontFamily:ui, fontSize:11, fontWeight:600, color:C.faint,
             textTransform:'uppercase', letterSpacing:'.1em' }}>D-Bucks Balance</div>
         </div>
-        <div style={{ fontFamily:ui, fontSize:24, fontWeight:700, color:C.ink, marginBottom:10, fontVariantNumeric:'tabular-nums' }}>
-          {dbucks !== null ? dbucks.toLocaleString() : '—'}
+        <div style={{ fontFamily:ui, fontSize:24, fontWeight:700, color:C.ink, marginBottom:6, fontVariantNumeric:'tabular-nums' }}>
+          {wallet !== null ? wallet.total.toLocaleString() : '—'}
         </div>
+        {wallet !== null && (wallet.redeemable > 0 || wallet.promo > 0) && (
+          <div style={{ display:'flex', gap:12, marginBottom:10, fontFamily:ui, fontSize:10.5 }}>
+            <span style={{ color:C.jadeHi }}>💵 {wallet.redeemable.toLocaleString()} cashable</span>
+            <span style={{ color:C.gold }}>🎁 {wallet.promo.toLocaleString()} rewards</span>
+          </div>
+        )}
         <button onClick={() => nav('/store')}
           style={{ width:'100%', padding:'8px 12px', borderRadius:10,
             background:'transparent', border:`1px solid ${C.hair}`, color:C.dim,
@@ -190,6 +182,22 @@ export function Sidebar() {
       </div>
 
       {/* ── Rostrum Pro upsell ── */}
+      {isPro(profile) ? (
+        <div style={{ margin:'0 12px 14px', padding:'14px 16px', borderRadius:16,
+          background: `linear-gradient(160deg, ${a(C.gold,'2E')}, ${a(C.cyan,'12')})`,
+          border: `1px solid ${a(C.gold,'40')}`, display:'flex', alignItems:'center', gap:11, cursor:'pointer' }}
+          onClick={() => nav('/pro')}>
+          <div style={{ width:34, height:34, borderRadius:10, flexShrink:0,
+            background: `linear-gradient(135deg, ${C.gold}, ${C.cyan})`,
+            display:'grid', placeItems:'center', color:'#FFFFFF' }}>
+            <CrownIcon size={18} />
+          </div>
+          <div>
+            <div style={{ fontFamily:display, fontSize:14, fontWeight:700, color:C.ink }}>Pro member</div>
+            <div style={{ fontFamily:ui, fontSize:11, color:C.dim }}>Perks active · manage plan</div>
+          </div>
+        </div>
+      ) : (
       <div style={{ margin:'0 12px 14px', padding:'16px 16px 14px', borderRadius:16,
         background: `linear-gradient(160deg, ${a(C.gold,'38')}, ${a(C.cyan,'14')}, ${a(C.gold,'07')})`,
         border: `1px solid ${a(C.gold,'33')}`,
@@ -207,11 +215,12 @@ export function Sidebar() {
         <div style={{ fontFamily:ui, fontSize:11.5, color:C.dim, lineHeight:1.4, marginBottom:12 }}>
           Unlock exclusive perks and grow your influence.
         </div>
-        <button onClick={() => alert('Rostrum Pro is coming soon!')}
+        <button onClick={() => nav('/pro')}
           style={{ ...solidGold, padding:'8px 14px', fontSize:12, width:'100%', borderRadius:10 }}>
           Upgrade Now
         </button>
       </div>
+      )}
     </>
   );
 
@@ -251,6 +260,22 @@ export function Sidebar() {
           <div style={{ position:'fixed', inset:'56px 0 0 0', zIndex:99, display:'flex', flexDirection:'column',
             background:a(C.base,'F0'), backdropFilter:'blur(20px)', overflowY:'auto', padding:'12px 0' }}>
             {sidebarBody}
+            {/* Mobile-only Earnings (desktop uses the TopBar dropdown) */}
+            <button onClick={() => nav('/earnings')}
+              style={{ display:'flex', alignItems:'center', gap:12, width:'100%', textAlign:'left',
+                borderTop:`1px solid ${C.hair}`, padding:'12px 18px', background:'transparent',
+                border:'none', cursor:'pointer', fontFamily:ui, fontSize:14, fontWeight:500, color:C.dim }}>
+              <span style={{ display:'flex', color:C.faint }}><EarningsIcon /></span> Earnings
+            </button>
+            {/* Mobile-only Back Office (desktop uses the TopBar dropdown) */}
+            {isAdmin && (
+              <button onClick={() => nav('/backoffice')}
+                style={{ display:'flex', alignItems:'center', gap:10, width:'100%', textAlign:'left',
+                  borderTop:`1px solid ${C.hair}`, padding:'13px 18px', background:'transparent',
+                  border:'none', cursor:'pointer', fontFamily:ui, fontSize:14, fontWeight:600, color:C.gold }}>
+                <span style={{ fontSize:15 }}>🗂️</span> Back Office
+              </button>
+            )}
             {/* Mobile-only profile + theme + sign out (no TopBar on mobile) */}
             <div style={{ borderTop:`1px solid ${C.hair}`, padding:'14px 18px', display:'flex',
               alignItems:'center', gap:12 }}>

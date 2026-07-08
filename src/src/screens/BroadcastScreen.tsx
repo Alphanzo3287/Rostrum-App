@@ -60,6 +60,7 @@ function BroadcastInner() {
   const [params] = useSearchParams();
   const token = params.get('t');
   const url   = params.get('u');
+  const watermark = params.get('wm') === '1';   // free-tier recording watermark
 
   const debateId = id ?? '';
   const dz   = useDebate(debateId);
@@ -145,6 +146,15 @@ function BroadcastInner() {
   return (
     <div style={{ position:'fixed', inset:0, background:'#0a0909', display:'flex', flexDirection:'column',
       fontFamily:ui, overflow:'hidden' }}>
+
+      {watermark && (
+        <div style={{ position:'absolute', bottom:22, right:26, zIndex:9999, pointerEvents:'none',
+          display:'flex', alignItems:'center', gap:8, padding:'8px 14px', borderRadius:10,
+          background:'rgba(10,9,9,0.42)', border:'1px solid rgba(255,255,255,0.14)', backdropFilter:'blur(2px)' }}>
+          <span style={{ fontFamily:display, fontSize:15, fontWeight:800, color:'#E9C46A' }}>The Rostrum</span>
+          <span style={{ fontFamily:ui, fontSize:10.5, color:'rgba(255,255,255,0.72)', letterSpacing:'.02em' }}>Recorded on rostrums.site</span>
+        </div>
+      )}
 
       {/* ── Top bar ── */}
       <div style={{ display:'flex', alignItems:'center', gap:16, padding:'14px 22px',

@@ -8,13 +8,16 @@ import { C, ui, display, mono, solidGold, field, a } from '../lib/theme';
 import { useIsTablet } from '../lib/useMediaQuery';
 
 export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; notice?: string }) {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, resetPasswordForEmail } = useAuth();
   const [mode, setMode] = useState<'signup' | 'login'>(notice ? 'login' : 'signup');
+  const [view, setView] = useState<'auth' | 'reset'>('auth');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
+  const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [resetSent, setResetSent] = useState(false);
   const isMobile = useIsTablet();
 
   async function submit() {
@@ -29,6 +32,20 @@ export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; not
       }
     } catch (e: any) {
       setErr(e?.message ?? 'Something went wrong');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendReset() {
+    setErr(null);
+    if (!email.trim()) { setErr('Enter your email first.'); return; }
+    setBusy(true);
+    try {
+      await resetPasswordForEmail(email);
+      setResetSent(true);
+    } catch (e: any) {
+      setErr(e?.message ?? 'Could not send the reset email.');
     } finally {
       setBusy(false);
     }
@@ -106,10 +123,11 @@ export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; not
           )}
 
           <h2 style={{ fontFamily:display, fontSize:30, fontWeight:700, color:C.ink, margin:'0 0 6px', letterSpacing:'-.02em' }}>
-            {mode === 'signup' ? 'Create your account' : 'Welcome back'}
+            {view === 'reset' ? 'Reset your password' : mode === 'signup' ? 'Create your account' : 'Welcome back'}
           </h2>
           <p style={{ fontFamily:ui, fontSize:14, color:C.faint, margin:'0 0 28px' }}>
-            {mode === 'signup' ? 'Join the chamber and start debating.' : 'Sign in to enter the chamber.'}
+            {view === 'reset' ? "Enter your email and we'll send you a reset link."
+              : mode === 'signup' ? 'Join the chamber and start debating.' : 'Sign in to enter the chamber.'}
           </p>
 
           {notice && (
@@ -119,6 +137,45 @@ export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; not
             </div>
           )}
 
+          {view === 'reset' ? (
+            resetSent ? (
+              <>
+                <div style={{ padding:'14px 16px', borderRadius:10, fontFamily:ui, fontSize:13, lineHeight:1.55,
+                  color:C.jadeHi, background:a(C.jade,'14'), border:`1px solid ${a(C.jade,'44')}` }}>
+                  Check your email — if an account exists for {email.trim()}, a password-reset link is on its way.
+                  Open it on this device to set a new password.
+                </div>
+                <button onClick={() => { setView('auth'); setResetSent(false); setErr(null); }}
+                  style={{ ...solidGold, width:'100%', marginTop:18, padding:'14px', fontSize:14.5 }}>
+                  Back to login
+                </button>
+              </>
+            ) : (
+              <>
+                <Labeled label="email" lower>
+                  <input value={email} onChange={e => setEmail(e.target.value)} placeholder="email"
+                    style={field} onFocus={focusField} onBlur={blurField}
+                    onKeyDown={e => { if (e.key === 'Enter') sendReset(); }} />
+                </Labeled>
+                {err && (
+                  <div style={{ fontFamily:ui, fontSize:12.5, color:C.garnetHi, margin:'4px 0 14px',
+                    padding:'10px 12px', borderRadius:10, background:a(C.garnet,'14'), border:`1px solid ${a(C.garnet,'33')}` }}>
+                    {err}
+                  </div>
+                )}
+                <button onClick={sendReset} disabled={busy}
+                  style={{ ...solidGold, width:'100%', marginTop:8, padding:'14px', fontSize:14.5, opacity: busy ? 0.6 : 1 }}>
+                  {busy ? 'Sending…' : 'Send reset link'}
+                </button>
+                <button onClick={() => { setView('auth'); setErr(null); }}
+                  style={{ background:'none', border:'none', cursor:'pointer', width:'100%', marginTop:16,
+                    fontFamily:ui, fontSize:13, color:C.dim }}>
+                  ← Back to login
+                </button>
+              </>
+            )
+          ) : (
+          <>
           {/* Mode toggle */}
           <div style={{ display:'flex', gap:5, background:C.glass, padding:5, borderRadius:12, marginBottom:24,
             border:`1px solid ${C.hair}` }}>
@@ -135,19 +192,51 @@ export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; not
 
           {mode === 'signup' && (
             <Labeled label="Display name">
-              <input value={name} onChange={e => setName(e.target.value)} placeholder="Marcus Cole"
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name"
                 style={field} onFocus={focusField} onBlur={blurField} />
             </Labeled>
           )}
-          <Labeled label="Email">
-            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@email.com"
+          <Labeled label="email" lower>
+            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="email"
               style={field} onFocus={focusField} onBlur={blurField} />
           </Labeled>
           <Labeled label="Password">
-            <input value={pw} onChange={e => setPw(e.target.value)} type="password" placeholder="••••••••"
-              style={field} onFocus={focusField} onBlur={blurField}
-              onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
+            <div style={{ position: 'relative' }}>
+              <input value={pw} onChange={e => setPw(e.target.value)} type={showPw ? 'text' : 'password'} placeholder="••••••••"
+                style={{ ...field, paddingRight: 46 }} onFocus={focusField} onBlur={blurField}
+                onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
+              <button type="button" onClick={() => setShowPw(v => !v)} tabIndex={-1}
+                aria-label={showPw ? 'Hide password' : 'Show password'}
+                title={showPw ? 'Hide password' : 'Show password'}
+                style={{ position: 'absolute', right: 8, top: 0, bottom: 0, display: 'flex', alignItems: 'center',
+                  background: 'none', border: 'none', cursor: 'pointer', padding: '0 6px', color: C.faint }}
+                onMouseEnter={e => { e.currentTarget.style.color = C.dim; }}
+                onMouseLeave={e => { e.currentTarget.style.color = C.faint; }}>
+                {showPw ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 7 10 7a13.2 13.2 0 0 1-1.67 2.68" />
+                    <path d="M6.61 6.61A13.5 13.5 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.39-1.61" />
+                    <line x1="2" y1="2" x2="22" y2="22" />
+                  </svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                )}
+              </button>
+            </div>
           </Labeled>
+
+          {mode === 'login' && (
+            <div style={{ textAlign:'right', marginTop:-8, marginBottom:6 }}>
+              <button onClick={() => { setView('reset'); setErr(null); setResetSent(false); }}
+                style={{ background:'none', border:'none', cursor:'pointer', fontFamily:ui, fontSize:12.5,
+                  color:C.gold, fontWeight:600 }}>
+                Forgot password?
+              </button>
+            </div>
+          )}
 
           {err && (
             <div style={{ fontFamily:ui, fontSize:12.5, color:C.garnetHi, margin:'4px 0 14px',
@@ -163,19 +252,24 @@ export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; not
           </button>
 
           <p style={{ fontFamily:ui, fontSize:12, color:C.faint, textAlign:'center', margin:'20px 0 0', lineHeight:1.6 }}>
-            By continuing you agree to The Rostrum's<br/>Terms of Service and Privacy Policy.
+            By continuing you agree to The Rostrum's<br/>
+            <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color:C.dim }}>Terms of Service</a>
+            {' '}and{' '}
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color:C.dim }}>Privacy Policy</a>.
           </p>
+          </>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
+function Labeled({ label, children, lower }: { label: string; children: React.ReactNode; lower?: boolean }) {
   return (
     <label style={{ display:'block', marginBottom:16 }}>
       <span style={{ fontFamily:ui, fontSize:11.5, fontWeight:700, letterSpacing:'.06em',
-        textTransform:'uppercase', color:C.dim }}>{label}</span>
+        textTransform: lower ? 'none' : 'uppercase', color:C.dim }}>{label}</span>
       <div style={{ marginTop:8 }}>{children}</div>
     </label>
   );

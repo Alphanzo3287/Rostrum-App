@@ -29,9 +29,10 @@ export type RosData = {
   onJump: (i: number) => void; onToggle: () => void; onNext: () => void; onSetRemaining: (s: number) => void;
 };
 
-export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom, pollOpen, format }: {
+export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom, pollOpen, format, collapsible, collapsed, onToggleCollapse }: {
   debateId: string; role: Role; tab: string; setTab: (t: string) => void; ros?: RosData;
   members?: any[]; lkRoom?: any; pollOpen?: boolean; format?: string;
+  collapsible?: boolean; collapsed?: boolean; onToggleCollapse?: () => void;
 }) {
   let tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence']]
             : role === 'moderator' ? [['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence']]
@@ -46,14 +47,22 @@ export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom,
   if (format === 'speakers_corner') tabs = tabs.filter(([k]) => k !== 'ros' && k !== 'score' && k !== 'qa');
   return (
     <aside style={{ borderLeft:`1px solid ${C.hair}`, background:a(C.base2,'EB'), backdropFilter:'blur(20px)', display:'flex', flexDirection:'column', minHeight:0 }}>
-      <div style={{ display:'flex', padding:8, gap:5, borderBottom:`1px solid ${C.hair}`, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+      <div style={{ display:'flex', alignItems:'center', padding:8, gap:5, borderBottom: collapsed ? 'none' : `1px solid ${C.hair}`, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
         {tabs.map(([k,l]) => (
-          <button key={k} onClick={() => setTab(k)} style={{ flex:'0 0 auto', padding:'8px 14px', borderRadius:9, border:'none',
+          <button key={k} onClick={() => { setTab(k); if (collapsed && onToggleCollapse) onToggleCollapse(); }} style={{ flex:'0 0 auto', padding:'8px 14px', borderRadius:9, border:'none',
             cursor:'pointer', fontFamily:ui, fontSize:11, fontWeight:600, whiteSpace:'nowrap', transition:'all .15s',
-            color: tab===k ? '#FFFFFF' : C.dim,
-            background: tab===k ? `linear-gradient(135deg, ${C.gold}, ${C.cyan})` : 'transparent' }}>{l}</button>
+            color: tab===k && !collapsed ? '#FFFFFF' : C.dim,
+            background: tab===k && !collapsed ? `linear-gradient(135deg, ${C.gold}, ${C.cyan})` : 'transparent' }}>{l}</button>
         ))}
+        {collapsible && onToggleCollapse && (
+          <button onClick={onToggleCollapse} aria-label={collapsed ? 'Expand panel' : 'Collapse panel'} title={collapsed ? 'Expand panel' : 'Collapse panel to see the stage'}
+            style={{ flex:'0 0 auto', marginLeft:'auto', width:34, height:34, display:'grid', placeItems:'center', borderRadius:9,
+              border:`1px solid ${C.hair}`, background:C.glass, color:C.dim, cursor:'pointer', fontSize:13 }}>
+            {collapsed ? '▲' : '▼'}
+          </button>
+        )}
       </div>
+      {!collapsed && (
       <div style={{ flex:1, overflowY:'auto', padding:16, display:'flex', flexDirection:'column', minHeight:0 }}>
         {tab==='invite' && <InvitePanel debateId={debateId} format={format} />}
         {tab==='ros' && (ros ? <RosPanel ros={ros} /> : <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint }}>Run of show is unavailable.</p>)}
@@ -64,6 +73,7 @@ export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom,
         {tab==='evidence' && <EvidencePanel debateId={debateId} canAdd={role==='host'||role==='moderator'||role==='debater'} />}
         {/* Gifting now happens by hovering/tapping a person on stage → Send gift. */}
       </div>
+      )}
     </aside>
   );
 }

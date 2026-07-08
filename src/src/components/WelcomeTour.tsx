@@ -5,9 +5,13 @@
 // anytime via the "?" in the nav (window event 'rostrum:tour').
 // =====================================================================
 import { useEffect, useState } from 'react';
+import { useAuth } from '../lib/auth';
+import { supabase } from '../lib/supabaseClient';
 import { C, ui, display, solidGold, a } from '../lib/theme';
 
 const KEY = 'rostrum:onboarded:v1';
+
+async function mark_tour_seen() { await supabase.rpc('mark_tour_seen'); }
 
 type Step = { title: string; body: string };
 const STEPS: Step[] = [
@@ -26,21 +30,29 @@ const STEPS: Step[] = [
 ];
 
 export function WelcomeTour() {
+  const { profile, refreshProfile } = useAuth();
   const [open, setOpen] = useState(false);
   const [i, setI] = useState(0);
 
+  // Manual replay (e.g. a "Replay tour" button) always works.
   useEffect(() => {
-    let seen = false;
-    try { seen = localStorage.getItem(KEY) === '1'; } catch { /* ignore */ }
-    if (!seen) setOpen(true);
     const reopen = () => { setI(0); setOpen(true); };
     window.addEventListener('rostrum:tour', reopen);
     return () => window.removeEventListener('rostrum:tour', reopen);
   }, []);
 
-  function finish() {
-    try { localStorage.setItem(KEY, '1'); } catch { /* ignore */ }
+  // Auto-show ONCE per account, using the durable DB flag (not localStorage,
+  // which reset across devices/deploys and caused it to reappear every login).
+  useEffect(() => {
+    if (!profile) return;
+    if (profile.tour_seen_at) return;           // already seen — never again
+    setOpen(true);
+  }, [profile?.id, profile?.tour_seen_at]);
+
+  async function finish() {
     setOpen(false);
+    try { localStorage.setItem(KEY, '1'); } catch { /* ignore */ }
+    try { await mark_tour_seen(); await refreshProfile(); } catch { /* best effort */ }
   }
   if (!open) return null;
   const step = STEPS[i];

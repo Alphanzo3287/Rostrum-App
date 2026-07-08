@@ -53,6 +53,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   const nav = useNavigate();
   const openProfile = (handle?: string | null) => { if (handle) nav(`/u/${handle}`); };
   const [tab, setTab] = useState('vote');
+  const [railOpen, setRailOpen] = useState(true);   // mobile: collapse the bottom panel to reveal the stage
 
   // Mirror the live broadcast composition so the host's preview matches what
   // YouTube sees, and the layout strip gives immediate visual feedback.
@@ -271,7 +272,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
       {/* ---- main ---- */}
       <div style={{ flex:1, display:'grid',
         gridTemplateColumns: isNarrow ? '1fr' : '1fr 322px',
-        gridTemplateRows: isNarrow ? 'minmax(240px,42vh) 1fr' : '1fr',
+        gridTemplateRows: isNarrow ? (railOpen ? 'minmax(240px,42vh) 1fr' : '1fr auto') : '1fr',
         minHeight:0, overflow: isNarrow ? 'auto' : 'hidden' }}>
         <div style={{ display:'flex', flexDirection:'column', minWidth:0, minHeight:0, padding:'14px 16px 0' }}>
           {dz.phase === 'assembly'
@@ -355,6 +356,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         )}
 
         <ContextRail debateId={debateId} role={role} tab={tab} setTab={setTab} members={room.members} lkRoom={room.room}
+          collapsible={isNarrow} collapsed={isNarrow && !railOpen} onToggleCollapse={() => setRailOpen(o => !o)}
           pollOpen={!!dz.debate?.poll_open} format={dz.debate?.format}
           ros={{
             segments: dz.segments, segIdx: dz.segIdx, remaining: dz.remaining,

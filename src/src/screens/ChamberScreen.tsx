@@ -16,10 +16,13 @@ import { useYouTubeStream } from '../lib/useYouTubeStream';
 import {
   joinDebate, getBroadcastState, subscribeBroadcastState, getResults,
   getFloorStats, getTally, castVote, listParticipants, demoteToAudience, promoteToRole, setSpotlight,
+  removeFromChamber, subscribeMyRemoval,
   type BroadcastState, type FloorStats,
 } from '../lib/api';
 import { demoteFromStage, promoteFromAudience } from '../lib/livekit';
 import { useStageInvites, type StageRole, type StageSide } from '../lib/stageInvites';
+import { getDebateReward, type DebateReward } from '../lib/rewards';
+import { DebateRewardCard } from '../components/DebateRewardCard';
 import { GiftModal } from '../components/GiftModal';
 import { VideoTile } from '../components/VideoTile';
 import { SlideStage } from '../components/SlideStage';
@@ -31,6 +34,7 @@ import { WinnerOverlay } from '../components/WinnerOverlay';
 import { BroadcastBar } from '../components/BroadcastBar';
 import { ShareButton } from '../components/ShareSheet';
 import { C, ui, display, mono, a, ghostBtn, solidGold } from '../lib/theme';
+import { Avatar } from '../components/ui';
 import { useIsTablet, useIsMobile } from '../lib/useMediaQuery';
 import { CompetitorCard, FloorStage, HostTopRow, GalleryStrip, AudienceVoteStrip, JudgesStrip, FloorStatStrip, WaitingHall, Initials, useSideIdentity, sideLabelFor, SideIdentityModal } from '../components/hall';
 import { InteractionBar } from '../components/InteractionBar';
@@ -49,6 +53,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   const nav = useNavigate();
   const openProfile = (handle?: string | null) => { if (handle) nav(`/u/${handle}`); };
   const [tab, setTab] = useState('vote');
+  const [railOpen, setRailOpen] = useState(true);   // mobile: collapse the bottom panel to reveal the stage
 
   // Mirror the live broadcast composition so the host's preview matches what
   // YouTube sees, and the layout strip gives immediate visual feedback.
@@ -67,12 +72,28 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   // make sure a participant row exists (token also upserts audience as a fallback)
   useEffect(() => { joinDebate(debateId).catch(() => {}); }, [debateId]);
 
-  // when the host finalizes, everyone is routed to results
-  useEffect(() => { if (dz.phase === 'ended') onEnded(); }, [dz.phase, onEnded]);
+  // When the debate ends, show the XP reward card first (if this user earned
+  // anything), then route to results on "Continue". Audience members who earned
+  // nothing skip straight through.
+  const [reward, setReward] = useState<DebateReward | null>(null);
+  const [rewardChecked, setRewardChecked] = useState(false);
+  useEffect(() => {
+    if (dz.phase !== 'ended') return;
+    let alive = true;
+    getDebateReward(debateId)
+      .then(r => { if (!alive) return; if (r && r.xp_awarded > 0) setReward(r); else onEnded(); })
+      .catch(() => { if (alive) onEnded(); })
+      .finally(() => { if (alive) setRewardChecked(true); });
+    return () => { alive = false; };
+  }, [dz.phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const me = room.members.find(m => m.isLocal);
   const role = (me?.role ?? 'audience') as any;
-  const isHost = role === 'host';
+  // Derive host from the debate's own host_id too, not just the live-room
+  // participant role — before "Begin Debate" the host may not yet be a
+  // connected LiveKit participant, which otherwise hid their management
+  // options (like Remove) in the waiting room.
+  const isHost = role === 'host' || (!!user?.id && dz.debate?.host_id === user.id);
   const format = dz.debate?.format;
   const isLecture = format === 'lecture';
   const isLegacy = format === 'legacy';
@@ -82,6 +103,31 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
     if (isSpeakersCorner) { setTab(role === 'host' ? 'invite' : 'chat'); return; }
     setTab(role === 'judge' ? 'score' : role === 'host' ? 'ros' : 'vote');
   }, [role, isLecture, isLegacy, isSpeakersCorner]);
+
+  // Instant boot: the moment a host/moderator removes me, disconnect from the
+  // room and leave — so a removed person can't keep participating until they
+  // happen to refresh. (The host can never be removed, so skip for them.)
+  const meId = me?.identity;
+  useEffect(() => {
+    if (!meId || isHost) return;
+    const off = subscribeMyRemoval(debateId, meId, () => {
+      try { room.room?.disconnect(); } catch { /* noop */ }
+      try { alert('You were removed from this chamber by a host or moderator.'); } catch { /* noop */ }
+      onLeave();
+    });
+    return () => off();
+  }, [debateId, meId, isHost]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Host cancelled the event → send everyone still inside back to the lobby in
+  // real time. The realtime status flip reaches every client, but 'cancelled'
+  // maps to the 'assembly' phase, so the results/ended flow never fires for it;
+  // without this, only the host's own device left and others had to refresh.
+  useEffect(() => {
+    if (dz.debate?.status !== 'cancelled') return;
+    try { room.room?.disconnect(); } catch { /* noop */ }
+    if (!isHost) { try { alert('This event was cancelled by the host.'); } catch { /* noop */ } }
+    onLeave();
+  }, [dz.debate?.status, isHost]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- Person menu (hover on desktop / tap on mobile) — profile, gift,
   // and, for the host or a moderator, invite/remove. Lives at the top
@@ -99,15 +145,29 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
     const isSelf = m.identity === me?.identity;
     if (isSelf && m.role === 'audience') return; // nothing useful for yourself in the audience
     cancelMenuClose();
-    setCtxMenu({ x: e.clientX, y: e.clientY, member: m, via });
+    // Anchor the menu just below the hovered tile rather than exactly under
+    // the cursor. Spawning it under the pointer made the tile immediately
+    // register "pointer left" and the menu could close before it was ever
+    // seen — which is why hover worked on the small host pill but not on
+    // the larger competitor cards or gallery avatars. Anchoring to the
+    // tile's own box keeps the cursor on the tile when the menu appears.
+    const el = e.currentTarget as HTMLElement | null;
+    if (el && typeof el.getBoundingClientRect === 'function') {
+      const r = el.getBoundingClientRect();
+      setCtxMenu({ x: r.left, y: r.bottom + 6, member: m, via });
+    } else {
+      setCtxMenu({ x: e.clientX, y: e.clientY, member: m, via });
+    }
   };
-  // Bound onto each on-stage tile: hover opens on desktop (mouse only),
-  // tap/click opens everywhere. Right-click still works as a fallback.
+  // Bound onto each on-stage tile: mouse-enter opens on desktop (a plain
+  // hover), click/tap opens everywhere, right-click still works as a
+  // fallback. onMouseEnter is far more reliable across element types than
+  // pointerenter with a pointerType guard.
   const personHandlers = (m: RoomMember) => ({
     onClick: (e: React.MouseEvent) => openPerson(e, m, 'tap'),
     onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); openPerson(e, m, 'tap'); },
-    onPointerEnter: (e: React.PointerEvent) => { if (e.pointerType === 'mouse') openPerson(e as unknown as React.MouseEvent, m, 'hover'); },
-    onPointerLeave: (e: React.PointerEvent) => { if (e.pointerType === 'mouse') scheduleMenuClose(); },
+    onMouseEnter: (e: React.MouseEvent) => openPerson(e, m, 'hover'),
+    onMouseLeave: () => scheduleMenuClose(),
   });
   // Legacy adapter: existing tiles call onContextMenu(e, member); route
   // that through the same opener so every tile behaves consistently.
@@ -169,6 +229,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
 
   return (
     <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', background:C.base }}>
+      {reward && <DebateRewardCard reward={reward} onContinue={() => { setReward(null); onEnded(); }} />}
       {/* ---- tally bar ---- */}
       <div style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 20px',
         borderBottom:`1px solid ${C.hair}`, background:a(C.base,'CC'), backdropFilter:'blur(20px)' }}>
@@ -211,7 +272,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
       {/* ---- main ---- */}
       <div style={{ flex:1, display:'grid',
         gridTemplateColumns: isNarrow ? '1fr' : '1fr 322px',
-        gridTemplateRows: isNarrow ? 'minmax(240px,42vh) 1fr' : '1fr',
+        gridTemplateRows: isNarrow ? (railOpen ? 'minmax(240px,42vh) 1fr' : '1fr auto') : '1fr',
         minHeight:0, overflow: isNarrow ? 'auto' : 'hidden' }}>
         <div style={{ display:'flex', flexDirection:'column', minWidth:0, minHeight:0, padding:'14px 16px 0' }}>
           {dz.phase === 'assembly'
@@ -256,10 +317,12 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         {ctxMenu && (
           <StageActionMenu x={ctxMenu.x} y={ctxMenu.y} via={ctxMenu.via} member={ctxMenu.member} debateId={debateId} format={format}
             isSelf={ctxMenu.member.identity === me?.identity} canManage={canManage}
+            featuredId={bs.stageId}
+            onSpotlight={(id) => { setBs(b => ({ ...b, stageId: id })); setSpotlight(debateId, id).catch(() => {}); }}
             onProfile={openProfile}
             onGift={() => { setGiftTarget(ctxMenu.member); closeMenuNow(); }}
-            onHoverKeep={ctxMenu.via === 'hover' ? cancelMenuClose : undefined}
-            onHoverLeave={ctxMenu.via === 'hover' ? scheduleMenuClose : undefined}
+            onHoverKeep={cancelMenuClose}
+            onHoverLeave={scheduleMenuClose}
             onSendInvite={(r, s) => {
               const maxSeats = dz.debate?.max_stage_seats;
               const maxMods = dz.debate?.max_moderators;
@@ -293,6 +356,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         )}
 
         <ContextRail debateId={debateId} role={role} tab={tab} setTab={setTab} members={room.members} lkRoom={room.room}
+          collapsible={isNarrow} collapsed={isNarrow && !railOpen} onToggleCollapse={() => setRailOpen(o => !o)}
           pollOpen={!!dz.debate?.poll_open} format={dz.debate?.format}
           ros={{
             segments: dz.segments, segIdx: dz.segIdx, remaining: dz.remaining,
@@ -324,6 +388,11 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         streamError={yt.error}
         onStreamStart={yt.start}
         onStreamStop={yt.stop}
+        recording={dz.recording}
+        recBusy={dz.recBusy}
+        recError={dz.recError}
+        onRecStart={dz.startRec}
+        onRecStop={dz.stopRec}
         setTab={setTab}
         onLeave={onLeave}
         pollOpen={!!dz.debate?.poll_open}
@@ -947,6 +1016,9 @@ function LiveHall({
   const mod = members.find(m => m.role === 'moderator');
   const judges = members.filter(m => m.role === 'judge');
   const audience = members.filter(m => m.role === 'audience');
+  // An explicit spotlight (host/mod featured someone) takes over the floor for
+  // everyone — synced via bs.stageId, so all accounts see the same thing.
+  const spotlit = bs.stageId ? members.find(m => m.identity === bs.stageId) : undefined;
 
   const segTotal = dz.segments?.[dz.segIdx]?.duration_secs ?? 0;
   const phaseLabel = dz.seg?.label ?? 'In session';
@@ -1001,7 +1073,9 @@ function LiveHall({
       </div>
     )
     : <FloorStage roundLabel={phaseLabel} countdown={countdown} hasFloorSide={speakerSide}
-        presenting={presentingContent} presenterName={presenter?.name}>{overlays}</FloorStage>;
+        presenting={presentingContent} presenterName={presenter?.name}
+        spotlight={spotlit ? <VideoTile member={spotlit} active size="stage" /> : undefined}
+        spotlightName={spotlit?.name}>{overlays}</FloorStage>;
 
   const propCard = (
     <CompetitorCard side="prop" member={propMember} profile={sideProfiles.prop}
@@ -1090,8 +1164,9 @@ function LiveHall({
 
 /* ---- C5 · Stage Action Menu (host-only: right-click a profile to
    promote them onto the stage or move them back to the audience) ---- */
-function StageActionMenu({ x, y, via, member, debateId, isSelf, canManage, onSendInvite, onProfile, onGift, onClose, onHoverKeep, onHoverLeave, format }: {
+function StageActionMenu({ x, y, via, member, debateId, isSelf, canManage, featuredId, onSpotlight, onSendInvite, onProfile, onGift, onClose, onHoverKeep, onHoverLeave, format }: {
   x: number; y: number; via: 'hover' | 'tap'; member: RoomMember; debateId: string; isSelf: boolean; canManage: boolean;
+  featuredId?: string | null; onSpotlight?: (identity: string | null) => void;
   onSendInvite: (role: StageRole, side: StageSide) => void;
   onProfile: (handle?: string | null) => void; onGift: () => void;
   onClose: () => void; onHoverKeep?: () => void; onHoverLeave?: () => void; format?: string;
@@ -1101,6 +1176,9 @@ function StageActionMenu({ x, y, via, member, debateId, isSelf, canManage, onSen
   const onStage = member.role !== 'audience';
   const showInvite = canManage && !isSelf && !onStage;
   const showDemote = canManage && !isSelf && onStage && member.role !== 'host';
+  const showRemove = canManage && !isSelf && member.role !== 'host';
+  const showSpotlight = canManage && onStage && !!onSpotlight;
+  const isSpotlit = !!featuredId && featuredId === member.identity;
 
   async function demote() {
     setBusy(true);
@@ -1114,74 +1192,113 @@ function StageActionMenu({ x, y, via, member, debateId, isSelf, canManage, onSen
     setSent(label);
     setTimeout(onClose, 900);
   }
+  async function remove() {
+    if (!confirm(`Permanently remove ${member.name} from this chamber?\n\nThey will never be able to rejoin or see this room again. This can't be undone.`)) return;
+    setBusy(true);
+    try { await removeFromChamber(debateId, member.identity); onClose(); }
+    catch (e: any) { alert(e?.message ?? 'Could not remove'); setBusy(false); }
+  }
 
-  const menuW = 210;
+  const menuW = 234;
   const left = typeof window !== 'undefined' ? Math.min(x, window.innerWidth - menuW - 12) : x;
-  const top = typeof window !== 'undefined' ? Math.min(y, window.innerHeight - 260) : y;
+  const top = typeof window !== 'undefined' ? Math.min(y, window.innerHeight - 320) : y;
+
+  const roleMeta: Record<string, { label: string; color: string }> = {
+    host: { label: 'Host', color: C.warning },
+    moderator: { label: 'Moderator', color: C.gold },
+    debater: { label: 'Debater', color: C.jadeHi },
+    judge: { label: 'Judge', color: C.cyan },
+    audience: { label: 'Audience', color: C.faint },
+  };
+  const rm = roleMeta[member.role] ?? roleMeta.audience;
 
   return (
     <>
       <div onClick={onClose} onContextMenu={e => { e.preventDefault(); onClose(); }}
         style={{ position:'fixed', inset:0, zIndex:205, pointerEvents: via === 'hover' ? 'none' : 'auto' }} />
       <div onMouseEnter={onHoverKeep} onMouseLeave={onHoverLeave}
-        style={{ position:'fixed', top, left, zIndex:210, width:menuW, borderRadius:12,
-        background:C.panel, border:`1px solid ${C.hairHi}`, boxShadow:'0 20px 50px rgba(0,0,0,.5)', padding:6 }}>
-        <div style={{ padding:'8px 10px 7px', fontFamily:ui, fontSize:11.5, fontWeight:700, color:C.ink,
-          borderBottom:`1px solid ${C.hair}`, marginBottom:4, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-          {isSelf ? 'You' : member.name}
+        style={{ position:'fixed', top, left, zIndex:210, width:menuW, borderRadius:16,
+          background:a(C.panel,'F2'), backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)',
+          border:`1px solid ${C.hairHi}`, boxShadow:`0 24px 64px ${a(C.base,'CC')}, 0 2px 8px ${a(C.base,'80')}`,
+          padding:7, overflow:'hidden' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10, padding:'6px 8px 10px' }}>
+          <Avatar url={member.avatar} name={member.name} size={38} />
+          <div style={{ minWidth:0 }}>
+            <div style={{ fontFamily:ui, fontSize:14, fontWeight:700, color:C.ink,
+              whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+              {isSelf ? 'You' : member.name}
+            </div>
+            <div style={{ fontFamily:ui, fontSize:10, fontWeight:800, color:rm.color,
+              textTransform:'uppercase', letterSpacing:'.08em', marginTop:2 }}>{rm.label}</div>
+          </div>
         </div>
+        <div style={{ height:1, background:C.hair, margin:'0 2px 6px' }} />
         {sent ? (
           <div style={{ padding:'9px 10px', fontFamily:ui, fontSize:12.5, color:C.jadeHi }}>✓ Invite sent — {sent}</div>
         ) : (
           <>
             {member.handle && (
-              <MenuBtn label="View profile" onClick={() => { onProfile(member.handle); onClose(); }} busy={busy} />
+              <MenuBtn icon="◎" label="View profile" onClick={() => { onProfile(member.handle); onClose(); }} busy={busy} />
             )}
             {!isSelf && (
-              <MenuBtn label="🎁 Send gift" onClick={() => { onGift(); onClose(); }} busy={busy} />
+              <MenuBtn icon="✦" label="Send gift" onClick={() => { onGift(); onClose(); }} busy={busy} />
             )}
-            {(showInvite || showDemote || isSelf) && <div style={{ height:1, background:C.hair, margin:'4px 6px' }} />}
+            {showSpotlight && (
+              <MenuBtn icon={isSpotlit ? '★' : '☆'}
+                label={isSpotlit ? 'Remove from spotlight' : (isSelf ? 'Spotlight me on screen' : 'Spotlight on screen')}
+                onClick={() => { onSpotlight!(isSpotlit ? null : member.identity); onClose(); }} busy={busy} />
+            )}
+            {(showInvite || showDemote || isSelf) && <div style={{ height:1, background:C.hair, margin:'6px 2px' }} />}
             {isSelf && onStage && (
-              <MenuBtn label="Leave the stage" danger onClick={demote} busy={busy} />
+              <MenuBtn icon="↩" label="Leave the stage" danger onClick={demote} busy={busy} />
             )}
             {showDemote && (
-              <MenuBtn label="→ Move to audience" danger onClick={demote} busy={busy} />
+              <MenuBtn icon="↓" label="Move to audience" danger onClick={demote} busy={busy} />
             )}
             {showInvite && (format === 'legacy' ? (
               <>
-                <MenuBtn label="Invite as Speaker" onClick={() => invite('debater', null, 'Speaker')} busy={busy} />
-                <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Speaker" onClick={() => invite('debater', null, 'Speaker')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
               </>
             ) : format === 'speakers_corner' ? (
               <>
-                <MenuBtn label="Invite as Proposition" onClick={() => invite('debater', 'prop', 'Proposition')} busy={busy} />
-                <MenuBtn label="Invite as Opposition" onClick={() => invite('debater', 'opp', 'Opposition')} busy={busy} />
-                <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Proposition" onClick={() => invite('debater', 'prop', 'Proposition')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Opposition" onClick={() => invite('debater', 'opp', 'Opposition')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
               </>
             ) : format === 'lecture' ? (
-              <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
+              <MenuBtn icon="+" label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
             ) : (
               <>
-                <MenuBtn label="Invite as Proposition" onClick={() => invite('debater', 'prop', 'Proposition')} busy={busy} />
-                <MenuBtn label="Invite as Opposition" onClick={() => invite('debater', 'opp', 'Opposition')} busy={busy} />
-                <MenuBtn label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
-                <MenuBtn label="Invite as Judge" onClick={() => invite('judge', null, 'Judge')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Proposition" onClick={() => invite('debater', 'prop', 'Proposition')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Opposition" onClick={() => invite('debater', 'opp', 'Opposition')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Moderator" onClick={() => invite('moderator', null, 'Moderator')} busy={busy} />
+                <MenuBtn icon="+" label="Invite as Judge" onClick={() => invite('judge', null, 'Judge')} busy={busy} />
               </>
             ))}
+            {showRemove && (
+              <>
+                <div style={{ height:1, background:C.hair, margin:'6px 2px' }} />
+                <MenuBtn icon="⛔" label="Remove from chamber" danger onClick={remove} busy={busy} />
+              </>
+            )}
           </>
         )}
       </div>
     </>
   );
 }
-function MenuBtn({ label, onClick, busy, danger }: { label: string; onClick: () => void; busy: boolean; danger?: boolean }) {
+function MenuBtn({ label, icon, onClick, busy, danger }: { label: string; icon?: string; onClick: () => void; busy: boolean; danger?: boolean }) {
+  const base = danger ? C.garnetHi : C.ink;
+  const hoverBg = danger ? a(C.garnet, '16') : a(C.gold, '12');
   return (
-    <button onClick={onClick} disabled={busy} style={{ display:'block', width:'100%', textAlign:'left', padding:'9px 10px',
-      borderRadius:8, border:'none', background:'transparent', cursor: busy ? 'default' : 'pointer',
-      fontFamily:ui, fontSize:13, fontWeight:500, color: danger ? C.garnetHi : C.ink, opacity: busy ? .6 : 1 }}
-      onMouseEnter={e => { if (!busy) e.currentTarget.style.background = C.panel2; }}
+    <button onClick={onClick} disabled={busy} style={{ display:'flex', alignItems:'center', gap:10, width:'100%', textAlign:'left', padding:'9px 10px',
+      borderRadius:10, border:'none', background:'transparent', cursor: busy ? 'default' : 'pointer',
+      fontFamily:ui, fontSize:13, fontWeight:600, color: base, opacity: busy ? .6 : 1, transition:'background .12s ease' }}
+      onMouseEnter={e => { if (!busy) e.currentTarget.style.background = hoverBg; }}
       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-      {busy ? '…' : label}
+      {icon && <span style={{ fontSize:13.5, width:16, textAlign:'center', opacity:.9, flexShrink:0, color: danger ? C.garnetHi : C.dim }}>{icon}</span>}
+      <span style={{ flex:1 }}>{busy ? '…' : label}</span>
     </button>
   );
 }

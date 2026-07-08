@@ -97,6 +97,7 @@ export interface CreateDebateInput {
   thumbnailFile?: File | null;
   maxStageSeats?: number | null;
   maxModerators?: number | null;
+  communityId?: string | null;
 }
 
 export async function createDebate(input: CreateDebateInput): Promise<Debate> {
@@ -120,6 +121,7 @@ export async function createDebate(input: CreateDebateInput): Promise<Debate> {
     status: input.scheduledAt ? 'scheduled' : 'assembly',
     max_stage_seats: input.maxStageSeats ?? null,
     max_moderators: input.maxModerators ?? null,
+    community_id: input.communityId ?? null,
   }).select().single();
   if (error) throw error;
   const d = debate as Debate;
@@ -310,6 +312,27 @@ export async function unfollow(targetId: string) {
   if (!user) throw new Error('not authenticated');
   const { error } = await supabase.from('follows').delete()
     .eq('follower_id', user.id).eq('following_id', targetId);
+  if (error) throw error;
+}
+
+/* ---- Blocking (reversible). Blocked pairs can't see/engage each other; a
+   host-block also hides that host's events from the blocked user. ---- */
+export async function amIBlocking(targetId: string): Promise<boolean> {
+  const { data } = await supabase.rpc('am_i_blocking', { p_user: targetId });
+  return !!data;
+}
+export async function blockUser(targetId: string) {
+  const { error } = await supabase.rpc('block_user', { p_user: targetId });
+  if (error) throw error;
+}
+export async function unblockUser(targetId: string) {
+  const { error } = await supabase.rpc('unblock_user', { p_user: targetId });
+  if (error) throw error;
+}
+
+/* ---- Host/moderator permanent removal from a chamber (irreversible). ---- */
+export async function removeFromChamber(debateId: string, userId: string) {
+  const { error } = await supabase.rpc('remove_from_chamber', { p_debate: debateId, p_user: userId });
   if (error) throw error;
 }
 
@@ -550,11 +573,31 @@ export function subscribeTally(debateId: string, onChange: (t: Tally) => void) {
     .subscribe());
 }
 
+/* Fires whenever any debate row changes (status flips to live/ended, viewer
+   count updates, etc.) so the lobby can refresh instantly instead of waiting
+   for the poll. */
+export function subscribeDebatesList(onChange: () => void) {
+  return safeSub(() => supabase.channel(`debates-list:${uniq()}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'debates' }, () => onChange())
+    .subscribe());
+}
+
 export function subscribeParticipants(debateId: string, onChange: () => void) {
   return safeSub(() => supabase.channel(`participants:${debateId}:${uniq()}`)
     .on('postgres_changes',
       { event: '*', schema: 'public', table: 'debate_participants', filter: `debate_id=eq.${debateId}` },
       () => onChange())
+    .subscribe());
+}
+
+/* Fires on the removed user's own client the moment a host/moderator removes
+   them from this chamber, so they can be dropped instantly. Realtime respects
+   RLS, so a user only ever receives their own removal row. */
+export function subscribeMyRemoval(debateId: string, myId: string, onRemoved: () => void) {
+  return safeSub(() => supabase.channel(`removals:${debateId}:${uniq()}`)
+    .on('postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'chamber_removals', filter: `debate_id=eq.${debateId}` },
+      (payload: any) => { if (payload?.new?.user_id === myId) onRemoved(); })
     .subscribe());
 }
 
@@ -874,7 +917,7 @@ export async function declineTeamInvite(inviteId: string): Promise<void> {
 
 /* ─────────────────── PROFILE EDITING ─────────────────── */
 export async function updateProfile(patch: {
-  display_name?: string; handle?: string; bio?: string | null; topics?: string[]; socials?: Partial<import('./types').Socials>;
+  display_name?: string; handle?: string; bio?: string | null; topics?: string[]; socials?: Partial<import('./types').Socials>; profile_accent?: string | null;
 }): Promise<Profile> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('not signed in');

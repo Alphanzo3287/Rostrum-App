@@ -25,12 +25,15 @@ export function VideoTile({ member, active, size = 'tile' }: {
   const vref = useRef<HTMLVideoElement>(null);
   const aref = useRef<HTMLAudioElement>(null);
 
-  // attach / detach the camera track
+  // attach / detach the camera track. Must depend on camOn too: the <video>
+  // element only exists while camOn is true, so if the camera turns on AFTER
+  // the track is already known (e.g. a host who wasn't on stage, then gets
+  // spotlighted), the element mounts and we need to re-run to attach to it.
   useEffect(() => {
     const el = vref.current;
     const t = member.videoTrack;
     if (el && t) { t.attach(el); return () => { t.detach(el); }; }
-  }, [member.videoTrack]);
+  }, [member.videoTrack, member.camOn]);
 
   // attach remote audio (skip our own to avoid echo)
   useEffect(() => {
@@ -65,9 +68,12 @@ export function VideoTile({ member, active, size = 'tile' }: {
       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '12px 7px 5px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         background: 'linear-gradient(transparent, rgba(0,0,0,0.82))' }}>
-        <span style={{ fontSize: size === 'stage' ? 13 : 11, color: '#fff', fontWeight: 600,
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {member.name.split(' ')[0]}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+          <span style={{ fontSize: size === 'stage' ? 13 : 11, color: '#fff', fontWeight: 600,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {member.name.split(' ')[0]}
+          </span>
+          {member.pro && <span title="Rostrum Pro" style={{ fontSize: size === 'stage' ? 12 : 10, flexShrink: 0 }}>👑</span>}
         </span>
         <MicGlyph on={member.micOn} color={tone.hi} />
       </div>

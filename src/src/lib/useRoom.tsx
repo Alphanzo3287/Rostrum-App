@@ -17,6 +17,7 @@ export interface RoomMember {
   role: string;            // host | moderator | debater | judge | audience
   side: 'prop' | 'opp' | null;
   avatar: string | null;
+  pro?: boolean;           // Rostrum Pro member (from token metadata)
   isLocal: boolean;
   isSpeaking: boolean;
   micOn: boolean;
@@ -52,6 +53,15 @@ export function useRoom(debateId: string | null): UseRoom {
 
   const sync = useCallback((room: Room) => {
     const all: Participant[] = [room.localParticipant, ...room.remoteParticipants.values()];
+    // Belt-and-braces: explicitly subscribe to every remote camera/mic
+    // publication. autoSubscribe should do this, but a publication that
+    // slipped through (e.g. published before permissions settled) stays
+    // unsubscribed forever — the spotlighted host renders black for viewers.
+    for (const p of room.remoteParticipants.values()) {
+      for (const pub of p.trackPublications.values()) {
+        try { if (!pub.isSubscribed && (pub as any).setSubscribed) (pub as any).setSubscribed(true); } catch { /* noop */ }
+      }
+    }
     setMembers(all.map((p) => {
       const md = meta(p);
       const cam: TrackPublication | undefined = p.getTrackPublication(Track.Source.Camera);
@@ -64,6 +74,7 @@ export function useRoom(debateId: string | null): UseRoom {
         role: md.role ?? 'audience',
         side: md.side ?? null,
         avatar: md.avatar ?? null,
+        pro: !!md.pro,
         isLocal: p === room.localParticipant,
         isSpeaking: p.isSpeaking,
         micOn: !!mic && !mic.isMuted,
@@ -86,8 +97,12 @@ export function useRoom(debateId: string | null): UseRoom {
       setCanPublish(cp);
 
       // dynacast pauses a track when it has no subscribers — which kills the
-      // camera when you're testing alone. Keep tracks publishing.
-      room = new Room({ adaptiveStream: true, dynacast: false });
+      // camera when you're testing alone. adaptiveStream pauses a remote track
+      // when it isn't attached to a visible element, so a participant who
+      // wasn't on-screen (e.g. the host in Oxford) has paused video that fails
+      // to resume when spotlighted — viewers see black. Disable both so any
+      // subscribed track always delivers frames.
+      room = new Room({ adaptiveStream: false, dynacast: false });
       roomRef.current = room;
 
       const resync = () => room && sync(room);
@@ -97,6 +112,8 @@ export function useRoom(debateId: string | null): UseRoom {
         .on(RoomEvent.ParticipantDisconnected, resync)
         .on(RoomEvent.TrackSubscribed, (_t: RemoteTrack) => resync())
         .on(RoomEvent.TrackUnsubscribed, resync)
+        .on(RoomEvent.TrackPublished, resync)
+        .on(RoomEvent.TrackUnpublished, resync)
         .on(RoomEvent.TrackMuted, resync)
         .on(RoomEvent.TrackUnmuted, resync)
         .on(RoomEvent.LocalTrackPublished, resync)

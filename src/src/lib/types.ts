@@ -33,6 +33,11 @@ export interface Profile {
   follower_count: number;
   following_count: number;
   created_at: string;
+  onboarded_at?: string | null;
+  terms_accepted_at?: string | null;
+  pro_until?: string | null;
+  profile_accent?: string | null;
+  tour_seen_at?: string | null;
 }
 
 export interface Debate {

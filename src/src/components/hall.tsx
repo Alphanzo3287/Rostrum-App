@@ -176,7 +176,7 @@ function WaitingPodium({ tone }: { tone: { base: string; hi: string } }) {
 }
 
 /* ============================== FLOOR STAGE ============================== */
-export function FloorStage({ roundLabel, countdown, hasFloorSide, assembling, children, presenting, presenterName }: {
+export function FloorStage({ roundLabel, countdown, hasFloorSide, assembling, children, presenting, presenterName, spotlight, spotlightName }: {
   roundLabel: string;
   countdown: string;
   hasFloorSide: Side | null;
@@ -184,13 +184,31 @@ export function FloorStage({ roundLabel, countdown, hasFloorSide, assembling, ch
   children?: React.ReactNode;   // WinnerOverlay / voting indicator overlays
   presenting?: React.ReactNode; // slides / screen-share content — takes over the stage when present
   presenterName?: string | null;
+  spotlight?: React.ReactNode;  // a spotlighted person's video — takes over the stage for everyone
+  spotlightName?: string | null;
 }) {
   const tone = hasFloorSide ? sideTone(hasFloorSide) : null;
 
+  if (!presenting && spotlight) {
+    return (
+      <div style={{ position: 'relative', borderRadius: 18, overflow: 'hidden',
+        width: '100%', aspectRatio: '16 / 9', border: `1px solid ${C.hair}`, background: '#000' }}>
+        <div style={{ position: 'absolute', inset: 0 }}>{spotlight}</div>
+        <span style={{ position: 'absolute', top: 10, left: 10, zIndex: 2, padding: '4px 11px', borderRadius: 999,
+          background: a('#000000', 'A6'), border: `1px solid ${C.hairHi}`,
+          fontFamily: ui, fontSize: 10.5, fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.warning }} />
+          Spotlight{spotlightName ? ` · ${spotlightName}` : ''}
+        </span>
+        {children}
+      </div>
+    );
+  }
+
   if (presenting) {
     return (
-      <div style={{ position: 'relative', borderRadius: 18, overflow: 'hidden', minHeight: 0,
-        display: 'flex', border: `1px solid ${C.hair}`, background: '#000' }}>
+      <div style={{ position: 'relative', borderRadius: 18, overflow: 'hidden',
+        width: '100%', aspectRatio: '16 / 9', border: `1px solid ${C.hair}`, background: '#000' }}>
         <div style={{ position: 'absolute', inset: 0 }}>{presenting}</div>
         <span style={{ position: 'absolute', top: 10, left: 10, zIndex: 2, padding: '4px 11px', borderRadius: 999,
           background: a('#000000', 'A6'), border: `1px solid ${C.hairHi}`,
@@ -303,7 +321,7 @@ function SeatPill({ member, label, tone, glow, onProfile, onContextMenu, bind }:
         <span style={{ fontFamily: ui, fontSize: 9, letterSpacing: '.1em', textTransform: 'uppercase', color: tone }}>{label}</span>
         <span style={{ fontFamily: ui, fontSize: 12.5, fontWeight: 600, color: member ? C.ink : C.faint, maxWidth: 120,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {member ? member.name.split(' ')[0] : 'Open seat'}</span>
+          {member ? member.name.split(' ')[0] : 'Open seat'}{member?.pro ? ' 👑' : ''}</span>
       </span>
     </span>
   );
@@ -472,9 +490,9 @@ function useCountdown(target: string | null | undefined) {
   return secs;
 }
 
-function WaitingSeatCard({ side, member, debateId, canInvite, onContextMenu }: {
+function WaitingSeatCard({ side, member, debateId, canInvite, onContextMenu, bind }: {
   side: Side; member?: RoomMember; debateId: string; canInvite: boolean;
-  onContextMenu?: (e: React.MouseEvent) => void;
+  onContextMenu?: (e: React.MouseEvent) => void; bind?: React.HTMLAttributes<HTMLDivElement>;
 }) {
   const t = sideTone(side);
   const [copied, setCopied] = useState(false);
@@ -485,9 +503,11 @@ function WaitingSeatCard({ side, member, debateId, canInvite, onContextMenu }: {
       setCopied(true); setTimeout(() => setCopied(false), 1800);
     } catch { /* clipboard blocked — non-fatal */ }
   };
+  const interactive = !!(member && bind);
   return (
-    <div style={{ flex: '1 1 240px', minWidth: 0, borderRadius: 18, padding: '18px 16px', textAlign: 'center',
+    <div {...(interactive ? bind : {})} style={{ flex: '1 1 240px', minWidth: 0, borderRadius: 18, padding: '18px 16px', textAlign: 'center',
       background: `linear-gradient(180deg, ${a(t.base, '12')}, ${a(C.panel, 'CC')})`,
+      cursor: interactive ? 'pointer' : 'default',
       border: `1px solid ${a(t.base, member ? '55' : '2E')}` }}
       onContextMenu={member && onContextMenu ? (e) => { e.preventDefault(); onContextMenu(e); } : undefined}>
       <span style={{ fontFamily: ui, fontWeight: 800, fontSize: 10.5, letterSpacing: '.16em',
@@ -580,8 +600,10 @@ export function WaitingHall({ debateId, members, motion, viewerCount, scheduledA
       {!noSides && (
         <div style={{ display: 'flex', gap: 14, marginTop: 4, marginBottom: 16, flexWrap: 'wrap' }}>
           <WaitingSeatCard side="prop" member={propMember} debateId={debateId} canInvite={isHost && !propMember}
+            bind={propMember && personBind ? personBind(propMember) : undefined}
             onContextMenu={propMember && onContextMenu ? (e) => onContextMenu(e, propMember) : undefined} />
           <WaitingSeatCard side="opp" member={oppMember} debateId={debateId} canInvite={isHost && !oppMember}
+            bind={oppMember && personBind ? personBind(oppMember) : undefined}
             onContextMenu={oppMember && onContextMenu ? (e) => onContextMenu(e, oppMember) : undefined} />
         </div>
       )}
@@ -589,7 +611,7 @@ export function WaitingHall({ debateId, members, motion, viewerCount, scheduledA
       {/* gallery */}
       <div style={{ marginTop: 'auto' }}>
         <GalleryStrip audience={audience.length ? audience : members.filter(m => m.role === 'audience')} onProfile={onProfile}
-          onMemberContextMenu={onContextMenu} />
+          personBind={personBind} onMemberContextMenu={onContextMenu} />
         {viewerCount > members.length && (
           <div style={{ fontFamily: ui, fontSize: 11, color: C.faint, marginTop: 6 }}>
             {fmtN(viewerCount)} total watching</div>

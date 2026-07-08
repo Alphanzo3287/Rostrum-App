@@ -89,7 +89,9 @@ export function initialTheme(): ThemeMode {
   if (typeof window === 'undefined') return 'dark';
   const saved = localStorage.getItem('rostrum-theme');
   if (saved === 'light' || saved === 'dark') return saved;
-  if (window.matchMedia?.('(prefers-color-scheme: light)').matches) return 'light';
+  // Dark by default. A user's explicit choice is saved to localStorage and
+  // persists across logins on this browser; we intentionally do NOT follow the
+  // OS light/dark preference so the platform opens dark for everyone first.
   return 'dark';
 }
 
