@@ -27,8 +27,9 @@ export function GavelFab({ debateId, room, name, canSpeak, topic }: {
   const [open, setOpen] = useState(false);
   const [auto, setAuto] = useState(false);
   const [toast, setToast] = useState<FactCheck | null>(null);
+  const [fabFailed, setFabFailed] = useState(false);
   const { transcriptRef, supported, listening } = useLiveTranscript(room, name, canSpeak);
-  const { pos, onPointerDown, wasDragged } = useDraggable('rostrum.gavelfab', bottomRight(120));
+  const { pos, onPointerDown, wasDragged } = useDraggable('rostrum.gavelfab.v2', bottomRight(88, 120));
   const openRef = useRef(open);
   openRef.current = open;
 
@@ -52,18 +53,20 @@ export function GavelFab({ debateId, room, name, canSpeak, topic }: {
     return unsub;
   }, [debateId]);
 
-  // Position the widget/toast near the button, clamped on-screen.
+  // Anchor the panel/toast to the viewport EDGE nearest the FAB. Using CSS
+  // right/left/bottom/top (not computed pixels) makes overflow impossible.
   const vw = typeof window !== 'undefined' ? window.innerWidth : 1000;
   const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
-  const widgetH = Math.min(vh * 0.72, 560);
-  const widget = anchor(pos, WIDGET_W, widgetH, vw, vh);
-  const toastPos = anchor(pos, Math.min(320, vw - 24), 62, vw, vh);
+  const nearRight = (pos.x + 44) > vw / 2;
+  const nearBottom = (pos.y + 48) > vh / 2;
+  const hEdge = nearRight ? { right: 16 } : { left: 16 };
+  const vEdge = nearBottom ? { bottom: 120 } : { top: 120 };
 
   return createPortal(
     <>
       {open && (
-        <div style={{ position: 'fixed', left: widget.left, top: widget.top, zIndex: 300, width: WIDGET_W, maxWidth: 'calc(100vw - 24px)',
-          height: widgetH, display: 'flex', flexDirection: 'column', borderRadius: 18, overflow: 'hidden',
+        <div style={{ position: 'fixed', ...hEdge, ...vEdge, zIndex: 300, width: `min(${WIDGET_W}px, calc(100vw - 32px))`,
+          height: 'min(560px, calc(100vh - 140px))', display: 'flex', flexDirection: 'column', borderRadius: 18, overflow: 'hidden',
           background: a(C.base2, 'F5'), backdropFilter: 'blur(22px)', border: `1px solid ${C.hairHi}`, boxShadow: '0 24px 70px rgba(0,0,0,.55)' }}>
           <div style={{ padding: '13px 15px', borderBottom: `1px solid ${C.hair}`, display: 'flex', alignItems: 'center', gap: 10 }}>
             <GavelMascot state="avatar" size={36} />
@@ -104,7 +107,7 @@ export function GavelFab({ debateId, room, name, canSpeak, topic }: {
       {/* subtle auto-verdict toast */}
       {toast && !open && (
         <button onClick={() => { setOpen(true); setToast(null); }}
-          style={{ position: 'fixed', left: toastPos.left, top: toastPos.top, zIndex: 299, maxWidth: Math.min(320, vw - 24),
+          style={{ position: 'fixed', ...hEdge, ...vEdge, zIndex: 299, width: 'min(320px, calc(100vw - 32px))',
             display: 'flex', alignItems: 'center', gap: 9, padding: '9px 13px', borderRadius: 12, cursor: 'pointer', textAlign: 'left',
             background: a(C.base2, 'F2'), backdropFilter: 'blur(14px)', border: `1px solid ${a(VERDICT_COLOR[toast.verdict] ?? '#8A93A0', '66')}`,
             boxShadow: '0 12px 34px rgba(0,0,0,.4)', animation: 'none' }}>
@@ -120,26 +123,25 @@ export function GavelFab({ debateId, room, name, canSpeak, topic }: {
         </button>
       )}
 
-      {/* draggable FAB */}
+      {/* draggable FAB — Gavel himself */}
       <button onPointerDown={onPointerDown} onClick={() => { if (!wasDragged()) setOpen(o => !o); }}
-        aria-label="Gavel fact-checker (drag to move)" title="Gavel — drag to move"
-        style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 300, height: 52, padding: '0 18px 0 8px', touchAction: 'none',
-          display: 'flex', alignItems: 'center', gap: 8, borderRadius: 999, border: 'none', cursor: 'grab',
-          color: '#fff', fontFamily: display, fontSize: 15, fontWeight: 700,
-          background: `linear-gradient(135deg, ${C.gold}, ${C.cyan})`, boxShadow: `0 10px 30px ${a(C.gold, '55')}` }}>
-        <GavelMascot state="avatar" size={38} />
-        Gavel
-        {auto && <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', boxShadow: '0 0 8px #fff' }} />}
+        aria-label="Open Gavel (drag to move)" title="Gavel — click to open, drag to move"
+        style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 300, touchAction: 'none', cursor: 'grab',
+          background: 'transparent', border: 'none', padding: 0, lineHeight: 0 }}>
+        <div style={{ position: 'relative', width: 78, height: 100 }}>
+          {/* grounding glow so he pops on any background */}
+          <div style={{ position: 'absolute', left: '50%', bottom: 6, transform: 'translateX(-50%)', width: 56, height: 20,
+            borderRadius: '50%', background: a(C.cyan, '66'), filter: 'blur(13px)', pointerEvents: 'none' }} />
+          {fabFailed
+            ? <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'end center' }}><GavelMascot state="idle" size={92} float /></div>
+            : <img src="/gavel/gavel-fab.png" alt="Gavel" onError={() => setFabFailed(true)}
+                style={{ position: 'relative', height: 100, width: 'auto', display: 'block', margin: '0 auto',
+                  filter: `drop-shadow(0 10px 16px rgba(0,0,0,.55))`, animation: 'gavelFloat 3.6s ease-in-out infinite' }} />}
+          {auto && <span style={{ position: 'absolute', top: 4, right: 8, width: 12, height: 12, borderRadius: '50%',
+            background: '#4FC2A7', border: '2px solid #0b0e14', boxShadow: '0 0 9px #4FC2A7' }} />}
+        </div>
       </button>
     </>,
     document.body,
   );
-}
-
-/** Place a panel of size w×h near the FAB, opening above it, clamped on-screen. */
-function anchor(pos: { x: number; y: number }, w: number, h: number, vw: number, vh: number) {
-  const left = Math.min(Math.max(pos.x + 120 - w, 8), Math.max(8, vw - w - 8));
-  let top = pos.y - h - 12;
-  if (top < 8) top = Math.min(pos.y + 60, Math.max(8, vh - h - 8));
-  return { left, top: Math.max(8, top) };
 }
