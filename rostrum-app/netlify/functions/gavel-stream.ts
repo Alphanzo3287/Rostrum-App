@@ -1,37 +1,53 @@
 // =====================================================================
 // The Rostrum · netlify/functions/gavel-stream.ts
-// TRUE streaming for Gavel's text tools. A Netlify v2 streaming function
-// that opens an Anthropic SSE stream and forwards the text deltas to the
-// browser token-by-token (ChatGPT-style). If a runtime buffers the
-// response, it still arrives correctly — just not incrementally.
-// Requires env: ANTHROPIC_API_KEY.
+// TRUE streaming for Gavel's text tools (Netlify v2 streaming function).
+// Uses the same prompt builder + effort/budget routing as gavel-assist so
+// streamed and buffered answers are identical. Requires ANTHROPIC_API_KEY.
 // =====================================================================
 import { userFromToken } from '../../src/server/supabaseAdmin';
-import { buildAssistPrompt } from '../../src/server/gavelCore';
+import { buildAssistPrompt, assistRequestConfig, type GavelMode } from '../../src/server/gavelCore';
+
+const MODES = new Set(['quick', 'detailed', 'deep']);
+let effortSupported = true;   // self-healing: flips off once if the API rejects it
 
 export default async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') return new Response('method not allowed', { status: 405 });
 
   const user = await userFromToken(req.headers.get('authorization'));
   if (!user) return new Response('unauthorized', { status: 401 });
+  if (!process.env.ANTHROPIC_API_KEY) return new Response('Gavel is not configured (missing ANTHROPIC_API_KEY).', { status: 503 });
 
   const body = await req.json().catch(() => ({} as any));
   const tool = String(body.tool || 'chat');
+  const mode = (MODES.has(String(body.mode)) ? String(body.mode) : 'quick') as GavelMode;
+  if ((tool === 'chat' || tool === 'explain') && !String(body.question || '').trim()) {
+    return new Response('enter a claim or question', { status: 400 });
+  }
+
   const { system, user: userMsg } = buildAssistPrompt(tool, {
     transcript: String(body.transcript || '').slice(0, 8000),
     topic: String(body.topic || '').slice(0, 400),
     question: String(body.question || '').slice(0, 1000),
+    mode,
   });
-  if ((tool === 'chat' || tool === 'explain') && !String(body.question || '').trim()) {
-    return new Response('enter a claim or question', { status: 400 });
-  }
-  if (!process.env.ANTHROPIC_API_KEY) return new Response('Gavel is not configured (missing ANTHROPIC_API_KEY).', { status: 503 });
+  const cfg = assistRequestConfig(tool, mode);
 
-  const upstream = await fetch('https://api.anthropic.com/v1/messages', {
+  const call = (withEffort: boolean) => fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 2500, system, stream: true, messages: [{ role: 'user', content: userMsg }] }),
+    body: JSON.stringify({
+      model: 'claude-sonnet-5', max_tokens: cfg.maxTokens, system, stream: true,
+      ...(withEffort ? { effort: cfg.effort } : {}),
+      messages: [{ role: 'user', content: userMsg }],
+    }),
   });
+
+  let upstream = await call(effortSupported);
+  if (upstream.status === 400 && effortSupported) {
+    const errBody = await upstream.text().catch(() => '');
+    if (/effort/i.test(errBody)) { effortSupported = false; upstream = await call(false); }
+    else return new Response(`Gavel request rejected: ${errBody.slice(0, 160)}`, { status: 502 });
+  }
   if (!upstream.ok || !upstream.body) return new Response(`Gavel unavailable (${upstream.status})`, { status: 502 });
 
   const reader = upstream.body.getReader();
@@ -45,7 +61,7 @@ export default async (req: Request): Promise<Response> => {
       if (done) { controller.close(); return; }
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
-      buffer = lines.pop() || '';                    // keep the partial last line
+      buffer = lines.pop() || '';
       for (const line of lines) {
         const t = line.trim();
         if (!t.startsWith('data:')) continue;

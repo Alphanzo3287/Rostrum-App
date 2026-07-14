@@ -7,9 +7,10 @@
 // =====================================================================
 import type { Handler } from '@netlify/functions';
 import { userFromToken } from '../../src/server/supabaseAdmin';
-import { assist, findSources } from '../../src/server/gavelCore';
+import { assist, findSources, type GavelMode } from '../../src/server/gavelCore';
 
 const TOOLS = new Set(['chat', 'summarize', 'fallacies', 'steelman', 'rebuttal', 'context', 'explain']);
+const MODES = new Set(['quick', 'detailed', 'deep']);
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'method not allowed' });
@@ -18,6 +19,7 @@ export const handler: Handler = async (event) => {
 
   const body = safeBody(event.body);
   const rawTool = String(body.tool || 'chat');
+  const mode = (MODES.has(String(body.mode)) ? String(body.mode) : 'quick') as GavelMode;
   const question = String(body.question || '').slice(0, 1000);
   const transcript = String(body.transcript || '').slice(0, 8000);
   const topic = String(body.topic || '').slice(0, 400);
@@ -33,7 +35,7 @@ export const handler: Handler = async (event) => {
 
     const tool = TOOLS.has(rawTool) ? rawTool : 'chat';
     if ((tool === 'chat' || tool === 'explain') && !question.trim()) return json(400, { error: 'enter a claim or question' });
-    const answer = await assist(tool, { transcript, topic, question });
+    const answer = await assist(tool, { transcript, topic, question, mode });
     return json(200, { answer });
   } catch (err: any) {
     console.error('gavel-assist error:', err?.message ?? err);

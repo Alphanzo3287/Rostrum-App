@@ -5,7 +5,7 @@
 // live auto-verdicts injected as they land.
 // =====================================================================
 import { useEffect, useRef, useState } from 'react';
-import { requestFactCheck, askGavelStream, findSourcesFor, subscribeFactChecks, type FactCheck, type FactSource, type GavelTool } from '../lib/gavel';
+import { requestFactCheck, askGavelStream, findSourcesFor, subscribeFactChecks, type FactCheck, type FactSource, type GavelTool, type GavelMode } from '../lib/gavel';
 import { GavelMascot } from './GavelMascot';
 import { C, ui, mono, display, a } from '../lib/theme';
 
@@ -38,6 +38,7 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
   ]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<GavelMode>('quick');
   const [mascot, setMascot] = useState<'idle' | 'thinking' | 'happy' | 'unsure' | 'error'>('idle');
   const feedRef = useRef<HTMLDivElement>(null);
 
@@ -83,7 +84,7 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
     const mid = uid(); add({ id: mid, role: 'gavel', kind: 'text', text: '' });
     let acc = '';
     try {
-      await askGavelStream({ tool, question, transcript: getTranscript(), topic }, chunk => {
+      await askGavelStream({ tool, question, transcript: getTranscript(), topic, mode }, chunk => {
         acc += chunk;
         setMessages(p => p.map(m => (m.id === mid && m.role === 'gavel' && m.kind === 'text' ? { ...m, text: acc } : m)));
       });
@@ -144,8 +145,19 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
           ))}
       </div>
 
-      {/* input */}
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+      {/* response mode + input */}
+      <div style={{ display: 'flex', gap: 5, marginTop: 12, marginBottom: 8 }}>
+        {([['quick', 'Quick', '~250 words'], ['detailed', 'Detailed', '400–600 words'], ['deep', 'Deep', '800–1200 words']] as [GavelMode, string, string][]).map(([m, label, hint]) => (
+          <button key={m} onClick={() => setMode(m)} title={hint}
+            style={{ flex: 1, padding: '6px 0', borderRadius: 8, cursor: 'pointer',
+              border: `1px solid ${mode === m ? a(C.cyan, '66') : C.hair}`,
+              background: mode === m ? a(C.cyan, '16') : 'transparent',
+              color: mode === m ? C.cyan : C.faint, fontFamily: ui, fontSize: 11, fontWeight: 700 }}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
         <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') factCheck(input); }}
           placeholder="Enter a claim to fact-check…" disabled={busy}
           style={{ flex: 1, minWidth: 0, padding: '11px 13px', borderRadius: 12, background: C.panel2, border: `1px solid ${C.hair}`,

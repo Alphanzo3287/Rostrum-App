@@ -23,9 +23,10 @@ export interface FactCheck {
 }
 
 export type GavelTool = 'chat' | 'summarize' | 'fallacies' | 'steelman' | 'rebuttal' | 'context' | 'explain';
+export type GavelMode = 'quick' | 'detailed' | 'deep';
 
 /** Ask Gavel about the live debate, or run a debate tool over the transcript. */
-export async function askGavel(input: { tool: GavelTool; question?: string; transcript?: string; topic?: string }): Promise<string> {
+export async function askGavel(input: { tool: GavelTool; question?: string; transcript?: string; topic?: string; mode?: GavelMode }): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('not authenticated');
   const res = await fetch('/.netlify/functions/gavel-assist', {
@@ -54,7 +55,7 @@ export async function findSourcesFor(query: string, topic?: string): Promise<Fac
 
 /** Streamed version of askGavel — calls onToken as text arrives (ChatGPT-style). */
 export async function askGavelStream(
-  input: { tool: GavelTool; question?: string; transcript?: string; topic?: string },
+  input: { tool: GavelTool; question?: string; transcript?: string; topic?: string; mode?: GavelMode },
   onToken: (chunk: string) => void,
 ): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();
