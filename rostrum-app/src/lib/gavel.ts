@@ -22,7 +22,7 @@ export interface FactCheck {
   requester?: { display_name: string; handle: string } | null;
 }
 
-export type GavelTool = 'chat' | 'summarize' | 'fallacies' | 'steelman' | 'rebuttal' | 'context';
+export type GavelTool = 'chat' | 'summarize' | 'fallacies' | 'steelman' | 'rebuttal' | 'context' | 'explain';
 
 /** Ask Gavel about the live debate, or run a debate tool over the transcript. */
 export async function askGavel(input: { tool: GavelTool; question?: string; transcript?: string; topic?: string }): Promise<string> {
@@ -36,6 +36,43 @@ export async function askGavel(input: { tool: GavelTool; question?: string; tran
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body?.error ?? 'Gavel could not respond');
   return body.answer as string;
+}
+
+/** Retrieval only — real scholarly sources for a claim or topic (no verdict). */
+export async function findSourcesFor(query: string, topic?: string): Promise<FactSource[]> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('not authenticated');
+  const res = await fetch('/.netlify/functions/gavel-assist', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ tool: 'sources', question: query, topic }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.error ?? 'Gavel could not find sources');
+  return (body.sources ?? []) as FactSource[];
+}
+
+/** Streamed version of askGavel — calls onToken as text arrives (ChatGPT-style). */
+export async function askGavelStream(
+  input: { tool: GavelTool; question?: string; transcript?: string; topic?: string },
+  onToken: (chunk: string) => void,
+): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('not authenticated');
+  const res = await fetch('/.netlify/functions/gavel-stream', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok || !res.body) throw new Error('Gavel could not respond');
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    if (chunk) onToken(chunk);
+  }
 }
 
 /** Submit a claim to Gavel. Returns the stored verdict (also visible to the room). */

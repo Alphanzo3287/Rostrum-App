@@ -5,7 +5,7 @@
 // live auto-verdicts injected as they land.
 // =====================================================================
 import { useEffect, useRef, useState } from 'react';
-import { requestFactCheck, askGavel, subscribeFactChecks, type FactCheck, type GavelTool } from '../lib/gavel';
+import { requestFactCheck, askGavelStream, findSourcesFor, subscribeFactChecks, type FactCheck, type FactSource, type GavelTool } from '../lib/gavel';
 import { GavelMascot } from './GavelMascot';
 import { C, ui, mono, display, a } from '../lib/theme';
 
@@ -13,17 +13,21 @@ type Msg =
   | { id: string; role: 'user'; text: string }
   | { id: string; role: 'gavel'; kind: 'text'; text: string }
   | { id: string; role: 'gavel'; kind: 'progress'; text: string }
+  | { id: string; role: 'gavel'; kind: 'sources'; sources: FactSource[] }
   | { id: string; role: 'gavel'; kind: 'verdict'; fc: FactCheck; note?: string };
 
 const uid = () => Math.random().toString(36).slice(2);
 const VC: Record<string, string> = { Supported: '#4FC2A7', Refuted: '#E86A6A', Contested: '#E5B567', Unsupported: '#8A93A0', NotFactual: '#8A93A0', Error: '#8A93A0' };
 
-const TOOLS: { tool: GavelTool; label: string; icon: string }[] = [
-  { tool: 'summarize', label: 'Summarize', icon: '📄' },
-  { tool: 'fallacies', label: 'Fallacies', icon: '🧠' },
-  { tool: 'steelman', label: 'Steelman', icon: '🎯' },
-  { tool: 'rebuttal', label: 'Rebuttal', icon: '💥' },
-  { tool: 'context', label: 'Context', icon: '📚' },
+type Action = { tool: GavelTool | 'sources'; label: string; icon: string; mode: 'text' | 'explain' | 'sources' };
+const TOOLS: Action[] = [
+  { tool: 'summarize', label: 'Summarize', icon: '📄', mode: 'text' },
+  { tool: 'fallacies', label: 'Fallacies', icon: '🧠', mode: 'text' },
+  { tool: 'steelman', label: 'Steelman', icon: '🎯', mode: 'text' },
+  { tool: 'rebuttal', label: 'Rebuttal', icon: '💥', mode: 'text' },
+  { tool: 'context', label: 'Context', icon: '📚', mode: 'text' },
+  { tool: 'explain', label: 'Explain', icon: '💡', mode: 'explain' },
+  { tool: 'sources', label: 'Find Sources', icon: '🔎', mode: 'sources' },
 ];
 
 export function GavelWidget({ debateId, getTranscript, topic }: {
@@ -62,16 +66,48 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
     } finally { setBusy(false); }
   }
 
-  async function runTool(tool: GavelTool, label: string) {
+  async function runAction(a: Action) {
     if (busy) return;
+    if (a.mode === 'sources') return runSources();
+    if (a.mode === 'explain') {
+      if (!input.trim()) { setInput(''); add({ id: uid(), role: 'gavel', kind: 'text', text: 'Type a claim in the box first, then tap Explain.' }); return; }
+      return runText(a.tool as GavelTool, `Explain: "${input.trim()}"`, input.trim());
+    }
+    return runText(a.tool as GavelTool, a.label);
+  }
+
+  // Streamed text response (ChatGPT-style token-by-token).
+  async function runText(tool: GavelTool, label: string, question?: string) {
     add({ id: uid(), role: 'user', text: label });
     setBusy(true); setMascot('thinking');
-    const pid = uid(); add({ id: pid, role: 'gavel', kind: 'progress', text: 'Reading the transcript…' });
+    const mid = uid(); add({ id: mid, role: 'gavel', kind: 'text', text: '' });
+    let acc = '';
     try {
-      const answer = await askGavel({ tool, transcript: getTranscript(), topic });
-      remove(pid); add({ id: uid(), role: 'gavel', kind: 'text', text: answer }); settle('happy');
+      await askGavelStream({ tool, question, transcript: getTranscript(), topic }, chunk => {
+        acc += chunk;
+        setMessages(p => p.map(m => (m.id === mid && m.role === 'gavel' && m.kind === 'text' ? { ...m, text: acc } : m)));
+      });
+      if (!acc.trim()) setMessages(p => p.map(m => (m.id === mid && m.role === 'gavel' && m.kind === 'text' ? { ...m, text: 'Gavel had nothing to add on that.' } : m)));
+      settle('happy');
     } catch (e: any) {
-      remove(pid); add({ id: uid(), role: 'gavel', kind: 'text', text: e?.message ?? 'Gavel could not respond.' }); settle('error');
+      setMessages(p => p.map(m => (m.id === mid && m.role === 'gavel' && m.kind === 'text' ? { ...m, text: e?.message ?? 'Gavel could not respond.' } : m)));
+      settle('error');
+    } finally { setBusy(false); }
+  }
+
+  async function runSources() {
+    const q = input.trim() || topic || '';
+    if (!q) { add({ id: uid(), role: 'gavel', kind: 'text', text: 'Type a claim or topic to find sources for.' }); return; }
+    add({ id: uid(), role: 'user', text: `Find sources: ${input.trim() || topic}` });
+    setBusy(true); setMascot('thinking');
+    const pid = uid(); add({ id: pid, role: 'gavel', kind: 'progress', text: 'Searching academic sources…' });
+    try {
+      const sources = await findSourcesFor(q, topic);
+      remove(pid);
+      if (sources.length === 0) { add({ id: uid(), role: 'gavel', kind: 'text', text: 'No scholarly sources found for that query.' }); settle('unsure'); }
+      else { add({ id: uid(), role: 'gavel', kind: 'sources', sources }); settle('happy'); }
+    } catch (e: any) {
+      remove(pid); add({ id: uid(), role: 'gavel', kind: 'text', text: e?.message ?? 'Gavel could not find sources.' }); settle('error');
     } finally { setBusy(false); }
   }
 
@@ -80,7 +116,7 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
       {/* tools */}
       <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 10, marginBottom: 4 }}>
         {TOOLS.map(t => (
-          <button key={t.tool} onClick={() => runTool(t.tool, t.label)} disabled={busy}
+          <button key={t.tool} onClick={() => runAction(t)} disabled={busy}
             style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 999,
               border: `1px solid ${C.hair}`, background: C.panel2, color: C.dim, cursor: busy ? 'default' : 'pointer',
               fontFamily: ui, fontSize: 11.5, fontWeight: 600, opacity: busy ? 0.5 : 1, whiteSpace: 'nowrap' }}>
@@ -99,8 +135,9 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
             <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', maxWidth: '92%' }}>
               <GavelMascot state={m.kind === 'progress' ? 'thinking' : 'idle'} size={26} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                {m.kind === 'text' && <Bubble><span style={{ whiteSpace: 'pre-wrap' }}>{m.text}</span></Bubble>}
+                {m.kind === 'text' && <Bubble><span style={{ whiteSpace: 'pre-wrap' }}>{m.text || '…'}</span></Bubble>}
                 {m.kind === 'progress' && <Bubble><span style={{ color: C.faint }}>{m.text}</span></Bubble>}
+                {m.kind === 'sources' && <SourcesBubble sources={m.sources} />}
                 {m.kind === 'verdict' && <VerdictBubble fc={m.fc} note={m.note} />}
               </div>
             </div>
@@ -168,6 +205,27 @@ function VerdictBubble({ fc, note }: { fc: FactCheck; note?: string }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function SourcesBubble({ sources }: { sources: FactSource[] }) {
+  return (
+    <div style={{ borderRadius: '14px 14px 14px 4px', background: C.panel, border: `1px solid ${C.hair}`, padding: '11px 13px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+        <span style={{ fontSize: 13 }}>🔎</span>
+        <span style={{ fontFamily: ui, fontSize: 11, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint }}>
+          {sources.length} scholarly source{sources.length === 1 ? '' : 's'}
+        </span>
+      </div>
+      {sources.map((s, i) => (
+        <a key={i} href={s.url || undefined} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block', marginBottom: 8 }}>
+          <div style={{ fontFamily: ui, fontSize: 12, color: s.url ? C.cyan : C.dim, lineHeight: 1.35 }}>{s.title}</div>
+          <div style={{ fontFamily: mono, fontSize: 9.5, color: C.faint }}>
+            {s.authors}{s.year ? ` · ${s.year}` : ''}{s.journal ? ` · ${s.journal}` : ''} · cited {s.citations}×
+          </div>
+        </a>
+      ))}
     </div>
   );
 }

@@ -7,10 +7,9 @@
 // =====================================================================
 import type { Handler } from '@netlify/functions';
 import { userFromToken } from '../../src/server/supabaseAdmin';
-import { assist } from '../../src/server/gavelCore';
+import { assist, findSources } from '../../src/server/gavelCore';
 
-const TOOLS = new Set(['chat', 'summarize', 'fallacies', 'steelman', 'rebuttal', 'context']);
-const HOURLY_LIMIT_NOTE = true; void HOURLY_LIMIT_NOTE;
+const TOOLS = new Set(['chat', 'summarize', 'fallacies', 'steelman', 'rebuttal', 'context', 'explain']);
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'method not allowed' });
@@ -18,14 +17,22 @@ export const handler: Handler = async (event) => {
   if (!user) return json(401, { error: 'invalid session' });
 
   const body = safeBody(event.body);
-  const tool = TOOLS.has(String(body.tool)) ? String(body.tool) : 'chat';
+  const rawTool = String(body.tool || 'chat');
   const question = String(body.question || '').slice(0, 1000);
   const transcript = String(body.transcript || '').slice(0, 8000);
   const topic = String(body.topic || '').slice(0, 400);
 
-  if (tool === 'chat' && !question.trim()) return json(400, { error: 'ask a question' });
-
   try {
+    // Retrieval-only: return real scholarly sources for the query (or topic).
+    if (rawTool === 'sources') {
+      const q = (question.trim() || topic.trim());
+      if (!q) return json(400, { error: 'enter a claim or topic to find sources for' });
+      const sources = await findSources(q);
+      return json(200, { sources });
+    }
+
+    const tool = TOOLS.has(rawTool) ? rawTool : 'chat';
+    if ((tool === 'chat' || tool === 'explain') && !question.trim()) return json(400, { error: 'enter a claim or question' });
     const answer = await assist(tool, { transcript, topic, question });
     return json(200, { answer });
   } catch (err: any) {
