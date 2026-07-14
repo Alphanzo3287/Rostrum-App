@@ -64,14 +64,15 @@ export const handler: Handler = async (event) => {
   }
 
   const { data: profile } = await supabaseAdmin
-    .from('profiles').select('display_name, avatar_url, handle').eq('id', user.id).single();
+    .from('profiles').select('display_name, avatar_url, handle, pro_until').eq('id', user.id).single();
+  const isProMember = !!profile?.pro_until && new Date(profile.pro_until) > new Date();
 
   const room = debate.livekit_room || `debate_${debate.id}`;
 
   const at = new AccessToken(API_KEY, API_SECRET, {
     identity: user.id,
     name: profile?.display_name ?? 'Guest',
-    metadata: JSON.stringify({ role: part.role, side: part.side, avatar: profile?.avatar_url ?? null, handle: profile?.handle ?? null }),
+    metadata: JSON.stringify({ role: part.role, side: part.side, avatar: profile?.avatar_url ?? null, handle: profile?.handle ?? null, pro: isProMember }),
     ttl: '3h',
   });
   at.addGrant({

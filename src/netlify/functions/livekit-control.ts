@@ -13,7 +13,7 @@ import { createHmac } from 'crypto';
 import {
   RoomServiceClient, EgressClient,
   EncodedFileOutput, EncodedFileType, S3Upload,
-  StreamOutput, StreamProtocol, AccessToken,
+  StreamOutput, StreamProtocol, AccessToken, EncodingOptionsPreset,
 } from 'livekit-server-sdk';
 import { supabaseAdmin, userFromToken } from '../../src/server/supabaseAdmin';
 
@@ -72,20 +72,46 @@ export const handler: Handler = async (event) => {
         return json(200, { ok: true });
       }
 
-      // start recording to MP4. LiveKit Cloud users can drop the S3 block and
-      // use built-in egress storage instead.
+      // Start recording to MP4. Records the branded broadcast page (same proven
+      // path as YouTube), so Pro hosts get clean HD (1080p) and free hosts get
+      // 720p with a "Recorded on The Rostrum" watermark. Works with any
+      // S3-compatible store — set S3_ENDPOINT to switch to path-style.
       case 'recording_start': {
+        // HD + watermark are gated by the HOST's Pro status (looked up
+        // server-side so it can't be spoofed from the client).
+        const { data: deb } = await supabaseAdmin.from('debates').select('host_id').eq('id', debateId).maybeSingle();
+        let hostPro = false;
+        if (deb?.host_id) {
+          const { data: hp } = await supabaseAdmin.rpc('is_pro', { p_user: deb.host_id });
+          hostPro = !!hp;
+        }
+
         const file = new EncodedFileOutput({
           fileType: EncodedFileType.MP4,
-          filepath: `recordings/${room}-${Date.now()}.mp4`,
+          filepath: `${room}-${Date.now()}.mp4`,
           output: { case: 's3', value: new S3Upload({
             accessKey: process.env.S3_ACCESS_KEY!,
             secret:    process.env.S3_SECRET!,
-            bucket:    process.env.S3_BUCKET!,
+            bucket:    process.env.S3_BUCKET || 'recordings',
             region:    process.env.S3_REGION!,
+            ...(process.env.S3_ENDPOINT
+              ? { endpoint: process.env.S3_ENDPOINT, forcePathStyle: true }
+              : {}),
           }) },
         });
-        const info = await egress.startRoomCompositeEgress(room, { file }, { layout: 'speaker-dark' });
+
+        // Hidden, subscribe-only token for the egress browser (same as YouTube).
+        const rec = new AccessToken(KEY, SECRET, { identity: `rec-${debateId.slice(0, 8)}`, name: 'Recorder', ttl: '6h' });
+        rec.addGrant({ roomJoin: true, room, canSubscribe: true, canPublish: false, canPublishData: false, hidden: true });
+        const recToken = await rec.toJwt();
+        const recUrl =
+          `${SITE}/broadcast/${debateId}?t=${encodeURIComponent(recToken)}` +
+          `&u=${encodeURIComponent(process.env.LIVEKIT_URL || '')}` +
+          (hostPro ? '' : '&wm=1');                 // watermark for free hosts
+
+        const info = await egress.startWebEgress(recUrl, { file }, {
+          encodingOptions: hostPro ? EncodingOptionsPreset.H264_1080P_30 : EncodingOptionsPreset.H264_720P_30,
+        });
         return json(200, { egressId: info.egressId });
       }
 

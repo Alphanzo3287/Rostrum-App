@@ -9,7 +9,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
 import { listPerks, myPerkIds, redeemPerk } from '../lib/api';
-import { getMyWallet, getGiftTiers, startGiftDbucksCheckout, type Wallet, type GiftTier } from '../lib/payments';
+import { getMyWallet, type Wallet } from '../lib/payments';
 import type { Perk } from '../lib/types';
 import { C, ui, display, mono, solidGold, a } from '../lib/theme';
 import { Scroll, Empty } from '../components/ui';
@@ -17,14 +17,12 @@ import { Scroll, Empty } from '../components/ui';
 export function StoreScreen({ onBack }: { onBack?: () => void }) {
   const { refreshProfile } = useAuth();
   const [wallet, setWallet] = useState<Wallet | null>(null);
-  const [gifts, setGifts]   = useState<GiftTier[] | null>(null);
   const [perks, setPerks]   = useState<Perk[] | null>(null);
   const [owned, setOwned]   = useState<string[]>([]);
   const [busy, setBusy]     = useState<string | null>(null);
 
   useEffect(() => {
     getMyWallet().then(setWallet);
-    getGiftTiers().then(setGifts);
     listPerks().then(setPerks);
     myPerkIds().then(setOwned);
   }, []);
@@ -36,12 +34,6 @@ export function StoreScreen({ onBack }: { onBack?: () => void }) {
     try { await redeemPerk(p.id); setOwned(o => [...o, p.id]); await refreshProfile(); }
     catch (e: any) { alert(e?.message ?? 'Could not redeem'); }
     finally { setBusy(null); }
-  }
-
-  async function buyGift(g: GiftTier) {
-    setBusy(g.id);
-    try { const { url } = await startGiftDbucksCheckout(g.id); window.location.href = url; }
-    catch (e: any) { alert(e?.message ?? 'Could not start checkout'); setBusy(null); }
   }
 
   return (
@@ -80,28 +72,11 @@ export function StoreScreen({ onBack }: { onBack?: () => void }) {
         </div>
       )}
 
-      {/* ---- Gifts section ---- */}
-      <SectionTitle>Gifts</SectionTitle>
+      {/* ---- Tipping creators (now direct cash) ---- */}
+      <SectionTitle>Tipping creators</SectionTitle>
       <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint, marginBottom:14, lineHeight:1.5 }}>
-        Buy a gift to add its value to your wallet, then send it to any creator on stage during a live debate.
+        Tips are now real money, sent straight to the creator. During a live debate, tap someone on stage and choose <strong style={{ color:C.dim }}>Send a tip</strong> — they receive it directly to their own account.
       </p>
-      {!gifts ? <Empty>Loading gifts...</Empty> :
-       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:12, marginBottom:28 }}>
-         {gifts.map(g => (
-           <div key={g.id} style={{ padding:'16px 14px', borderRadius:18, border:`1px solid ${C.hair}`,
-             background:C.panel, textAlign:'center' }}>
-             <div style={{ fontSize:32, lineHeight:1.2 }}>{g.icon}</div>
-             <div style={{ fontFamily:display, fontSize:15, fontWeight:600, color:C.ink, marginTop:8 }}>{g.name}</div>
-             <div style={{ fontFamily:mono, fontSize:13, color:C.gold, marginTop:4 }}>{g.price_dbucks.toLocaleString()} D-Bucks</div>
-             <button onClick={() => buyGift(g)} disabled={busy === g.id}
-               style={{ ...solidGold, width:'100%', marginTop:12, padding:'9px 0', fontSize:13,
-                 opacity: busy === g.id ? .6 : 1 }}>
-               {busy === g.id ? '…' : `Buy · $${(g.amount_cents / 100).toFixed(2)}`}
-             </button>
-           </div>
-         ))}
-       </div>
-      }
 
       {/* ---- Perks section ---- */}
       <SectionTitle>Perks</SectionTitle>

@@ -7,18 +7,40 @@
 // - track_unpublished (audio) / participant_left -> stop clock, accumulate seconds
 // =====================================================================
 import type { Handler } from '@netlify/functions';
-import { WebhookReceiver } from 'livekit-server-sdk';
+import { WebhookReceiver, RoomServiceClient } from 'livekit-server-sdk';
 import { supabaseAdmin } from '../../src/server/supabaseAdmin';
 
 const receiver = new WebhookReceiver(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!);
+const httpUrl = (process.env.LIVEKIT_URL || '').replace('wss://', 'https://').replace('ws://', 'http://');
+const rooms = new RoomServiceClient(httpUrl, process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!);
 
 export const handler: Handler = async (event) => {
+  const authHeader = event.headers.authorization || event.headers.Authorization || '';
+  // Netlify may base64-encode the body depending on content-type; LiveKit's
+  // signature is over the RAW body, so decode first or the check fails (401).
+  const raw = event.isBase64Encoded && event.body
+    ? Buffer.from(event.body, 'base64').toString('utf8')
+    : (event.body || '');
+
   let e: any;
+  let sigOk = false;
+  let note: string | null = null;
   try {
-    e = await receiver.receive(event.body || '', event.headers.authorization || event.headers.Authorization);
-  } catch {
-    return { statusCode: 401, body: 'bad signature' };
+    e = await receiver.receive(raw, authHeader);
+    sigOk = true;
+  } catch (err: any) {
+    note = String(err?.message ?? err).slice(0, 300);
   }
+
+  // Diagnostic log (temporary): every attempt, so we can see delivery + signature.
+  try {
+    await supabaseAdmin.from('webhook_log').insert({
+      has_auth: !!authHeader, body_len: raw.length, sig_ok: sigOk,
+      event_type: sigOk ? (e?.event ?? null) : null, note,
+    });
+  } catch { /* logging must never break the webhook */ }
+
+  if (!sigOk) return { statusCode: 401, body: 'bad signature' };
 
   const room = e.room?.name ?? e.egressInfo?.roomName;
 
@@ -33,10 +55,20 @@ export const handler: Handler = async (event) => {
 
   // ── Viewer count ────────────────────────────────────────────────────
   if (e.event === 'participant_joined' || e.event === 'participant_left') {
-    const count = e.room?.numParticipants;
-    if (room && count != null) {
-      await supabaseAdmin.from('debates')
-        .update({ viewer_count: count }).eq('livekit_room', room);
+    if (room) {
+      // Ask LiveKit for the real participant list — more reliable than the
+      // numParticipants field, which isn't always populated on these payloads.
+      let count = e.room?.numParticipants ?? null;
+      try { count = (await rooms.listParticipants(room)).length; } catch { /* room may be gone */ }
+      if (count != null) {
+        await supabaseAdmin.from('debates').update({ viewer_count: count }).eq('livekit_room', room);
+        // Time-series snapshot for the analytics drop-off chart.
+        try {
+          const { data: d } = await supabaseAdmin.from('debates').select('id').eq('livekit_room', room).maybeSingle();
+          if (d?.id) await supabaseAdmin.from('debate_viewer_snapshots').insert({ debate_id: d.id, count });
+        } catch { /* snapshot is best-effort */ }
+        try { await supabaseAdmin.from('webhook_log').insert({ has_auth: true, body_len: 0, sig_ok: true, event_type: 'count_write', note: `room=${room} count=${count}` }); } catch { /* noop */ }
+      }
     }
   }
 
