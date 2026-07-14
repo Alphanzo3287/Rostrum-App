@@ -56,8 +56,8 @@ export async function autoExtractCheck(debateId: string, transcript: string): Pr
 }
 
 /** Live-subscribe to new verdicts in a debate (manual or auto, from anyone). */
-export function subscribeFactChecks(debateId: string, onInsert: (fc: FactCheck) => void) {
-  const ch = supabase.channel(`factchecks:${debateId}`)
+export function subscribeFactChecks(debateId: string, onInsert: (fc: FactCheck) => void, key = 'feed') {
+  const ch = supabase.channel(`factchecks:${debateId}:${key}`)
     .on('postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'fact_checks', filter: `debate_id=eq.${debateId}` },
       (payload) => onInsert(payload.new as any as FactCheck))
