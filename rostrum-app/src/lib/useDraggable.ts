@@ -55,7 +55,7 @@ export function useDraggable(storageKey: string, fallback: () => DragPos) {
 }
 
 function clamp(p: DragPos): DragPos {
-  const m = 8, w = 120, h = 108;
+  const m = 8, w = 120, h = 132;
   const vw = typeof window !== 'undefined' ? window.innerWidth : 1000;
   const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
   return {

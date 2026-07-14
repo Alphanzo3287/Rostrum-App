@@ -117,9 +117,9 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
       <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 10, marginBottom: 4 }}>
         {TOOLS.map(t => (
           <button key={t.tool} onClick={() => runAction(t)} disabled={busy}
-            style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 999,
+            style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 6, padding: '8px 13px', borderRadius: 999,
               border: `1px solid ${C.hair}`, background: C.panel2, color: C.dim, cursor: busy ? 'default' : 'pointer',
-              fontFamily: ui, fontSize: 11.5, fontWeight: 600, opacity: busy ? 0.5 : 1, whiteSpace: 'nowrap' }}>
+              fontFamily: ui, fontSize: 12.5, fontWeight: 600, opacity: busy ? 0.5 : 1, whiteSpace: 'nowrap' }}>
             <span>{t.icon}</span>{t.label}
           </button>
         ))}
@@ -130,10 +130,10 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
         {messages.map(m => m.role === 'user'
           ? (
             <div key={m.id} style={{ alignSelf: 'flex-end', maxWidth: '85%', padding: '9px 13px', borderRadius: '14px 14px 4px 14px',
-              background: a('#7C3AED', 'E6'), color: '#fff', fontFamily: ui, fontSize: 13, lineHeight: 1.45 }}>{m.text}</div>
+              background: a('#7C3AED', 'E6'), color: '#fff', fontFamily: ui, fontSize: 14, lineHeight: 1.5 }}>{m.text}</div>
           ) : (
             <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', maxWidth: '92%' }}>
-              <GavelMascot state={m.kind === 'progress' ? 'thinking' : 'idle'} size={26} />
+              <GavelMascot state={m.kind === "progress" ? "thinking" : "idle"} size={36} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 {m.kind === 'text' && <Bubble><span style={{ whiteSpace: 'pre-wrap' }}>{m.text || '…'}</span></Bubble>}
                 {m.kind === 'progress' && <Bubble><span style={{ color: C.faint }}>{m.text}</span></Bubble>}
@@ -149,7 +149,7 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
         <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') factCheck(input); }}
           placeholder="Enter a claim to fact-check…" disabled={busy}
           style={{ flex: 1, minWidth: 0, padding: '11px 13px', borderRadius: 12, background: C.panel2, border: `1px solid ${C.hair}`,
-            color: C.ink, fontFamily: ui, fontSize: 13, outline: 'none' }} />
+            color: C.ink, fontFamily: ui, fontSize: 14, outline: 'none' }} />
         <button onClick={() => factCheck(input)} disabled={busy || !input.trim()} aria-label="Send"
           style={{ width: 44, borderRadius: 12, border: 'none', cursor: busy || !input.trim() ? 'default' : 'pointer',
             opacity: busy || !input.trim() ? 0.5 : 1, color: '#fff', background: `linear-gradient(135deg, ${C.gold}, ${C.cyan})`, display: 'grid', placeItems: 'center' }}>
@@ -166,7 +166,7 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
 function Bubble({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ padding: '9px 13px', borderRadius: '14px 14px 14px 4px', background: C.panel, border: `1px solid ${C.hair}`,
-      color: C.dim, fontFamily: ui, fontSize: 13, lineHeight: 1.5 }}>{children}</div>
+      color: C.dim, fontFamily: ui, fontSize: 13.5, lineHeight: 1.55 }}>{children}</div>
   );
 }
 

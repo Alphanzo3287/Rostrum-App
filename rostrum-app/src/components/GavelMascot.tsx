@@ -30,7 +30,8 @@ if (typeof document !== 'undefined' && !document.getElementById('gavel-kf')) {
   s.id = 'gavel-kf';
   s.textContent =
     '@keyframes gavelFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}' +
-    '@keyframes gavelPulse{0%,100%{opacity:.55}50%{opacity:1}}';
+    '@keyframes gavelPulse{0%,100%{opacity:.55}50%{opacity:1}}' +
+    '@keyframes gavelBounce{0%{transform:translateY(0)}25%{transform:translateY(-12px)}45%{transform:translateY(0)}62%{transform:translateY(-6px)}80%{transform:translateY(0)}100%{transform:translateY(0)}}';
   document.head.appendChild(s);
 }
 
