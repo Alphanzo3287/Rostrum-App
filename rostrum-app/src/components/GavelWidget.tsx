@@ -133,7 +133,7 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
               background: a('#7C3AED', 'E6'), color: '#fff', fontFamily: ui, fontSize: 14, lineHeight: 1.5 }}>{m.text}</div>
           ) : (
             <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', maxWidth: '92%' }}>
-              <GavelMascot state={m.kind === "progress" ? "thinking" : "idle"} size={36} />
+              <GavelMascot state="avatar" size={42} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 {m.kind === 'text' && <Bubble><span style={{ whiteSpace: 'pre-wrap' }}>{m.text || '…'}</span></Bubble>}
                 {m.kind === 'progress' && <Bubble><span style={{ color: C.faint }}>{m.text}</span></Bubble>}

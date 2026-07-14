@@ -27,6 +27,8 @@ export function GavelFab({ debateId, room, name, canSpeak, topic }: {
   const [toast, setToast] = useState<FactCheck | null>(null);
   const [fabFailed, setFabFailed] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const widgetRef = useRef<HTMLDivElement>(null);
+  const [fixPos, setFixPos] = useState<{ left: number; top: number } | null>(null);
   const [vp, setVp] = useState(() => ({
     w: typeof document !== 'undefined' ? document.documentElement.clientWidth : 1000,
     h: typeof document !== 'undefined' ? document.documentElement.clientHeight : 800,
@@ -76,15 +78,34 @@ export function GavelFab({ debateId, room, name, canSpeak, topic }: {
   };
   const widgetXY = panelPos(W, H);
   const toastXY = panelPos(Math.min(340, vp.w - 24), 62);
+  const shownXY = fixPos ?? widgetXY;
+
+  // Reset the correction whenever the anchor/viewport changes.
+  useLayoutEffect(() => { setFixPos(null); }, [open, pos.x, pos.y, vp.w, vp.h, W, H]);
+  // GROUND TRUTH: measure the actually-rendered widget and pull it back inside
+  // the visible viewport if any edge overflows. Runs once per reset (guarded).
+  useLayoutEffect(() => {
+    if (!open || fixPos || !widgetRef.current) return;
+    const r = widgetRef.current.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth;
+    const vh = document.documentElement.clientHeight;
+    let left = widgetXY.left, top = widgetXY.top, changed = false;
+    if (r.right > vw - 12) { left = widgetXY.left - (r.right - (vw - 12)); changed = true; }
+    if (left < 12) { left = 12; changed = true; }
+    if (r.bottom > vh - 12) { top = widgetXY.top - (r.bottom - (vh - 12)); changed = true; }
+    if (top < 12) { top = 12; changed = true; }
+    if (changed) setFixPos({ left, top });
+  });
 
   return createPortal(
     <>
       {open && (
-        <div style={{ position: 'fixed', left: widgetXY.left, top: widgetXY.top, zIndex: 300, width: W,
+        <div ref={widgetRef} style={{ position: 'fixed', left: shownXY.left, top: shownXY.top, zIndex: 300, width: W,
+          maxWidth: 'calc(100vw - 24px)', maxHeight: 'calc(100vh - 24px)',
           height: H, display: 'flex', flexDirection: 'column', borderRadius: 20, overflow: 'hidden',
           background: a(C.base2, 'F5'), backdropFilter: 'blur(22px)', border: `1px solid ${C.hairHi}`, boxShadow: '0 24px 70px rgba(0,0,0,.55)' }}>
           <div style={{ padding: '15px 17px', borderBottom: `1px solid ${C.hair}`, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <GavelMascot state="avatar" size={46} />
+            <GavelMascot state="avatar" size={54} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: display, fontSize: 17, fontWeight: 700, color: C.ink, lineHeight: 1.1 }}>Gavel</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
