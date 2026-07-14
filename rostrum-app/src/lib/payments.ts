@@ -181,8 +181,8 @@ export async function getMyWithdrawals(): Promise<Withdrawal[]> {
 }
 
 /* ---- Buy & send a gift directly with real money (no wallet top-up step) ---- */
-export const startGiftCheckout = (tierId: string, toUserId: string, debateId?: string) =>
-  authedPost<{ url: string }>('stripe-gift-checkout', { tierId, toUserId, debateId });
+export const startGiftCheckout = (toUserId: string, opts: { tierId?: string; amountCents?: number; debateId?: string }) =>
+  authedPost<{ url: string }>('stripe-gift-checkout', { toUserId, ...opts });
 
 /* ---- Pay-per-view debate entry (Oxford / Legacy) ---- */
 export const startDebateEntryCheckout = (debateId: string) =>
