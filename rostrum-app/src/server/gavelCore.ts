@@ -24,6 +24,8 @@
 //
 // Pure logic: no database, no HTTP framework. Requires env ANTHROPIC_API_KEY.
 // =====================================================================
+import { selectDomains, defaultDomains } from './gavelSources';
+
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY!;
 const MODEL = 'claude-sonnet-5';
 const CONTACT = 'gavel@rostrums.site';
@@ -160,6 +162,10 @@ export async function runFactCheck(claimRaw: string): Promise<FactResult> {
     // NOTE: rules (1)-(6) are Gavel's fairness/anti-manipulation core. Do not trim them.
     `You are Gavel, an impartial fact-checker for a live debate. Today's date matters: your own training ` +
     `knowledge may be out of date, so you MUST search the web to verify the CLAIM against current information. ` +
+    `Your search is restricted to a curated list of scholarly, government, and primary-source domains. ` +
+    `Weight them in this order: peer-reviewed and government/statistical sources first, international bodies and ` +
+    `primary texts next, encyclopedias (Britannica, Wikipedia, SEP) LAST — treat those as orientation only and ` +
+    `corroborate them with a higher-tier source before relying on them. ` +
     `Rules: (1) Ground the verdict in evidence you actually retrieve — your web search results are the PRIMARY ` +
     `evidence, the numbered ACADEMIC SOURCES below are secondary corroboration. Use your own memory only if both ` +
     `are silent, and say so explicitly in the explanation. NEVER invent sources, findings, or citations. ` +
@@ -177,6 +183,7 @@ export async function runFactCheck(claimRaw: string): Promise<FactResult> {
       maxTokens: depth === 'deep' ? BUDGET.verdictDeep : BUDGET.verdictFast,
       effort: depth === 'deep' ? 'high' : 'low',
       webUses: fresh ? WEB_USES.verdictRecent : WEB_USES.verdict,
+      allowedDomains: selectDomains(claimText, { fresh }),
     },
   );
   const v = parseJson(call.text);
@@ -204,13 +211,13 @@ export async function runFactCheck(claimRaw: string): Promise<FactResult> {
 // Debate-aware assistant tools
 // =====================================================================
 const TOOL_PROMPTS: Record<string, string> = {
-  chat: `You are Gavel, an impartial AI assistant embedded in a live debate. Answer the user's question using the transcript and topic below. For anything about the debate itself, use the transcript. For any external or present-day fact, SEARCH THE WEB — your training knowledge may be out of date, so never rely on memory for facts that can change. Cite what you find. Be neutral and favor no side; if neither the transcript nor your search answers it, say so plainly rather than guessing.`,
+  chat: `You are Gavel, an impartial AI assistant embedded in a live debate. Answer the user's question using the transcript and topic below. For anything about the debate itself, use the transcript. For any external or present-day fact, SEARCH — your training knowledge may be out of date, so never rely on memory for facts that can change. Your search is limited to vetted scholarly, government and primary sources; prefer peer-reviewed and official ones over encyclopedias. Cite what you find. Be neutral and favor no side; if neither the transcript nor your search answers it, say so plainly rather than guessing.`,
   summarize: `You are Gavel. Give a neutral recap of the debate so far from the transcript: the motion, then each side's strongest points. Favor no side.`,
   fallacies: `You are Gavel. Identify clear logical fallacies in the debate transcript. For each: name it, quote or paraphrase the moment, and briefly explain. If none, say so. Scrutinize all sides equally; do not invent fallacies that aren't there.`,
   steelman: `You are Gavel. Produce the strongest good-faith version (steelman) of each side's case from the transcript, in two labelled sections. Be fair to both.`,
   rebuttal: `You are Gavel. Neutrally list the strongest fair counter-arguments to the MOST RECENT point in the transcript, usable by either side. Present them as considerations, not endorsements.`,
-  context: `You are Gavel. Give neutral background context a listener needs to follow the current topic. SEARCH THE WEB first for current, accurate information — your training data may be stale — and prefer recent authoritative sources. Stick to well-evidenced facts, note where matters are contested, and never invent sources.`,
-  explain: `You are Gavel. Neutrally explain the claim in the QUESTION to a debate audience: what it asserts, key background, and whether it is broadly accepted or genuinely contested (and why). SEARCH THE WEB for current information rather than relying on memory, which may be out of date. Do NOT declare it true or false — a formal fact-check does that. Never invent sources.`,
+  context: `You are Gavel. Give neutral background context a listener needs to follow the current topic. SEARCH first for current, accurate information — your training data may be stale. Your search is limited to vetted scholarly, government and primary sources; prefer peer-reviewed and official ones, and treat encyclopedias as orientation only. Stick to well-evidenced facts, note where matters are contested, and never invent sources.`,
+  explain: `You are Gavel. Neutrally explain the claim in the QUESTION to a debate audience: what it asserts, key background, and whether it is broadly accepted or genuinely contested (and why). SEARCH for current information rather than relying on memory, which may be out of date. Your search is limited to vetted scholarly, government and primary sources. Do NOT declare it true or false — a formal fact-check does that. Never invent sources.`,
 };
 
 /** Retrieval only — no verdict. Live web first (primary), then scholarly papers. */
@@ -230,7 +237,7 @@ async function webSearchOnly(query: string): Promise<FactSource[]> {
       `You are a retrieval tool. Search the web for authoritative, current sources about the user's topic. ` +
       `Then reply with the single word: done. Do not summarise or evaluate.`,
       `TOPIC:\n<topic>\n${query}\n</topic>`,
-      { maxTokens: 200, effort: 'low', webUses: WEB_USES.sources },
+      { maxTokens: 200, effort: 'low', webUses: WEB_USES.sources, allowedDomains: selectDomains(query) || defaultDomains() },
     );
     return out.webSources;
   } catch { return []; }   // retrieval is best-effort; academic still returns
@@ -258,7 +265,11 @@ export interface AssistResult { answer: string; sources: FactSource[] }
 export async function assist(tool: string, opts: { transcript?: string; topic?: string; question?: string; mode?: GavelMode }): Promise<AssistResult> {
   const { system, user } = buildAssistPrompt(tool, opts);
   const cfg = assistConfig(tool, opts.mode ?? 'quick');
-  const out = await claude(system, user, cfg);
+  const subject = [opts.question, opts.topic].filter(Boolean).join(' ');
+  const out = await claude(system, user, {
+    ...cfg,
+    ...(cfg.webUses ? { allowedDomains: selectDomains(subject, { fresh: needsFreshEvidence(subject) }) } : {}),
+  });
   return { answer: out.text.trim(), sources: out.webSources };
 }
 
@@ -317,46 +328,62 @@ export interface ClaudeOpts {
   effort?: 'low' | 'high';
   /** Enable Anthropic's server-side web search, capped at N searches. */
   webUses?: number;
+  /** Restrict search to Gavel's curated evidence allow-list (bare domains). */
+  allowedDomains?: string[];
 }
 export interface ClaudeResult { text: string; webSources: FactSource[] }
 
-const WEB_TOOL_VERSIONS = ['web_search_20260209', 'web_search_20250305'];
-let webToolIdx = 0;          // walks forward if a version is rejected
-let webToolSupported = true; // flips false only if no version works
-let effortSupported = true;  // flips false once if the API rejects the param
+// Newest first: 20260209+ adds dynamic filtering (results are filtered before
+// entering context = fewer input tokens). We walk older if a version is rejected.
+const WEB_TOOL_VERSIONS = ['web_search_20260318', 'web_search_20260209', 'web_search_20250305'];
+let webToolIdx = 0;            // walks forward if a version is rejected
+let webToolSupported = true;   // flips false only if no version works
+let domainFilterSupported = true; // flips false if allow-listing is rejected
+let effortSupported = true;    // flips false once if the API rejects the param
 
 async function claude(system: string, userMsg: string, opts: ClaudeOpts): Promise<ClaudeResult> {
   if (!ANTHROPIC_KEY) throw new Error('Gavel is not configured — ANTHROPIC_API_KEY is missing on the server.');
 
-  const body = (withEffort: boolean, withWeb: boolean) => JSON.stringify({
+  const body = (withEffort: boolean, withWeb: boolean, withDomains: boolean) => JSON.stringify({
     model: MODEL, max_tokens: opts.maxTokens, system,
     ...(withEffort && opts.effort ? { effort: opts.effort } : {}),
     ...(withWeb && opts.webUses
-      ? { tools: [{ type: WEB_TOOL_VERSIONS[webToolIdx], name: 'web_search', max_uses: opts.webUses }] }
+      ? { tools: [{
+          type: WEB_TOOL_VERSIONS[webToolIdx], name: 'web_search', max_uses: opts.webUses,
+          // Curated allow-list: Gavel only ever searches vetted sources.
+          ...(withDomains && opts.allowedDomains?.length ? { allowed_domains: opts.allowedDomains } : {}),
+        }] }
       : {}),
     messages: [{ role: 'user', content: userMsg }],
   });
-  const post = (withEffort: boolean, withWeb: boolean) => fetch('https://api.anthropic.com/v1/messages', {
+  const post = (withEffort: boolean, withWeb: boolean, withDomains: boolean) => fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: body(withEffort, withWeb),
+    body: body(withEffort, withWeb, withDomains),
   });
 
   let useWeb = webToolSupported && !!opts.webUses;
-  let res = await post(effortSupported, useWeb);
+  let useDomains = domainFilterSupported;
+  let res = await post(effortSupported, useWeb, useDomains);
 
   // Self-heal: retry once per unsupported capability rather than failing.
   while (res.status === 400) {
     const errText = await res.text().catch(() => '');
+    // Org-level domain policy conflict → drop our allow-list, keep searching.
+    if (useWeb && useDomains && /domain/i.test(errText)) {
+      domainFilterSupported = false; useDomains = false;
+      res = await post(effortSupported, useWeb, false);
+      continue;
+    }
     if (useWeb && /web_search|tools?\b/i.test(errText)) {
       if (webToolIdx < WEB_TOOL_VERSIONS.length - 1) { webToolIdx++; }   // try older tool version
       else { webToolSupported = false; useWeb = false; }                  // give up on web, keep answering
-      res = await post(effortSupported, useWeb);
+      res = await post(effortSupported, useWeb, useDomains);
       continue;
     }
     if (effortSupported && opts.effort && /effort/i.test(errText)) {
       effortSupported = false;
-      res = await post(false, useWeb);
+      res = await post(false, useWeb, useDomains);
       continue;
     }
     throw new Error(`Gavel request was rejected (400): ${errText.slice(0, 180)}`);

@@ -5,10 +5,11 @@
 // streamed and buffered answers are identical. Requires ANTHROPIC_API_KEY.
 // =====================================================================
 import { userFromToken } from '../../src/server/supabaseAdmin';
-import { buildAssistPrompt, assistRequestConfig, type GavelMode } from '../../src/server/gavelCore';
+import { buildAssistPrompt, assistRequestConfig, needsFreshEvidence, type GavelMode } from '../../src/server/gavelCore';
+import { selectDomains } from '../../src/server/gavelSources';
 
 const MODES = new Set(['quick', 'detailed', 'deep']);
-const WEB_TOOL_VERSIONS = ['web_search_20260209', 'web_search_20250305'];
+const WEB_TOOL_VERSIONS = ['web_search_20260318', 'web_search_20260209', 'web_search_20250305'];
 let effortSupported = true;   // self-healing: flips off once if the API rejects it
 let webToolIdx = 0;
 let webToolSupported = true;
@@ -34,33 +35,44 @@ export default async (req: Request): Promise<Response> => {
     mode,
   });
   const cfg = assistRequestConfig(tool, mode);
+  const subject = [String(body.question || ''), String(body.topic || '')].filter(Boolean).join(' ');
+  const domains = cfg.webUses ? selectDomains(subject, { fresh: needsFreshEvidence(subject) }) : [];
 
-  const call = (withEffort: boolean, withWeb: boolean) => fetch('https://api.anthropic.com/v1/messages', {
+  const call = (withEffort: boolean, withWeb: boolean, withDomains: boolean) => fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-5', max_tokens: cfg.maxTokens, system, stream: true,
       ...(withEffort ? { effort: cfg.effort } : {}),
       ...(withWeb && cfg.webUses
-        ? { tools: [{ type: WEB_TOOL_VERSIONS[webToolIdx], name: 'web_search', max_uses: cfg.webUses }] }
+        ? { tools: [{
+            type: WEB_TOOL_VERSIONS[webToolIdx], name: 'web_search', max_uses: cfg.webUses,
+            ...(withDomains && domains.length ? { allowed_domains: domains } : {}),
+          }] }
         : {}),
       messages: [{ role: 'user', content: userMsg }],
     }),
   });
 
   let useWeb = webToolSupported && !!cfg.webUses;
-  let upstream = await call(effortSupported, useWeb);
+  let useDomains = true;
+  let upstream = await call(effortSupported, useWeb, useDomains);
   while (upstream.status === 400) {
     const errBody = await upstream.text().catch(() => '');
+    if (useWeb && useDomains && /domain/i.test(errBody)) {
+      useDomains = false;
+      upstream = await call(effortSupported, useWeb, false);
+      continue;
+    }
     if (useWeb && /web_search|tools?\b/i.test(errBody)) {
       if (webToolIdx < WEB_TOOL_VERSIONS.length - 1) webToolIdx++;
       else { webToolSupported = false; useWeb = false; }
-      upstream = await call(effortSupported, useWeb);
+      upstream = await call(effortSupported, useWeb, useDomains);
       continue;
     }
     if (effortSupported && /effort/i.test(errBody)) {
       effortSupported = false;
-      upstream = await call(false, useWeb);
+      upstream = await call(false, useWeb, useDomains);
       continue;
     }
     return new Response(`Gavel request rejected: ${errBody.slice(0, 160)}`, { status: 502 });
