@@ -112,9 +112,9 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minHeight: 0, minWidth: 0, width: '100%' }}>
       {/* tools */}
-      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 10, marginBottom: 4 }}>
+      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', minWidth: 0, paddingBottom: 10, marginBottom: 4 }}>
         {TOOLS.map(t => (
           <button key={t.tool} onClick={() => runAction(t)} disabled={busy}
             style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 6, padding: '8px 13px', borderRadius: 999,
@@ -126,13 +126,13 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
       </div>
 
       {/* conversation */}
-      <div ref={feedRef} style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 2 }}>
+      <div ref={feedRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 2 }}>
         {messages.map(m => m.role === 'user'
           ? (
-            <div key={m.id} style={{ alignSelf: 'flex-end', maxWidth: '85%', padding: '9px 13px', borderRadius: '14px 14px 4px 14px',
-              background: a('#7C3AED', 'E6'), color: '#fff', fontFamily: ui, fontSize: 14, lineHeight: 1.5 }}>{m.text}</div>
+            <div key={m.id} style={{ alignSelf: 'flex-end', maxWidth: '85%', minWidth: 0, padding: '9px 13px', borderRadius: '14px 14px 4px 14px',
+              background: a('#7C3AED', 'E6'), color: '#fff', fontFamily: ui, fontSize: 14, lineHeight: 1.5, overflowWrap: 'anywhere' }}>{m.text}</div>
           ) : (
-            <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', maxWidth: '92%' }}>
+            <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', maxWidth: '100%', minWidth: 0 }}>
               <GavelMascot state="avatar" size={42} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 {m.kind === 'text' && <Bubble><span style={{ whiteSpace: 'pre-wrap' }}>{m.text || '…'}</span></Bubble>}
@@ -166,7 +166,7 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
 function Bubble({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ padding: '9px 13px', borderRadius: '14px 14px 14px 4px', background: C.panel, border: `1px solid ${C.hair}`,
-      color: C.dim, fontFamily: ui, fontSize: 13.5, lineHeight: 1.55 }}>{children}</div>
+      color: C.dim, fontFamily: ui, fontSize: 13.5, lineHeight: 1.55, minWidth: 0, overflowWrap: 'anywhere' }}>{children}</div>
   );
 }
 
@@ -174,7 +174,7 @@ function VerdictBubble({ fc, note }: { fc: FactCheck; note?: string }) {
   const color = VC[fc.verdict] ?? '#8A93A0';
   const pct = fc.confidence_pct ?? (fc.confidence === 'high' ? 88 : fc.confidence === 'medium' ? 60 : fc.confidence === 'low' ? 28 : null);
   return (
-    <div style={{ borderRadius: '14px 14px 14px 4px', background: C.panel, border: `1px solid ${a(color, '44')}`, padding: '11px 13px' }}>
+    <div style={{ borderRadius: '14px 14px 14px 4px', background: C.panel, border: `1px solid ${a(color, '44')}`, padding: '11px 13px', minWidth: 0, overflowWrap: 'anywhere' }}>
       {note && <div style={{ fontFamily: ui, fontSize: 9.5, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase', color: C.cyan, marginBottom: 6 }}>{note}</div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
         <span style={{ fontSize: 13 }}>⚖️</span>
@@ -211,7 +211,7 @@ function VerdictBubble({ fc, note }: { fc: FactCheck; note?: string }) {
 
 function SourcesBubble({ sources }: { sources: FactSource[] }) {
   return (
-    <div style={{ borderRadius: '14px 14px 14px 4px', background: C.panel, border: `1px solid ${C.hair}`, padding: '11px 13px' }}>
+    <div style={{ borderRadius: '14px 14px 14px 4px', background: C.panel, border: `1px solid ${C.hair}`, padding: '11px 13px', minWidth: 0, overflowWrap: 'anywhere' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
         <span style={{ fontSize: 13 }}>🔎</span>
         <span style={{ fontFamily: ui, fontSize: 11, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint }}>

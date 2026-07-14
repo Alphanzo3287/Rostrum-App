@@ -100,9 +100,10 @@ export function GavelFab({ debateId, room, name, canSpeak, topic }: {
   return createPortal(
     <>
       {open && (
-        <div ref={widgetRef} style={{ position: 'fixed', left: shownXY.left, top: shownXY.top, zIndex: 300, width: W,
-          maxWidth: 'calc(100vw - 24px)', maxHeight: 'calc(100vh - 24px)',
-          height: H, display: 'flex', flexDirection: 'column', borderRadius: 20, overflow: 'hidden',
+        <div ref={widgetRef} style={{ position: 'fixed', left: shownXY.left, top: shownXY.top, zIndex: 300,
+          width: 'min(400px, calc(100vw - 24px))', maxWidth: 'min(400px, calc(100vw - 24px))', boxSizing: 'border-box',
+          maxHeight: 'calc(100vh - 24px)', height: 'min(600px, calc(100vh - 140px))',
+          display: 'flex', flexDirection: 'column', borderRadius: 20, overflow: 'hidden',
           background: a(C.base2, 'F5'), backdropFilter: 'blur(22px)', border: `1px solid ${C.hairHi}`, boxShadow: '0 24px 70px rgba(0,0,0,.55)' }}>
           <div style={{ padding: '15px 17px', borderBottom: `1px solid ${C.hair}`, display: 'flex', alignItems: 'center', gap: 12 }}>
             <GavelMascot state="avatar" size={54} />
@@ -134,7 +135,7 @@ export function GavelFab({ debateId, room, name, canSpeak, topic }: {
             </button>
           </div>
 
-          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: '15px 17px', display: 'flex' }}>
+          <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden', padding: '15px 17px', display: 'flex' }}>
             <GavelWidget debateId={debateId} getTranscript={() => transcriptRef.current} topic={topic} />
           </div>
         </div>
