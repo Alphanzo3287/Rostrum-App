@@ -87,8 +87,18 @@ export async function requestFactCheck(debateId: string, claim: string): Promise
     headers: { 'content-type': 'application/json', authorization: `Bearer ${session.access_token}` },
     body: JSON.stringify({ debateId, claim }),
   });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body?.error ?? 'fact-check failed');
+  // A non-JSON body means the platform killed the function (timeout/crash)
+  // rather than our code returning an error — say so, don't show a bare string.
+  const raw = await res.text();
+  let body: any = {};
+  try { body = JSON.parse(raw); } catch { /* platform error page */ }
+  if (!res.ok) {
+    if (body?.error) throw new Error(body.error);
+    if (res.status === 504 || res.status === 502 || /timed? ?out/i.test(raw)) {
+      throw new Error('Gavel took too long and the request was cut off. Try Quick mode or a shorter claim.');
+    }
+    throw new Error(`Gavel failed (${res.status}). Please try again.`);
+  }
   return body.factCheck as FactCheck;
 }
 

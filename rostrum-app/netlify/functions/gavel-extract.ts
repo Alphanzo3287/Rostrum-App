@@ -43,7 +43,7 @@ export const handler: Handler = async (event) => {
     const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
     if ((recent ?? []).some(r => norm(r.claim) === norm(claim))) return json(200, { skipped: 'duplicate' });
 
-    const result = await runFactCheck(claim);
+    const result = await runFactCheck(claim, { deadlineMs: 7000 });
     const { data, error } = await supabaseAdmin.from('fact_checks').insert({
       debate_id: debateId, requested_by: null, claim, source: 'auto',
       verdict: result.verdict, confidence: result.confidence, confidence_pct: result.confidence_pct, explanation: result.explanation, sources: result.sources,
