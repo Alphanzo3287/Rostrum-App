@@ -6,6 +6,8 @@ import { supabase } from './supabaseClient';
 
 export interface FactSource {
   title: string; year: number | null; authors: string; journal: string; citations: number; url: string;
+  kind?: 'web' | 'academic';
+  published?: string;
 }
 export interface FactCheck {
   id: string;

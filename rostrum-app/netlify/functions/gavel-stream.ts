@@ -8,7 +8,10 @@ import { userFromToken } from '../../src/server/supabaseAdmin';
 import { buildAssistPrompt, assistRequestConfig, type GavelMode } from '../../src/server/gavelCore';
 
 const MODES = new Set(['quick', 'detailed', 'deep']);
+const WEB_TOOL_VERSIONS = ['web_search_20260209', 'web_search_20250305'];
 let effortSupported = true;   // self-healing: flips off once if the API rejects it
+let webToolIdx = 0;
+let webToolSupported = true;
 
 export default async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') return new Response('method not allowed', { status: 405 });
@@ -32,21 +35,35 @@ export default async (req: Request): Promise<Response> => {
   });
   const cfg = assistRequestConfig(tool, mode);
 
-  const call = (withEffort: boolean) => fetch('https://api.anthropic.com/v1/messages', {
+  const call = (withEffort: boolean, withWeb: boolean) => fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-5', max_tokens: cfg.maxTokens, system, stream: true,
       ...(withEffort ? { effort: cfg.effort } : {}),
+      ...(withWeb && cfg.webUses
+        ? { tools: [{ type: WEB_TOOL_VERSIONS[webToolIdx], name: 'web_search', max_uses: cfg.webUses }] }
+        : {}),
       messages: [{ role: 'user', content: userMsg }],
     }),
   });
 
-  let upstream = await call(effortSupported);
-  if (upstream.status === 400 && effortSupported) {
+  let useWeb = webToolSupported && !!cfg.webUses;
+  let upstream = await call(effortSupported, useWeb);
+  while (upstream.status === 400) {
     const errBody = await upstream.text().catch(() => '');
-    if (/effort/i.test(errBody)) { effortSupported = false; upstream = await call(false); }
-    else return new Response(`Gavel request rejected: ${errBody.slice(0, 160)}`, { status: 502 });
+    if (useWeb && /web_search|tools?\b/i.test(errBody)) {
+      if (webToolIdx < WEB_TOOL_VERSIONS.length - 1) webToolIdx++;
+      else { webToolSupported = false; useWeb = false; }
+      upstream = await call(effortSupported, useWeb);
+      continue;
+    }
+    if (effortSupported && /effort/i.test(errBody)) {
+      effortSupported = false;
+      upstream = await call(false, useWeb);
+      continue;
+    }
+    return new Response(`Gavel request rejected: ${errBody.slice(0, 160)}`, { status: 502 });
   }
   if (!upstream.ok || !upstream.body) return new Response(`Gavel unavailable (${upstream.status})`, { status: 502 });
 

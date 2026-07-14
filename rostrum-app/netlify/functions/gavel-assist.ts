@@ -35,8 +35,8 @@ export const handler: Handler = async (event) => {
 
     const tool = TOOLS.has(rawTool) ? rawTool : 'chat';
     if ((tool === 'chat' || tool === 'explain') && !question.trim()) return json(400, { error: 'enter a claim or question' });
-    const answer = await assist(tool, { transcript, topic, question, mode });
-    return json(200, { answer });
+    const { answer, sources } = await assist(tool, { transcript, topic, question, mode });
+    return json(200, { answer, sources });
   } catch (err: any) {
     console.error('gavel-assist error:', err?.message ?? err);
     const msg = String(err?.message || '');

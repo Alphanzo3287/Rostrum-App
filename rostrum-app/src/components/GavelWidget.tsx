@@ -209,12 +209,7 @@ function VerdictBubble({ fc, note }: { fc: FactCheck; note?: string }) {
       {fc.sources.length > 0 && (
         <div style={{ marginTop: 10, paddingTop: 9, borderTop: `1px solid ${a(C.hair, '80')}` }}>
           <div style={{ fontFamily: ui, fontSize: 9, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, marginBottom: 6 }}>Sources ({fc.sources.length})</div>
-          {fc.sources.map((s, i) => (
-            <a key={i} href={s.url || undefined} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block', marginBottom: 6 }}>
-              <div style={{ fontFamily: ui, fontSize: 11.5, color: s.url ? C.cyan : C.dim, lineHeight: 1.3 }}>{s.title}</div>
-              <div style={{ fontFamily: mono, fontSize: 9.5, color: C.faint }}>{s.authors}{s.year ? ` · ${s.year}` : ''} · cited {s.citations}×</div>
-            </a>
-          ))}
+          {fc.sources.map((s, i) => <SourceRow key={i} s={s} />)}
         </div>
       )}
     </div>
@@ -230,14 +225,24 @@ function SourcesBubble({ sources }: { sources: FactSource[] }) {
           {sources.length} scholarly source{sources.length === 1 ? '' : 's'}
         </span>
       </div>
-      {sources.map((s, i) => (
-        <a key={i} href={s.url || undefined} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block', marginBottom: 8 }}>
-          <div style={{ fontFamily: ui, fontSize: 12, color: s.url ? C.cyan : C.dim, lineHeight: 1.35 }}>{s.title}</div>
-          <div style={{ fontFamily: mono, fontSize: 9.5, color: C.faint }}>
-            {s.authors}{s.year ? ` · ${s.year}` : ''}{s.journal ? ` · ${s.journal}` : ''} · cited {s.citations}×
-          </div>
-        </a>
-      ))}
+      {sources.map((s, i) => <SourceRow key={i} s={s} />)}
     </div>
+  );
+}
+
+/** One source row, badged by provenance so the room can see live-web vs scholarly. */
+function SourceRow({ s }: { s: FactSource }) {
+  const web = s.kind === 'web';
+  const meta = web
+    ? [s.authors, s.published].filter(Boolean).join(' · ')
+    : `${s.authors}${s.year ? ` · ${s.year}` : ''}${s.journal ? ` · ${s.journal}` : ''} · cited ${s.citations}×`;
+  return (
+    <a href={s.url || undefined} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block', marginBottom: 7 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+        <span style={{ fontSize: 10, flexShrink: 0 }} title={web ? 'Live web source' : 'Academic source'}>{web ? '🌐' : '📚'}</span>
+        <span style={{ fontFamily: ui, fontSize: 11.5, color: s.url ? C.cyan : C.dim, lineHeight: 1.35, overflowWrap: 'anywhere' }}>{s.title}</span>
+      </div>
+      <div style={{ fontFamily: mono, fontSize: 9.5, color: C.faint, marginLeft: 15 }}>{meta}</div>
+    </a>
   );
 }
