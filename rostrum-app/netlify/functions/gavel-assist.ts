@@ -37,7 +37,8 @@ export const handler: Handler = async (event) => {
     return json(200, { answer });
   } catch (err: any) {
     console.error('gavel-assist error:', err?.message ?? err);
-    return json(500, { error: 'Gavel is temporarily unavailable. Please try again.' });
+    const msg = String(err?.message || '');
+    return json(503, { error: msg.startsWith('Gavel') ? msg : 'Gavel is temporarily unavailable. Please try again.' });
   }
 };
 

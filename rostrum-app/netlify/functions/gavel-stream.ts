@@ -25,13 +25,14 @@ export default async (req: Request): Promise<Response> => {
   if ((tool === 'chat' || tool === 'explain') && !String(body.question || '').trim()) {
     return new Response('enter a claim or question', { status: 400 });
   }
+  if (!process.env.ANTHROPIC_API_KEY) return new Response('Gavel is not configured (missing ANTHROPIC_API_KEY).', { status: 503 });
 
   const upstream = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 600, system, stream: true, messages: [{ role: 'user', content: userMsg }] }),
+    body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 2500, system, stream: true, messages: [{ role: 'user', content: userMsg }] }),
   });
-  if (!upstream.ok || !upstream.body) return new Response('gavel unavailable', { status: 502 });
+  if (!upstream.ok || !upstream.body) return new Response(`Gavel unavailable (${upstream.status})`, { status: 502 });
 
   const reader = upstream.body.getReader();
   const decoder = new TextDecoder();
