@@ -370,7 +370,7 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
       </div>
 
       {/* ---- Gavel floating fact-checker ---- */}
-      <GavelFab debateId={debateId} room={room.room} name={me?.name ?? 'Speaker'} canSpeak={!!room.canPublish} />
+      <GavelFab debateId={debateId} room={room.room} name={me?.name ?? 'Speaker'} canSpeak={!!room.canPublish} topic={dz.debate?.motion} />
 
       {/* ---- dock ---- */}
       <RoleDock

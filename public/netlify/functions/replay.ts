@@ -51,17 +51,29 @@ export const handler: Handler = async (event) => {
   if (!action || !debateId) return json(400, { error: 'action and debateId required' });
 
   const { data: debate } = await supabaseAdmin.from('debates')
-    .select('id, host_id, title, recording_url, recording_visibility')
+    .select('id, host_id, title:motion, recording_url, recording_visibility, created_at, host:profiles!debates_host_id_fkey(pro_until)')
     .eq('id', debateId).maybeSingle();
   if (!debate) return json(404, { error: 'debate not found' });
 
   const isHost = debate.host_id === user.id;
+
+  // Replay retention: free hosts keep replays for 7 days; Rostrum Pro keeps
+  // them forever. Computed from the HOST's Pro status (not the viewer's).
+  const RETENTION_DAYS = 7;
+  const hostPro = !!(debate as any).host?.pro_until && new Date((debate as any).host.pro_until) > new Date();
+  const ageMs = Date.now() - new Date(debate.created_at as string).getTime();
+  const expired = !hostPro && ageMs > RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
   switch (action) {
     // Short-lived presigned URLs for the player + a download variant that
     // triggers a file save with a friendly name.
     case 'play': {
       if (!debate.recording_url) return json(404, { error: 'no recording for this debate' });
+      if (expired) {
+        return json(403, { error: isHost
+          ? 'This replay expired after 7 days on the free plan. Upgrade to Rostrum Pro to keep your replays forever.'
+          : 'This replay is no longer available.' });
+      }
       if (!isHost && debate.recording_visibility !== 'public') {
         return json(403, { error: 'this replay is private' });
       }

@@ -14,11 +14,28 @@ export interface FactCheck {
   claim: string;
   verdict: 'Supported' | 'Refuted' | 'Contested' | 'Unsupported' | 'NotFactual' | 'Error';
   confidence: 'low' | 'medium' | 'high' | null;
+  confidence_pct?: number | null;
   explanation: string | null;
   sources: FactSource[];
   source?: 'manual' | 'auto';
   created_at: string;
   requester?: { display_name: string; handle: string } | null;
+}
+
+export type GavelTool = 'chat' | 'summarize' | 'fallacies' | 'steelman' | 'rebuttal' | 'context';
+
+/** Ask Gavel about the live debate, or run a debate tool over the transcript. */
+export async function askGavel(input: { tool: GavelTool; question?: string; transcript?: string; topic?: string }): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('not authenticated');
+  const res = await fetch('/.netlify/functions/gavel-assist', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify(input),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.error ?? 'Gavel could not respond');
+  return body.answer as string;
 }
 
 /** Submit a claim to Gavel. Returns the stored verdict (also visible to the room). */

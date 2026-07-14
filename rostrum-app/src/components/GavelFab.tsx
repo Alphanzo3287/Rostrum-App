@@ -6,7 +6,8 @@
 // =====================================================================
 import { useEffect, useRef, useState } from 'react';
 import type { Room } from 'livekit-client';
-import { GavelPanel } from './GavelPanel';
+import { GavelWidget } from './GavelWidget';
+import { GavelMascot } from './GavelMascot';
 import { useLiveTranscript } from '../lib/transcript';
 import { autoExtractCheck, subscribeFactChecks, type FactCheck } from '../lib/gavel';
 import { useDraggable, bottomRight } from '../lib/useDraggable';
@@ -19,8 +20,8 @@ const VERDICT_COLOR: Record<string, string> = {
   Supported: '#4FC2A7', Refuted: '#E86A6A', Contested: '#E5B567', Unsupported: '#8A93A0', NotFactual: '#8A93A0',
 };
 
-export function GavelFab({ debateId, room, name, canSpeak }: {
-  debateId: string; room: Room | null; name: string; canSpeak: boolean;
+export function GavelFab({ debateId, room, name, canSpeak, topic }: {
+  debateId: string; room: Room | null; name: string; canSpeak: boolean; topic?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [auto, setAuto] = useState(false);
@@ -57,13 +58,6 @@ export function GavelFab({ debateId, room, name, canSpeak }: {
   const widget = anchor(pos, WIDGET_W, widgetH, vw, vh);
   const toastPos = anchor(pos, Math.min(320, vw - 24), 62, vw, vh);
 
-  const gavelIcon = (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 13l-7.5 7.5a2.12 2.12 0 0 1-3-3L11 10" />
-      <path d="M9.5 8.5l6 6M14 6l4 4M17.5 9.5l3-3-4-4-3 3M16 20h6" />
-    </svg>
-  );
-
   return (
     <>
       {open && (
@@ -71,10 +65,14 @@ export function GavelFab({ debateId, room, name, canSpeak }: {
           height: widgetH, display: 'flex', flexDirection: 'column', borderRadius: 18, overflow: 'hidden',
           background: a(C.base2, 'F5'), backdropFilter: 'blur(22px)', border: `1px solid ${C.hairHi}`, boxShadow: '0 24px 70px rgba(0,0,0,.55)' }}>
           <div style={{ padding: '13px 15px', borderBottom: `1px solid ${C.hair}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 9, display: 'grid', placeItems: 'center', color: '#fff', background: `linear-gradient(135deg, ${C.gold}, ${C.cyan})` }}>{gavelIcon}</div>
+            <GavelMascot state="avatar" size={36} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: display, fontSize: 15, fontWeight: 700, color: C.ink, lineHeight: 1.1 }}>Gavel</div>
-              <div style={{ fontFamily: ui, fontSize: 10.5, color: C.faint }}>Impartial academic fact-checker</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontFamily: ui, fontSize: 10.5, color: '#A78BFA', fontWeight: 600 }}>AI Debate Assistant</span>
+                <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#4FC2A7' }} />
+                <span style={{ fontFamily: ui, fontSize: 9.5, color: C.faint }}>Online</span>
+              </div>
             </div>
             <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: C.faint, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>×</button>
           </div>
@@ -97,7 +95,7 @@ export function GavelFab({ debateId, room, name, canSpeak }: {
           </div>
 
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: '14px 15px', display: 'flex' }}>
-            <GavelPanel debateId={debateId} />
+            <GavelWidget debateId={debateId} getTranscript={() => transcriptRef.current} topic={topic} />
           </div>
         </div>
       )}
@@ -124,11 +122,11 @@ export function GavelFab({ debateId, room, name, canSpeak }: {
       {/* draggable FAB */}
       <button onPointerDown={onPointerDown} onClick={() => { if (!wasDragged()) setOpen(o => !o); }}
         aria-label="Gavel fact-checker (drag to move)" title="Gavel — drag to move"
-        style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 300, height: 52, padding: '0 18px 0 14px', touchAction: 'none',
-          display: 'flex', alignItems: 'center', gap: 9, borderRadius: 999, border: 'none', cursor: 'grab',
+        style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 300, height: 52, padding: '0 18px 0 8px', touchAction: 'none',
+          display: 'flex', alignItems: 'center', gap: 8, borderRadius: 999, border: 'none', cursor: 'grab',
           color: '#fff', fontFamily: display, fontSize: 15, fontWeight: 700,
           background: `linear-gradient(135deg, ${C.gold}, ${C.cyan})`, boxShadow: `0 10px 30px ${a(C.gold, '55')}` }}>
-        {gavelIcon}
+        <GavelMascot state="avatar" size={38} />
         Gavel
         {auto && <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', boxShadow: '0 0 8px #fff' }} />}
       </button>

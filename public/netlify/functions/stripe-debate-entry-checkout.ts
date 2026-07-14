@@ -1,10 +1,12 @@
 // =====================================================================
 // The Rostrum · netlify/functions/stripe-debate-entry-checkout.ts
-// Pay-per-view entry for a paid debate (Oxford or Legacy). Same
-// destination-charge pattern as buy-back: 85% straight to the host's
-// connected account, 15% stays with the platform, all in one charge.
-// Access itself is granted by stripe-webhook setting
-// debate_participants.paid = true once payment actually clears.
+// Pay-per-view entry for a paid debate. DIRECT charge on the host's
+// connected account: the host is the merchant of record and receives the
+// money straight away (the platform never holds it), the host bears
+// Stripe's processing fee, and the platform keeps a clean 20% via
+// application_fee_amount. Access is granted by stripe-webhook setting
+// debate_participants.paid = true once payment clears (arrives as a
+// Stripe Connect / connected-account event).
 // =====================================================================
 import type { Handler } from '@netlify/functions';
 import Stripe from 'stripe';
@@ -12,7 +14,7 @@ import { supabaseAdmin, userFromToken } from '../../src/server/supabaseAdmin';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const SITE = process.env.PUBLIC_SITE_URL || 'https://rostrums.site';
-const PLATFORM_FEE_BPS = 1500; // 15%
+const PLATFORM_FEE_BPS = 2000; // 20%
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'method not allowed' });
@@ -54,12 +56,11 @@ export const handler: Handler = async (event) => {
       }],
       payment_intent_data: {
         application_fee_amount: applicationFee,
-        transfer_data: { destination: account.stripe_account_id },
       },
       metadata: { kind: 'debate_entry', debate_id: debate.id, user_id: user.id },
       success_url: `${SITE}/debate/${debate.id}?entry=success`,
       cancel_url: `${SITE}/debate/${debate.id}?entry=cancelled`,
-    });
+    }, { stripeAccount: account.stripe_account_id });
     return json(200, { url: session.url });
   } catch (err: any) {
     const msg = err?.raw?.message ?? err?.message ?? 'entry checkout failed';
