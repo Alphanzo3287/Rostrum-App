@@ -5,6 +5,7 @@
 // =====================================================================
 import { useEffect, useRef, useState } from 'react';
 import { ReportModal } from './ReportModal';
+import { GavelPanel } from './GavelPanel';
 import {
   castVote, getTally, subscribeTally,
   askQuestion, setQuestionStatus, subscribeQuestions,
@@ -34,10 +35,10 @@ export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom,
   members?: any[]; lkRoom?: any; pollOpen?: boolean; format?: string;
   collapsible?: boolean; collapsed?: boolean; onToggleCollapse?: () => void;
 }) {
-  let tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence']]
-            : role === 'moderator' ? [['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence']]
-            : role === 'judge'  ? [['score','Score'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence']]
-            :                     [['vote','Vote'],['chat','Chat'],['qa','Ask'],['poll','Poll'],['evidence','Evidence']];
+  let tabs = role === 'host'  ? [['invite','Invite'],['ros','Run'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gavel','Gavel']]
+            : role === 'moderator' ? [['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gavel','Gavel']]
+            : role === 'judge'  ? [['score','Score'],['chat','Chat'],['qa','Q&A'],['poll','Poll'],['evidence','Evidence'],['gavel','Gavel']]
+            :                     [['vote','Vote'],['chat','Chat'],['qa','Ask'],['poll','Poll'],['evidence','Evidence'],['gavel','Gavel']];
   // Lecture has no sides, no audience verdict — the run-of-show list and
   // prop/opp poll don't apply.
   if (format === 'lecture') tabs = tabs.filter(([k]) => k !== 'ros' && k !== 'poll' && k !== 'vote' && k !== 'score');
@@ -71,6 +72,7 @@ export function ContextRail({ debateId, role, tab, setTab, ros, members, lkRoom,
         {tab==='qa' && <QAPanel debateId={debateId} canModerate={role==='host'||role==='moderator'} />}
         {tab==='score' && <ScorePanel debateId={debateId} />}
         {tab==='evidence' && <EvidencePanel debateId={debateId} canAdd={role==='host'||role==='moderator'||role==='debater'} />}
+        {tab==='gavel' && <GavelPanel debateId={debateId} />}
         {/* Gifting now happens by hovering/tapping a person on stage → Send gift. */}
       </div>
       )}
