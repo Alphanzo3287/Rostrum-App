@@ -16,6 +16,7 @@ export interface FactCheck {
   confidence: 'low' | 'medium' | 'high' | null;
   explanation: string | null;
   sources: FactSource[];
+  source?: 'manual' | 'auto';
   created_at: string;
   requester?: { display_name: string; handle: string } | null;
 }
@@ -41,4 +42,25 @@ export async function listFactChecks(debateId: string): Promise<FactCheck[]> {
     .eq('debate_id', debateId).order('created_at', { ascending: false }).limit(50);
   if (error) throw error;
   return (data ?? []) as any as FactCheck[];
+}
+
+/** Fire an auto-extract pass over recent transcript. Server bounds cost per debate. */
+export async function autoExtractCheck(debateId: string, transcript: string): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return;
+  await fetch('/.netlify/functions/gavel-extract', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ debateId, transcript }),
+  }).catch(() => {});
+}
+
+/** Live-subscribe to new verdicts in a debate (manual or auto, from anyone). */
+export function subscribeFactChecks(debateId: string, onInsert: (fc: FactCheck) => void) {
+  const ch = supabase.channel(`factchecks:${debateId}`)
+    .on('postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'fact_checks', filter: `debate_id=eq.${debateId}` },
+      (payload) => onInsert(payload.new as any as FactCheck))
+    .subscribe();
+  return () => { supabase.removeChannel(ch); };
 }

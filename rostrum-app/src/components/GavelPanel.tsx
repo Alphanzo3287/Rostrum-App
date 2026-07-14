@@ -5,7 +5,7 @@
 // the whole room.
 // =====================================================================
 import { useEffect, useState } from 'react';
-import { requestFactCheck, listFactChecks, type FactCheck } from '../lib/gavel';
+import { requestFactCheck, listFactChecks, subscribeFactChecks, type FactCheck } from '../lib/gavel';
 import { C, ui, mono, display, a } from '../lib/theme';
 
 const VERDICT: Record<string, { label: string; color: string; bg: string }> = {
@@ -30,7 +30,14 @@ export function GavelPanel({ debateId }: { debateId: string }) {
   const [checks, setChecks] = useState<FactCheck[]>([]);
 
   const load = () => { listFactChecks(debateId).then(setChecks).catch(() => {}); };
-  useEffect(load, [debateId]);
+  useEffect(() => {
+    load();
+    const unsub = subscribeFactChecks(debateId, fc => {
+      setChecks(prev => prev.some(c => c.id === fc.id) ? prev : [fc, ...prev]);
+    });
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debateId]);
 
   async function submit() {
     const c = claim.trim();
@@ -89,6 +96,10 @@ function VerdictCard({ fc }: { fc: FactCheck }) {
         </span>
         {fc.confidence && (
           <span style={{ fontFamily: mono, fontSize: 10, color: C.faint }}>· {fc.confidence} confidence</span>
+        )}
+        {fc.source === 'auto' && (
+          <span style={{ fontFamily: ui, fontSize: 9, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase',
+            color: C.cyan, padding: '2px 6px', borderRadius: 5, background: a(C.cyan, '18') }}>auto</span>
         )}
         <span style={{ marginLeft: 'auto', fontFamily: mono, fontSize: 10, color: C.faint }}>
           {fc.requester?.display_name ?? 'Someone'} · {ago(fc.created_at)}

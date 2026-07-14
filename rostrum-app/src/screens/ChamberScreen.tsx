@@ -29,6 +29,7 @@ import { SlideStage } from '../components/SlideStage';
 import { ScreenTile } from '../components/ScreenTile';
 import { SafePanel } from '../components/SafePanel';
 import { ContextRail } from '../components/ContextRail';
+import { GavelFab } from '../components/GavelFab';
 import { RoleDock } from '../components/RoleDock';
 import { WinnerOverlay } from '../components/WinnerOverlay';
 import { BroadcastBar } from '../components/BroadcastBar';
@@ -367,6 +368,9 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
             onSetRemaining: (s: number) => dz.setClock(s),
           }} />
       </div>
+
+      {/* ---- Gavel floating fact-checker ---- */}
+      <GavelFab debateId={debateId} room={room.room} name={me?.name ?? 'Speaker'} canSpeak={!!room.canPublish} />
 
       {/* ---- dock ---- */}
       <RoleDock
