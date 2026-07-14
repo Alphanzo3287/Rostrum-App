@@ -5,6 +5,7 @@
 // transcript, and a subtle toast when an auto-verdict lands.
 // =====================================================================
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Room } from 'livekit-client';
 import { GavelWidget } from './GavelWidget';
 import { GavelMascot } from './GavelMascot';
@@ -58,7 +59,7 @@ export function GavelFab({ debateId, room, name, canSpeak, topic }: {
   const widget = anchor(pos, WIDGET_W, widgetH, vw, vh);
   const toastPos = anchor(pos, Math.min(320, vw - 24), 62, vw, vh);
 
-  return (
+  return createPortal(
     <>
       {open && (
         <div style={{ position: 'fixed', left: widget.left, top: widget.top, zIndex: 300, width: WIDGET_W, maxWidth: 'calc(100vw - 24px)',
@@ -130,7 +131,8 @@ export function GavelFab({ debateId, room, name, canSpeak, topic }: {
         Gavel
         {auto && <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', boxShadow: '0 0 8px #fff' }} />}
       </button>
-    </>
+    </>,
+    document.body,
   );
 }
 
