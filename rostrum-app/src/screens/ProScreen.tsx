@@ -18,7 +18,7 @@ const FEATURES: { group: string; rows: Row[] }[] = [
       { label: 'Join & watch every debate', free: true, pro: true },
       { label: 'Host debates in all formats', free: true, pro: true },
       { label: 'Compete in tournaments & communities', free: true, pro: true },
-      { label: 'Earn & cash out D-Bucks', free: true, pro: true },
+      { label: 'Get paid directly for tips & pay-per-view', free: true, pro: true },
     ],
   },
   {
@@ -36,8 +36,6 @@ const FEATURES: { group: string; rows: Row[] }[] = [
     rows: [
       { label: 'Pro badge on profile & in rooms', free: false, pro: true },
       { label: 'Profile customization & priority visibility', free: false, pro: true },
-      { label: 'Cash-out platform fee', free: '15%', pro: '10%' },
-      { label: 'Monthly D-Bucks to gift & support debaters', free: false, pro: '500 / mo' },
       { label: 'Priority support & early access', free: false, pro: true },
     ],
   },

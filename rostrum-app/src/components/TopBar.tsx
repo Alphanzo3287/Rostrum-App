@@ -90,7 +90,6 @@ export function TopBar() {
                 padding:6, display:'flex', flexDirection:'column' }}>
                 {[
                   { label:'My Profile', to:'/me' },
-                  { label:'Wallet',     to:'/store' },
                   { label:'Earnings',   to:'/earnings' },
                   { label:'Settings',   to:'/settings' },
                   { label:'Help',       to:'/support' },

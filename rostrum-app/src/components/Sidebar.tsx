@@ -11,7 +11,6 @@ import { isPro } from '../lib/pro';
 import { unreadTotal, subscribeInbox } from '../screens/MessagesScreen';
 import { C, ui, display, mono, solidGold, a } from '../lib/theme';
 import { Avatar } from './ui';
-import { getMyWallet } from '../lib/payments';
 import { ThemeToggle } from './ThemeToggle';
 import { useIsTablet } from '../lib/useMediaQuery';
 
@@ -76,8 +75,6 @@ export function Sidebar() {
     return () => { on = false; off(); window.removeEventListener('rostrum:unread', load); };
   }, []);
 
-  const [wallet, setWallet] = useState<{ promo: number; redeemable: number; total: number } | null>(null);
-  useEffect(() => { getMyWallet().then(setWallet).catch(() => {}); }, []);
 
   const isAdmin = !!(profile as any)?.is_admin;
   const active = (to: string) => to === '/' ? pathname === '/' : pathname.startsWith(to);
@@ -92,7 +89,6 @@ export function Sidebar() {
     ...(isPro(profile) ? [{ to: '/analytics', label: 'Analytics', icon: AnalyticsIcon }] as NavItem[] : []),
     { to: '/leaderboard',  label: 'Rankings',      icon: RankingsIcon },
     { to: '/messages',     label: 'Messages',      icon: MessagesIcon,    badge: unread || undefined },
-    { to: '/store',        label: 'Store',         icon: StoreIcon },
   ];
 
   const sidebarBody = (
@@ -154,32 +150,6 @@ export function Sidebar() {
           <span style={{ flex:1 }}>Tournaments</span>
         </Link>
       </nav>
-
-      {/* ── D-Bucks balance card ── */}
-      <div style={{ margin:'14px 12px 12px', padding:'14px 16px', borderRadius:16,
-        background: `linear-gradient(135deg, ${a(C.warning,'14')}, ${a(C.warning,'07')})`,
-        border: `1px solid ${a(C.warning,'2E')}` }}>
-        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
-          <DBucksIcon />
-          <div style={{ fontFamily:ui, fontSize:11, fontWeight:600, color:C.faint,
-            textTransform:'uppercase', letterSpacing:'.1em' }}>D-Bucks Balance</div>
-        </div>
-        <div style={{ fontFamily:ui, fontSize:24, fontWeight:700, color:C.ink, marginBottom:6, fontVariantNumeric:'tabular-nums' }}>
-          {wallet !== null ? wallet.total.toLocaleString() : '—'}
-        </div>
-        {wallet !== null && (wallet.redeemable > 0 || wallet.promo > 0) && (
-          <div style={{ display:'flex', gap:12, marginBottom:10, fontFamily:ui, fontSize:10.5 }}>
-            <span style={{ color:C.jadeHi }}>💵 {wallet.redeemable.toLocaleString()} cashable</span>
-            <span style={{ color:C.gold }}>🎁 {wallet.promo.toLocaleString()} rewards</span>
-          </div>
-        )}
-        <button onClick={() => nav('/store')}
-          style={{ width:'100%', padding:'8px 12px', borderRadius:10,
-            background:'transparent', border:`1px solid ${C.hair}`, color:C.dim,
-            fontFamily:ui, fontSize:12, fontWeight:600, cursor:'pointer' }}>
-          View Wallet
-        </button>
-      </div>
 
       {/* ── Rostrum Pro upsell ── */}
       {isPro(profile) ? (

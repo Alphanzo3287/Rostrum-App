@@ -18,10 +18,7 @@ export function InteractionBar({ room, identity, name, onAskQuestion }: {
   room: Room | null; identity: string; name: string; onAskQuestion?: () => void;
 }) {
   const { toasts, raisedHands, iRaised, send, toggleHand } = useReactions(room, identity, name);
-  const [dbucks, setDbucks] = useState<number | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-
-  useEffect(() => { getMyWallet().then(w => setDbucks(w.total)).catch(() => {}); }, []);
 
   const handCount = raisedHands.size;
 
@@ -67,14 +64,6 @@ export function InteractionBar({ room, identity, name, onAskQuestion }: {
           </div>
         )}
       </div>
-
-      {dbucks != null && (
-        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '6px 12px', borderRadius: 999, background: a(C.warning, '14'), border: `1px solid ${a(C.warning, '44')}`,
-          fontFamily: ui, fontSize: 12, fontWeight: 700, color: C.warning, whiteSpace: 'nowrap' }}>
-          🪙 {dbucks.toLocaleString()} D-Bucks
-        </span>
-      )}
 
       <style>{`@keyframes reactionFloat { 0% { opacity:0; transform:translateY(6px);} 12% { opacity:1; transform:translateY(0);} 78% { opacity:1; } 100% { opacity:0; transform:translateY(-10px);} }`}</style>
     </div>
