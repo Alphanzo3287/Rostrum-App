@@ -13,6 +13,17 @@ type Row = { label: string; free: string | boolean; pro: string | boolean };
 
 const FEATURES: { group: string; rows: Row[] }[] = [
   {
+    group: 'Gavel · AI debate assistant',
+    rows: [
+      { label: 'See Gavel’s verdicts in any debate', free: true, pro: true },
+      { label: 'Fact-check claims against real academic sources', free: false, pro: 'Unlimited' },
+      { label: 'Auto-check live claims as they’re spoken', free: false, pro: true },
+      { label: 'Debate tools — summarize, fallacies, steelman, rebuttal', free: false, pro: true },
+      { label: 'Find scholarly sources & explain any claim', free: false, pro: true },
+      { label: 'Response depth', free: '—', pro: 'Quick · Detailed · Deep' },
+    ],
+  },
+  {
     group: 'Core experience',
     rows: [
       { label: 'Join & watch every debate', free: true, pro: true },
@@ -79,9 +90,30 @@ export function ProScreen() {
         </h1>
         <p style={{ fontFamily: ui, fontSize: 15, color: C.faint, margin: '0 auto', maxWidth: 520, lineHeight: 1.55 }}>
           {alreadyPro
-            ? 'Thanks for supporting The Rostrum. Your Pro perks are active across the platform.'
-            : 'Everything on The Rostrum stays free. Pro makes you more powerful — more reach, more storage, better economics, and status that stands out.'}
+            ? 'Thanks for supporting The Rostrum. Your Pro perks are active across the platform — including Gavel, your AI debate assistant.'
+            : 'Everything on The Rostrum stays free. Pro adds Gavel — an impartial AI fact-checker that holds every claim to the academic record — plus more reach, more storage, and status that stands out.'}
         </p>
+      </div>
+
+      {/* ---- Gavel spotlight — the headline Pro feature ---- */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 18px', borderRadius: 18,
+        border: `1px solid ${a(C.gold, '3A')}`, background: `linear-gradient(135deg, ${a(C.gold, '12')}, ${a(C.cyan, '0A')})`,
+        marginBottom: 22 }}>
+        <img src="/gavel/gavel-avatar.png" alt="Gavel" width={62} height={62}
+          onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+          style={{ width: 62, height: 62, objectFit: 'contain', flexShrink: 0 }} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: display, fontSize: 17, fontWeight: 700, color: C.ink }}>Meet Gavel</span>
+            <span style={{ fontFamily: ui, fontSize: 9, fontWeight: 900, letterSpacing: '.08em', color: '#0b0e14',
+              padding: '2px 6px', borderRadius: 4, background: `linear-gradient(135deg, ${C.gold}, ${C.cyan})` }}>PRO</span>
+          </div>
+          <p style={{ fontFamily: ui, fontSize: 13, color: C.dim, lineHeight: 1.5, margin: '4px 0 0' }}>
+            Your AI debate assistant. Gavel checks any claim against live scholarly, government and primary
+            sources — then delivers an impartial verdict with citations, in front of the whole room. He’ll
+            tell either side when they’re wrong.
+          </p>
+        </div>
       </div>
 
       {justUpgraded && (

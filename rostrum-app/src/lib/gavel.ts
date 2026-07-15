@@ -93,6 +93,7 @@ export async function requestFactCheck(debateId: string, claim: string): Promise
   let body: any = {};
   try { body = JSON.parse(raw); } catch { /* platform error page */ }
   if (!res.ok) {
+    if (res.status === 402) throw new Error(body?.error || 'Gavel is a Rostrum Pro feature. Upgrade to fact-check claims.');
     if (body?.error) throw new Error(body.error);
     if (res.status === 504 || res.status === 502 || /timed? ?out/i.test(raw)) {
       throw new Error('Gavel took too long and the request was cut off. Try Quick mode or a shorter claim.');

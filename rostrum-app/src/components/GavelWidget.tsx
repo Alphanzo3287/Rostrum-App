@@ -30,11 +30,13 @@ const TOOLS: Action[] = [
   { tool: 'sources', label: 'Find Sources', icon: '🔎', mode: 'sources' },
 ];
 
-export function GavelWidget({ debateId, getTranscript, topic }: {
-  debateId: string; getTranscript: () => string; topic?: string;
+export function GavelWidget({ debateId, getTranscript, topic, pro = true }: {
+  debateId: string; getTranscript: () => string; topic?: string; pro?: boolean;
 }) {
   const [messages, setMessages] = useState<Msg[]>([
-    { id: 'w', role: 'gavel', kind: 'text', text: "Hello, I'm Gavel — your impartial fact-checker. Enter a claim to check it against real academic sources, or use a tool to summarize the debate, spot fallacies, and more." },
+    { id: 'w', role: 'gavel', kind: 'text', text: pro
+      ? "Hello, I'm Gavel — your impartial fact-checker. Enter a claim to check it against real academic sources, or use a tool to summarize the debate, spot fallacies, and more."
+      : "Hello, I'm Gavel — the impartial fact-checker for this debate. My verdicts appear here for everyone in the room. To put your own claims to the test, upgrade to Rostrum Pro." },
   ]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -54,7 +56,7 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
   }, 'widget'), [debateId]);
 
   async function factCheck(claim: string) {
-    if (!claim.trim() || busy) return;
+    if (!claim.trim() || busy || !pro) return;
     add({ id: uid(), role: 'user', text: claim });
     setInput(''); setBusy(true); setMascot('thinking');
     const pid = uid(); add({ id: pid, role: 'gavel', kind: 'progress', text: 'Searching academic sources…' });
@@ -68,7 +70,7 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
   }
 
   async function runAction(a: Action) {
-    if (busy) return;
+    if (busy || !pro) return;
     if (a.mode === 'sources') return runSources();
     if (a.mode === 'explain') {
       if (!input.trim()) { setInput(''); add({ id: uid(), role: 'gavel', kind: 'text', text: 'Type a claim in the box first, then tap Explain.' }); return; }
@@ -117,11 +119,12 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
       {/* tools */}
       <div style={{ display: 'flex', gap: 6, overflowX: 'auto', minWidth: 0, paddingBottom: 10, marginBottom: 4 }}>
         {TOOLS.map(t => (
-          <button key={t.tool} onClick={() => runAction(t)} disabled={busy}
+          <button key={t.tool} onClick={() => runAction(t)} disabled={busy || !pro}
+            title={pro ? t.label : 'Rostrum Pro feature'}
             style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 6, padding: '8px 13px', borderRadius: 999,
               border: `1px solid ${C.hair}`, background: C.panel2, color: C.dim, cursor: busy ? 'default' : 'pointer',
-              fontFamily: ui, fontSize: 12.5, fontWeight: 600, opacity: busy ? 0.5 : 1, whiteSpace: 'nowrap' }}>
-            <span>{t.icon}</span>{t.label}
+              fontFamily: ui, fontSize: 12.5, fontWeight: 600, opacity: busy || !pro ? 0.45 : 1, whiteSpace: 'nowrap' }}>
+            <span>{t.icon}</span>{t.label}{!pro && <span style={{ fontSize: 8 }}>🔒</span>}
           </button>
         ))}
       </div>
@@ -145,7 +148,25 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
           ))}
       </div>
 
-      {/* response mode + input */}
+      {/* response mode + input — Pro only */}
+      {!pro ? (
+        <div style={{ marginTop: 12, padding: '13px 14px', borderRadius: 12,
+          border: `1px solid ${a(C.gold, '55')}`, background: a(C.gold, '0E') }}>
+          <div style={{ fontFamily: display, fontSize: 13.5, fontWeight: 700, color: C.ink }}>
+            Put a claim to the test
+          </div>
+          <div style={{ fontFamily: ui, fontSize: 11.5, color: C.dim, lineHeight: 1.5, marginTop: 4 }}>
+            Fact-check any claim against real academic sources, auto-check the live debate, and use the
+            debate tools — with Rostrum Pro.
+          </div>
+          <a href="/pro" style={{ display: 'block', textAlign: 'center', marginTop: 10, padding: '9px 0',
+            borderRadius: 9, textDecoration: 'none', color: '#0b0e14', fontFamily: ui, fontSize: 12.5, fontWeight: 800,
+            background: `linear-gradient(135deg, ${C.gold}, ${C.cyan})` }}>
+            Upgrade to Pro
+          </a>
+        </div>
+      ) : (
+      <>
       <div style={{ display: 'flex', gap: 5, marginTop: 12, marginBottom: 8 }}>
         {([['quick', 'Quick', '~250 words'], ['detailed', 'Detailed', '400–600 words'], ['deep', 'Deep', '800–1200 words']] as [GavelMode, string, string][]).map(([m, label, hint]) => (
           <button key={m} onClick={() => setMode(m)} title={hint}
@@ -168,8 +189,10 @@ export function GavelWidget({ debateId, getTranscript, topic }: {
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
         </button>
       </div>
+      </>
+      )}
       <div style={{ fontFamily: ui, fontSize: 9.5, color: C.faint, textAlign: 'center', marginTop: 6 }}>
-        Impartial · grounded in academic sources · <span style={{ color: mascot === 'thinking' ? C.gold : C.faint }}>{mascot === 'thinking' ? 'working…' : 'ready'}</span>
+        Impartial · grounded in academic sources · <span style={{ color: mascot === 'thinking' ? C.gold : C.faint }}>{pro ? (mascot === 'thinking' ? 'working…' : 'ready') : 'Pro feature'}</span>
       </div>
     </div>
   );

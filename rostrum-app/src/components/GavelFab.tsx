@@ -12,6 +12,8 @@ import { GavelMascot } from './GavelMascot';
 import { useLiveTranscript } from '../lib/transcript';
 import { autoExtractCheck, subscribeFactChecks, type FactCheck } from '../lib/gavel';
 import { useDraggable, bottomRight } from '../lib/useDraggable';
+import { useAuth } from '../lib/auth';
+import { isPro } from '../lib/pro';
 import { C, ui, display, a } from '../lib/theme';
 
 const AUTO_INTERVAL_MS = 40_000;
@@ -22,6 +24,8 @@ const VERDICT_COLOR: Record<string, string> = {
 export function GavelFab({ debateId, room, name, canSpeak, topic }: {
   debateId: string; room: Room | null; name: string; canSpeak: boolean; topic?: string;
 }) {
+  const { profile } = useAuth();
+  const pro = isPro(profile);
   const [open, setOpen] = useState(false);
   const [auto, setAuto] = useState(false);
   const [toast, setToast] = useState<FactCheck | null>(null);
@@ -45,12 +49,12 @@ export function GavelFab({ debateId, room, name, canSpeak, topic }: {
 
   // Auto-extract loop.
   useEffect(() => {
-    if (!auto) return;
+    if (!auto || !pro) return;
     let alive = true;
     const tick = () => { if (alive && transcriptRef.current.trim().length > 40) autoExtractCheck(debateId, transcriptRef.current); };
     const id = setInterval(tick, AUTO_INTERVAL_MS);
     return () => { alive = false; clearInterval(id); };
-  }, [auto, debateId, transcriptRef]);
+  }, [auto, pro, debateId, transcriptRef]);
 
   // Subtle toast when an AUTO verdict lands (skip if the widget is open — it's already in view).
   useEffect(() => {
@@ -120,23 +124,28 @@ export function GavelFab({ debateId, room, name, canSpeak, topic }: {
 
           <div style={{ padding: '12px 17px', borderBottom: `1px solid ${a(C.hair, '80')}`, display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: ui, fontSize: 13.5, fontWeight: 600, color: C.ink }}>Auto-check live claims</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontFamily: ui, fontSize: 13.5, fontWeight: 600, color: C.ink }}>Auto-check live claims</span>
+                {!pro && <ProTag />}
+              </div>
               <div style={{ fontFamily: ui, fontSize: 11, color: C.faint, lineHeight: 1.35 }}>
-                {supported
-                  ? (auto ? (listening ? 'Listening & watching the transcript…' : 'Watching the transcript…') : 'Gavel flags check-worthy claims as they’re spoken.')
-                  : 'Live transcription needs Chrome or Edge on this device.'}
+                {!pro
+                  ? 'Gavel flags check-worthy claims as they’re spoken — with Rostrum Pro.'
+                  : supported
+                    ? (auto ? (listening ? 'Listening & watching the transcript…' : 'Watching the transcript…') : 'Gavel flags check-worthy claims as they’re spoken.')
+                    : 'Live transcription needs Chrome or Edge on this device.'}
               </div>
             </div>
-            <button onClick={() => setAuto(v => !v)} disabled={!supported} aria-label="Toggle auto-check"
+            <button onClick={() => { if (pro && supported) setAuto(v => !v); }} disabled={!supported || !pro} aria-label="Toggle auto-check"
               style={{ position: 'relative', width: 46, height: 26, borderRadius: 999, border: 'none', flexShrink: 0,
-                cursor: supported ? 'pointer' : 'default', opacity: supported ? 1 : 0.4,
+                cursor: supported && pro ? 'pointer' : 'default', opacity: supported && pro ? 1 : 0.35,
                 background: auto ? `linear-gradient(135deg, ${C.gold}, ${C.cyan})` : C.panel2, transition: 'background .15s' }}>
               <span style={{ position: 'absolute', top: 3, left: auto ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .15s' }} />
             </button>
           </div>
 
           <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden', padding: '15px 17px', display: 'flex' }}>
-            <GavelWidget debateId={debateId} getTranscript={() => transcriptRef.current} topic={topic} />
+            <GavelWidget debateId={debateId} getTranscript={() => transcriptRef.current} topic={topic} pro={pro} />
           </div>
         </div>
       )}
@@ -182,5 +191,13 @@ export function GavelFab({ debateId, room, name, canSpeak, topic }: {
       </button>
     </>,
     document.body,
+  );
+}
+
+/** Tiny "PRO" chip used to mark gated capabilities. */
+function ProTag() {
+  return (
+    <span style={{ fontFamily: ui, fontSize: 8.5, fontWeight: 900, letterSpacing: '.08em', color: '#0b0e14',
+      padding: '2px 5px', borderRadius: 4, background: `linear-gradient(135deg, ${C.gold}, ${C.cyan})` }}>PRO</span>
   );
 }
