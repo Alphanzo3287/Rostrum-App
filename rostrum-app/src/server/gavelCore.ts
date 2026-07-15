@@ -147,11 +147,20 @@ export async function runFactCheck(claimRaw: string, opts: { deadlineMs?: number
   const depth = classifyComplexity(claimRaw);
 
   // 1. LIVE RETRIEVAL — curated sources, queried in parallel (~1-2s, free).
-  const evidence = await retrieveEvidence(claimRaw, { fresh, limit: 6 });
+  //    The claim is reduced to KEYWORDS first: these indexes full-text match the
+  //    query, so a natural-language sentence matches nothing.
+  const { evidence, diag, query } = await retrieveEvidence(claimRaw, { fresh, limit: 6 });
 
   if (evidence.length === 0) {
+    // Distinguish "the record is silent" from "retrieval broke". Conflating the
+    // two produced an identical, misleading card for every claim.
+    const errors = diag.filter(d => d.error);
+    console.error('gavel retrieval empty', JSON.stringify({ query, diag }));
+    if (errors.length === diag.length && diag.length > 0) {
+      throw new Error(`Gavel could not reach its source indexes (${errors.map(e => e.source).join(', ')}). Please try again.`);
+    }
     return { verdict: 'Unsupported', confidence: 'low', confidence_pct: 20,
-      explanation: 'No sources addressing this claim were found in the curated scholarly, government and reference indexes Gavel searches. That does not make it true or false — only that the available record does not speak to it.',
+      explanation: `No sources matching this claim were found in the indexes Gavel searched (query: "${query}"). That does not make it true or false — only that the retrieved record does not speak to it. Try rephrasing with the key terms.`,
       sources: [] };
   }
 
@@ -228,7 +237,7 @@ const TOOL_PROMPTS: Record<string, string> = {
 /** Retrieval only — no verdict, and no model call at all: we query the
  *  curated indexes directly, so this is instant and costs nothing. */
 export async function findSources(query: string): Promise<FactSource[]> {
-  const evidence = await retrieveEvidence(query, { fresh: needsFreshEvidence(query), limit: 8 });
+  const { evidence } = await retrieveEvidence(query, { fresh: needsFreshEvidence(query), limit: 8 });
   return evidence.map(({ abstract, ...rest }) => rest);
 }
 
@@ -271,7 +280,8 @@ export async function assist(tool: string, opts: { transcript?: string; topic?: 
   // (summarize/fallacies/steelman/rebuttal) need no external facts.
   let retrieved: Evidence[] = [];
   if (WEB_GROUNDED_TOOLS.has(tool) && subject) {
-    retrieved = await retrieveEvidence(subject, { fresh: needsFreshEvidence(subject), limit: 5 }).catch(() => []);
+    retrieved = await retrieveEvidence(subject, { fresh: needsFreshEvidence(subject), limit: 5 })
+      .then(r => r.evidence).catch(() => []);
   }
 
   const { system, user } = buildAssistPrompt(tool, opts, retrieved);

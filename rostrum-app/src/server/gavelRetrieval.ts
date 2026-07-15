@@ -20,9 +20,48 @@ import { detectTopic, type Topic } from './gavelSources';
 
 const CONTACT = 'gavel@rostrums.site';
 const UA = `TheRostrum/Gavel (${CONTACT})`;
-const PER_SOURCE_TIMEOUT_MS = 2600;   // a slow index must never blow the budget
+const PER_SOURCE_TIMEOUT_MS = 4200;   // a slow index must never blow the budget
 
 export interface Evidence extends FactSource { abstract: string }
+/** Per-source outcome, so a retrieval failure is never silent again. */
+export interface RetrievalDiag { source: string; count: number; ms: number; error?: string }
+
+// ---------------------------------------------------------------------
+// Query building — CRITICAL.
+// Scholarly APIs full-text match the query, so a natural-language claim
+// ("Academic scholars generally agree that the Qur'an was compiled...")
+// matches nothing and returns zero results. They need KEYWORDS. We extract
+// them locally: no model call, no latency, no cost.
+// ---------------------------------------------------------------------
+const STOP = new Set([
+  'the','a','an','and','or','but','is','are','was','were','be','been','being','am','being',
+  'that','this','these','those','it','its','of','to','in','on','at','for','with','by','from','as',
+  'has','have','had','do','does','did','will','would','could','should','may','might','can','must',
+  'about','into','than','then','so','if','not','no','nor','all','any','some','most','more','less',
+  'there','their','they','them','we','you','your','our','my','his','her','him','she','he','i',
+  'who','whom','what','when','where','why','how','which','while','during','because','said','says',
+  'say','claim','claims','claimed','stated','state','states','agree','agrees','generally','really',
+  'actually','just','also','very','much','many','one','two','only','even','still','other','such',
+  'debater','debaters','speaker','opponent','true','false','fact','check','question','think',
+]);
+
+/** Turn a claim into a keyword query an academic index can actually match. */
+export function buildSearchQuery(text: string, max = 8): string {
+  const words = String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s'’-]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  const kept: string[] = [];
+  for (const w of words) {
+    const t = w.replace(/^['’-]+|['’-]+$/g, '');
+    if (t.length < 3 || STOP.has(t) || kept.includes(t)) continue;
+    kept.push(t);
+    if (kept.length >= max) break;
+  }
+  // Never send an empty query; fall back to a trimmed slice of the original.
+  return kept.length >= 2 ? kept.join(' ') : String(text || '').slice(0, 90).trim();
+}
 
 /** fetch with a hard timeout; resolves null instead of throwing. */
 async function get(url: string, headers: Record<string, string> = {}): Promise<any | null> {
@@ -155,36 +194,79 @@ export async function searchWikipedia(q: string, n = 3): Promise<Evidence[]> {
 // ---------------------------------------------------------------------
 // Orchestration — pick 2-3 indexes by topic and run them in PARALLEL.
 // ---------------------------------------------------------------------
-type Retriever = (q: string) => Promise<Evidence[]>;
+interface Retriever { name: string; fn: (q: string) => Promise<Evidence[]> }
 
-function retrieversFor(topic: Topic, fresh: boolean): Retriever[] {
+export function retrieversFor(topic: Topic, fresh: boolean): Retriever[] {
+  const OA = (n: number): Retriever => ({ name: 'OpenAlex', fn: q => searchOpenAlex(q, n) });
+  const S2 = (n: number): Retriever => ({ name: 'SemanticScholar', fn: q => searchSemanticScholar(q, n) });
+  const WK = (n: number): Retriever => ({ name: 'Wikipedia', fn: q => searchWikipedia(q, n) });
+  const PM = (n: number): Retriever => ({ name: 'PubMed', fn: q => searchPubMed(q, n) });
+  const AX = (n: number): Retriever => ({ name: 'arXiv', fn: q => searchArxiv(q, n) });
+
   // Present-day claims: journals can't answer, so lead with continuously
   // updated references and keep one scholarly index for corroboration.
-  if (fresh) return [q => searchWikipedia(q, 4), q => searchOpenAlex(q, 2)];
+  if (fresh) return [WK(4), OA(2)];
 
   switch (topic) {
-    case 'health':     return [q => searchPubMed(q, 4), q => searchOpenAlex(q, 3), q => searchWikipedia(q, 1)];
-    case 'science':    return [q => searchArxiv(q, 3), q => searchOpenAlex(q, 3), q => searchWikipedia(q, 1)];
+    case 'health':     return [PM(4), OA(3), WK(2)];
+    case 'science':    return [AX(3), OA(3), WK(2)];
     case 'law':
     case 'history':
-    case 'religion':   return [q => searchOpenAlex(q, 3), q => searchWikipedia(q, 3), q => searchSemanticScholar(q, 2)];
-    case 'economics':
-    case 'philosophy':
-    default:           return [q => searchOpenAlex(q, 3), q => searchSemanticScholar(q, 3), q => searchWikipedia(q, 1)];
+    case 'religion':   return [OA(4), WK(3), S2(3)];
+    case 'economics':  return [OA(3), S2(3), WK(2)];
+    case 'philosophy': return [OA(3), S2(3), WK(2)];
+    default:           return [OA(3), S2(3), WK(2)];
   }
 }
 
 /**
  * Retrieve live evidence for a claim from the curated sources.
- * Runs every selected index concurrently; a failing/slow index is skipped.
- * Academic results are ordered first so the model weights them above
- * encyclopedias, matching the tier policy.
+ *
+ * Runs every selected index concurrently; a slow/failing index is skipped, not
+ * fatal. If the full keyword query finds nothing anywhere, we retry ONCE with a
+ * looser 4-keyword query — narrow queries returning zero was the single biggest
+ * cause of "no sources found".
+ *
+ * Returns diagnostics alongside the evidence so failures are never silent.
  */
-export async function retrieveEvidence(query: string, opts: { fresh?: boolean; limit?: number } = {}): Promise<Evidence[]> {
-  const topic = detectTopic(query);
-  const settled = await Promise.allSettled(retrieversFor(topic, !!opts.fresh).map(r => r(query)));
-  const all: Evidence[] = [];
-  for (const s of settled) if (s.status === 'fulfilled') all.push(...s.value);
+export async function retrieveEvidence(
+  claim: string,
+  opts: { fresh?: boolean; limit?: number } = {},
+): Promise<{ evidence: Evidence[]; diag: RetrievalDiag[]; query: string }> {
+  const topic = detectTopic(claim);
+  const retrievers = retrieversFor(topic, !!opts.fresh);
+
+  const runAll = async (q: string) => {
+    const diag: RetrievalDiag[] = [];
+    const settled = await Promise.allSettled(retrievers.map(async r => {
+      const t0 = Date.now();
+      try {
+        const out = await r.fn(q);
+        diag.push({ source: r.name, count: out.length, ms: Date.now() - t0 });
+        return out;
+      } catch (e: any) {
+        diag.push({ source: r.name, count: 0, ms: Date.now() - t0, error: String(e?.message || e).slice(0, 80) });
+        return [] as Evidence[];
+      }
+    }));
+    const all: Evidence[] = [];
+    for (const s of settled) if (s.status === 'fulfilled') all.push(...s.value);
+    return { all, diag };
+  };
+
+  let query = buildSearchQuery(claim, 8);
+  let { all, diag } = await runAll(query);
+
+  // Loosen once if nothing matched — fewer, broader terms.
+  if (all.length === 0) {
+    const looser = buildSearchQuery(claim, 4);
+    if (looser && looser !== query) {
+      query = looser;
+      const retry = await runAll(looser);
+      all = retry.all;
+      diag = [...diag, ...retry.diag.map(d => ({ ...d, source: d.source + ' (retry)' }))];
+    }
+  }
 
   // Dedupe by URL, then by normalised title.
   const seen = new Set<string>();
@@ -194,9 +276,9 @@ export async function retrieveEvidence(query: string, opts: { fresh?: boolean; l
     seen.add(key); return true;
   });
 
-  // Academic first (tier policy), then everything else.
+  // Academic first (tier policy), then reference works.
   unique.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'academic' ? -1 : 1));
-  return unique.slice(0, opts.limit ?? 6);
+  return { evidence: unique.slice(0, opts.limit ?? 6), diag, query };
 }
 
 function reconstructAbstract(inv: Record<string, number[]> | null | undefined): string {
