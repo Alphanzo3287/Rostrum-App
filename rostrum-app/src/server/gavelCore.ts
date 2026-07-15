@@ -143,13 +143,23 @@ const MODE_WORDS: Record<GavelMode, string> = {
  * search was added.
  */
 export async function runFactCheck(claimRaw: string, opts: { deadlineMs?: number } = {}): Promise<FactResult> {
+  // ONE global budget for the whole request, subdivided across stages. Giving
+  // each stage its own fixed timeout let retrieval(4.2s) + model(8s) exceed the
+  // platform's 10s ceiling; now every stage gets only what is actually left.
+  const budget = opts.deadlineMs ?? 8500;
+  const started = Date.now();
+  const remaining = () => budget - (Date.now() - started);
+
   const fresh = needsFreshEvidence(claimRaw);
   const depth = classifyComplexity(claimRaw);
 
   // 1. LIVE RETRIEVAL — curated sources, queried in parallel (~1-2s, free).
   //    The claim is reduced to KEYWORDS first: these indexes full-text match the
   //    query, so a natural-language sentence matches nothing.
-  const { evidence, diag, query } = await retrieveEvidence(claimRaw, { fresh, limit: 6 });
+  // Reserve the majority of the budget for the model; retrieval gets the rest.
+  const { evidence, diag, query } = await retrieveEvidence(claimRaw, {
+    fresh, limit: 6, budgetMs: Math.min(3000, Math.max(1200, remaining() - 4800)),
+  });
 
   if (evidence.length === 0) {
     // Distinguish "the record is silent" from "retrieval broke". Conflating the
@@ -170,7 +180,7 @@ export async function runFactCheck(claimRaw: string, opts: { deadlineMs?: number
     `[${i + 1}] (${e.kind === 'academic' ? 'scholarly' : 'reference'}) "${e.title}"` +
     `${e.year ? ` (${e.year})` : ''}, ${e.authors}${e.journal ? `, ${e.journal}` : ''}.` +
     `${e.citations ? ` Cited by ${e.citations}.` : ''}` +
-    `${e.abstract ? ` Abstract: ${e.abstract.slice(0, 650)}` : ''}`
+    `${e.abstract ? ` Abstract: ${e.abstract.slice(0, 480)}` : ''}`
   ).join('\n\n');
 
   const call = await claude(
@@ -192,7 +202,7 @@ export async function runFactCheck(claimRaw: string, opts: { deadlineMs?: number
     {
       maxTokens: depth === 'deep' ? BUDGET.verdictDeep : BUDGET.verdictFast,
       effort: depth === 'deep' ? 'high' : 'low',
-      deadlineMs: opts.deadlineMs,
+      deadlineMs: Math.max(2500, remaining() - 300),   // whatever time is left
     },
   );
 

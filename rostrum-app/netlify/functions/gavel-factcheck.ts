@@ -30,7 +30,7 @@ export const handler: Handler = async (event) => {
 
     // Netlify kills sync functions at ~10s. Give the model a hard 8s so we can
     // always return a readable JSON error instead of a platform HTML timeout.
-    const result = await runFactCheck(claim, { deadlineMs: 8000 });
+    const result = await runFactCheck(claim, { deadlineMs: 8600 });
     const { data, error } = await supabaseAdmin.from('fact_checks').insert({
       debate_id: debateId, requested_by: user.id, claim, source: 'manual',
       verdict: result.verdict, confidence: result.confidence, confidence_pct: result.confidence_pct, explanation: result.explanation, sources: result.sources,

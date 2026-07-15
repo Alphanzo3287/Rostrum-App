@@ -20,7 +20,7 @@ import { detectTopic, type Topic } from './gavelSources';
 
 const CONTACT = 'gavel@rostrums.site';
 const UA = `TheRostrum/Gavel (${CONTACT})`;
-const PER_SOURCE_TIMEOUT_MS = 4200;   // a slow index must never blow the budget
+const PER_SOURCE_TIMEOUT_MS = 3000;   // ceiling; the caller's budget can lower it
 
 export interface Evidence extends FactSource { abstract: string }
 /** Per-source outcome, so a retrieval failure is never silent again. */
@@ -64,9 +64,13 @@ export function buildSearchQuery(text: string, max = 8): string {
 }
 
 /** fetch with a hard timeout; resolves null instead of throwing. */
+/** Wall-clock ceiling for the CURRENT retrieval pass; set by retrieveEvidence
+ *  from the caller's remaining budget so a slow index can never overrun it. */
+let currentTimeout = PER_SOURCE_TIMEOUT_MS;
+
 async function get(url: string, headers: Record<string, string> = {}): Promise<any | null> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), PER_SOURCE_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), currentTimeout);
   try {
     const res = await fetch(url, { headers: { 'User-Agent': UA, ...headers }, signal: ctrl.signal });
     if (!res.ok) return null;
@@ -130,7 +134,7 @@ export async function searchCrossref(q: string, n = 3): Promise<Evidence[]> {
 /** arXiv — physics, AI, math, CS preprints (Atom XML, parsed leniently). */
 export async function searchArxiv(q: string, n = 3): Promise<Evidence[]> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), PER_SOURCE_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), currentTimeout);
   try {
     const res = await fetch(`https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(q)}&max_results=${n}`,
       { headers: { 'User-Agent': UA }, signal: ctrl.signal });
@@ -231,8 +235,13 @@ export function retrieversFor(topic: Topic, fresh: boolean): Retriever[] {
  */
 export async function retrieveEvidence(
   claim: string,
-  opts: { fresh?: boolean; limit?: number } = {},
+  opts: { fresh?: boolean; limit?: number; budgetMs?: number } = {},
 ): Promise<{ evidence: Evidence[]; diag: RetrievalDiag[]; query: string }> {
+  const started = Date.now();
+  const budget = Math.max(1200, opts.budgetMs ?? PER_SOURCE_TIMEOUT_MS);
+  const remaining = () => budget - (Date.now() - started);
+  currentTimeout = Math.min(PER_SOURCE_TIMEOUT_MS, budget);
+
   const topic = detectTopic(claim);
   const retrievers = retrieversFor(topic, !!opts.fresh);
 
@@ -257,10 +266,12 @@ export async function retrieveEvidence(
   let query = buildSearchQuery(claim, 8);
   let { all, diag } = await runAll(query);
 
-  // Loosen once if nothing matched — fewer, broader terms.
-  if (all.length === 0) {
+  // Loosen once if nothing matched — but ONLY if the budget can afford it.
+  // (An unconditional retry used to double retrieval time and blow the limit.)
+  if (all.length === 0 && remaining() > 1200) {
     const looser = buildSearchQuery(claim, 4);
     if (looser && looser !== query) {
+      currentTimeout = Math.min(currentTimeout, remaining());
       query = looser;
       const retry = await runAll(looser);
       all = retry.all;
