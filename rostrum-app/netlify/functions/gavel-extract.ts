@@ -11,6 +11,7 @@
 import type { Handler } from '@netlify/functions';
 import { supabaseAdmin, userFromToken } from '../../src/server/supabaseAdmin';
 import { runFactCheck, extractClaimFromTranscript } from '../../src/server/gavelCore';
+import { requirePro } from '../../src/server/proAccess';
 
 const COOLDOWN_MS = 35_000;   // at most one auto-check per debate per 35s
 
@@ -18,6 +19,10 @@ export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'method not allowed' });
   const user = await userFromToken(event.headers.authorization || event.headers.Authorization);
   if (!user) return json(401, { error: 'invalid session' });
+
+  // Auto-check runs on the toggler's behalf — same paid gate.
+  const gate = await requirePro(user.id);
+  if (!gate.ok) return json(402, { error: gate.reason, upgrade: true });
 
   const body = safeBody(event.body);
   const debateId = String(body.debateId || '');

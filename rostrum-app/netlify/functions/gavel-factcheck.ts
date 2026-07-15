@@ -6,6 +6,7 @@
 import type { Handler } from '@netlify/functions';
 import { supabaseAdmin, userFromToken } from '../../src/server/supabaseAdmin';
 import { runFactCheck } from '../../src/server/gavelCore';
+import { requirePro } from '../../src/server/proAccess';
 
 const MAX_CLAIM_LEN = 1000;
 const HOURLY_LIMIT = 15;
@@ -14,6 +15,10 @@ export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'method not allowed' });
   const user = await userFromToken(event.headers.authorization || event.headers.Authorization);
   if (!user) return json(401, { error: 'invalid session' });
+
+  // PAID FEATURE — enforced server-side, not just in the UI.
+  const gate = await requirePro(user.id);
+  if (!gate.ok) return json(402, { error: gate.reason, upgrade: true });
 
   const body = safeBody(event.body);
   const debateId = String(body.debateId || '');

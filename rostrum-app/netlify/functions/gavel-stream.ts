@@ -7,6 +7,7 @@
 import { userFromToken } from '../../src/server/supabaseAdmin';
 import { buildAssistPrompt, assistRequestConfig, needsFreshEvidence, type GavelMode } from '../../src/server/gavelCore';
 import { selectDomains } from '../../src/server/gavelSources';
+import { requirePro } from '../../src/server/proAccess';
 
 const MODES = new Set(['quick', 'detailed', 'deep']);
 const WEB_TOOL_VERSIONS = ['web_search_20260318', 'web_search_20260209', 'web_search_20250305'];
@@ -20,6 +21,10 @@ export default async (req: Request): Promise<Response> => {
   const user = await userFromToken(req.headers.get('authorization'));
   if (!user) return new Response('unauthorized', { status: 401 });
   if (!process.env.ANTHROPIC_API_KEY) return new Response('Gavel is not configured (missing ANTHROPIC_API_KEY).', { status: 503 });
+
+  // PAID FEATURE — enforced server-side, not just in the UI.
+  const gate = await requirePro(user.id);
+  if (!gate.ok) return new Response(gate.reason, { status: 402 });
 
   const body = await req.json().catch(() => ({} as any));
   const tool = String(body.tool || 'chat');

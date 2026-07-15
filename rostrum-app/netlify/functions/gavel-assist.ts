@@ -8,6 +8,7 @@
 import type { Handler } from '@netlify/functions';
 import { userFromToken } from '../../src/server/supabaseAdmin';
 import { assist, findSources, type GavelMode } from '../../src/server/gavelCore';
+import { requirePro } from '../../src/server/proAccess';
 
 const TOOLS = new Set(['chat', 'summarize', 'fallacies', 'steelman', 'rebuttal', 'context', 'explain']);
 const MODES = new Set(['quick', 'detailed', 'deep']);
@@ -16,6 +17,10 @@ export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'method not allowed' });
   const user = await userFromToken(event.headers.authorization || event.headers.Authorization);
   if (!user) return json(401, { error: 'invalid session' });
+
+  // PAID FEATURE — enforced server-side, not just in the UI.
+  const gate = await requirePro(user.id);
+  if (!gate.ok) return json(402, { error: gate.reason, upgrade: true });
 
   const body = safeBody(event.body);
   const rawTool = String(body.tool || 'chat');

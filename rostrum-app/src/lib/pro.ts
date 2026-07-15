@@ -29,9 +29,11 @@ export function coverGradient(accentHex?: string | null): string {
   return `linear-gradient(120deg, ${a(accentHex, '8A')}, ${a(accentHex, '40')}, ${a(accentHex, '12')})`;
 }
 
+// NOTE: these are DISPLAY values only. The amount actually charged lives in
+// netlify/functions/stripe-pro-subscribe.ts (price_cents). Keep the two in sync.
 export const PRO_PRICING: Record<ProPlanId, { label: string; price: string; per: string; note?: string }> = {
-  monthly: { label: 'Monthly', price: '$15', per: '/month' },
-  annual:  { label: 'Annual',  price: '$150', per: '/year', note: '2 months free' },
+  monthly: { label: 'Monthly', price: '$20', per: '/month' },
+  annual:  { label: 'Annual',  price: '$200', per: '/year', note: '2 months free' },
 };
 
 /** True if this profile currently has an active Pro membership. */
