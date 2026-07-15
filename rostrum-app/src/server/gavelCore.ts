@@ -281,7 +281,10 @@ export function assistRequestConfig(tool: string, mode?: GavelMode): { effort: '
 
 export interface AssistResult { answer: string; sources: FactSource[] }
 
-export async function assist(tool: string, opts: { transcript?: string; topic?: string; question?: string; mode?: GavelMode }): Promise<AssistResult> {
+export async function assist(tool: string, opts: { transcript?: string; topic?: string; question?: string; mode?: GavelMode; deadlineMs?: number }): Promise<AssistResult> {
+  const budget = opts.deadlineMs ?? 8000;
+  const started = Date.now();
+  const remaining = () => budget - (Date.now() - started);
   const cfg = assistConfig(tool, opts.mode ?? 'quick');
   const subject = [opts.question, opts.topic].filter(Boolean).join(' ').trim();
 
@@ -290,14 +293,16 @@ export async function assist(tool: string, opts: { transcript?: string; topic?: 
   // (summarize/fallacies/steelman/rebuttal) need no external facts.
   let retrieved: Evidence[] = [];
   if (WEB_GROUNDED_TOOLS.has(tool) && subject) {
-    retrieved = await retrieveEvidence(subject, { fresh: needsFreshEvidence(subject), limit: 5 })
-      .then(r => r.evidence).catch(() => []);
+    retrieved = await retrieveEvidence(subject, {
+      fresh: needsFreshEvidence(subject), limit: 5,
+      budgetMs: Math.min(2500, Math.max(1200, remaining() - 4500)),
+    }).then(r => r.evidence).catch(() => []);
   }
 
   const { system, user } = buildAssistPrompt(tool, opts, retrieved);
   const out = await claude(system, user, {
     ...cfg,
-    deadlineMs: 8000,
+    deadlineMs: Math.max(2500, remaining() - 200),
     ...(USE_WEB_TOOL && cfg.webUses
       ? { webUses: cfg.webUses, allowedDomains: selectDomains(subject, { fresh: needsFreshEvidence(subject) }) }
       : {}),

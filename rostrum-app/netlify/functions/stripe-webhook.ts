@@ -13,7 +13,28 @@ import Stripe from 'stripe';
 import { supabaseAdmin } from '../../src/server/supabaseAdmin';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+// Two Stripe endpoints point at this URL and each has its OWN signing secret:
+//   · Account endpoint  → platform events (Rostrum Pro subscriptions)
+//   · Connect endpoint  → connected-account events (tips + PPV are DIRECT
+//     charges, so their checkout.session.completed fires on the creator's
+//     account, not ours).
+// Try each configured secret; only one will match a given event. Keeping both
+// here means neither money flow can silently fail signature verification.
+const webhookSecrets = [
+  process.env.STRIPE_WEBHOOK_SECRET,
+  process.env.STRIPE_WEBHOOK_SECRET_CONNECT,
+].filter(Boolean) as string[];
+
+/** Verify against every configured secret; throw only if none match. */
+function verifyEvent(rawBody: string | Buffer, sig: string): Stripe.Event {
+  if (webhookSecrets.length === 0) throw new Error('no webhook secret configured');
+  let lastErr: any;
+  for (const secret of webhookSecrets) {
+    try { return stripe.webhooks.constructEvent(rawBody, sig, secret); }
+    catch (err) { lastErr = err; }
+  }
+  throw lastErr;
+}
 
 export const handler: Handler = async (event) => {
   const sig = event.headers['stripe-signature'] || event.headers['Stripe-Signature'];
@@ -25,7 +46,7 @@ export const handler: Handler = async (event) => {
 
   let stripeEvent: Stripe.Event;
   try {
-    stripeEvent = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+    stripeEvent = verifyEvent(rawBody, sig);
   } catch (err: any) {
     console.error('stripe-webhook signature verification failed:', err?.message);
     return { statusCode: 400, body: `webhook signature verification failed: ${err?.message}` };
