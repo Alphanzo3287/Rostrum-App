@@ -34,7 +34,13 @@ const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY!;
 /** Opt-in: the model's own web_search tool. Needs a >10s function timeout
  *  (Netlify Pro) and adds $10/1,000 searches. Off by default. */
 const USE_WEB_TOOL = process.env.GAVEL_WEB_SEARCH === '1';
-const MODEL = 'claude-sonnet-5';
+// SPEED IS THE BINDING CONSTRAINT. Netlify kills sync functions at 10s, and a
+// large model reading retrieved sources took 5-9s of that on its own.
+// The verdict step is grounded READING (judge these abstracts), not recall, so
+// the fast model does it well at a fraction of the latency and cost.
+// The large model is reserved for Deep mode, where depth is the point.
+const MODEL_FAST = 'claude-haiku-4-5-20251001';
+const MODEL_DEEP = 'claude-sonnet-5';
 const CONTACT = 'gavel@rostrums.site';
 
 // ---- Types ----
@@ -158,7 +164,7 @@ export async function runFactCheck(claimRaw: string, opts: { deadlineMs?: number
   //    query, so a natural-language sentence matches nothing.
   // Reserve the majority of the budget for the model; retrieval gets the rest.
   const { evidence, diag, query } = await retrieveEvidence(claimRaw, {
-    fresh, limit: 6, budgetMs: Math.min(3000, Math.max(1200, remaining() - 4800)),
+    fresh, limit: 4, budgetMs: Math.min(2500, Math.max(1200, remaining() - 4000)),
   });
 
   if (evidence.length === 0) {
@@ -180,7 +186,7 @@ export async function runFactCheck(claimRaw: string, opts: { deadlineMs?: number
     `[${i + 1}] (${e.kind === 'academic' ? 'scholarly' : 'reference'}) "${e.title}"` +
     `${e.year ? ` (${e.year})` : ''}, ${e.authors}${e.journal ? `, ${e.journal}` : ''}.` +
     `${e.citations ? ` Cited by ${e.citations}.` : ''}` +
-    `${e.abstract ? ` Abstract: ${e.abstract.slice(0, 480)}` : ''}`
+    `${e.abstract ? ` Abstract: ${e.abstract.slice(0, 360)}` : ''}`
   ).join('\n\n');
 
   const call = await claude(
@@ -200,6 +206,7 @@ export async function runFactCheck(claimRaw: string, opts: { deadlineMs?: number
     `explanation (2-4 neutral sentences citing source numbers like [1]), cited (array of source numbers used).`,
     `CLAIM:\n<claim>\n${claimRaw}\n</claim>\n\nSOURCES (retrieved live):\n${block}`,
     {
+      model: depth === 'deep' ? MODEL_DEEP : MODEL_FAST,
       maxTokens: depth === 'deep' ? BUDGET.verdictDeep : BUDGET.verdictFast,
       effort: depth === 'deep' ? 'high' : 'low',
       deadlineMs: Math.max(2500, remaining() - 300),   // whatever time is left
@@ -302,6 +309,7 @@ export async function assist(tool: string, opts: { transcript?: string; topic?: 
   const { system, user } = buildAssistPrompt(tool, opts, retrieved);
   const out = await claude(system, user, {
     ...cfg,
+    model: opts.mode === 'deep' ? MODEL_DEEP : MODEL_FAST,
     deadlineMs: Math.max(2500, remaining() - 200),
     ...(USE_WEB_TOOL && cfg.webUses
       ? { webUses: cfg.webUses, allowedDomains: selectDomains(subject, { fresh: needsFreshEvidence(subject) }) }
@@ -366,6 +374,8 @@ function reconstructAbstract(inv: Record<string, number[]> | null | undefined): 
 // =====================================================================
 export interface ClaudeOpts {
   maxTokens: number;
+  /** Defaults to the fast model; pass MODEL_DEEP for Deep mode. */
+  model?: string;
   effort?: 'low' | 'high';
   /** Enable Anthropic's server-side web search, capped at N searches. */
   webUses?: number;
@@ -388,9 +398,13 @@ let effortSupported = true;    // flips false once if the API rejects the param
 async function claude(system: string, userMsg: string, opts: ClaudeOpts): Promise<ClaudeResult> {
   if (!ANTHROPIC_KEY) throw new Error('Gavel is not configured — ANTHROPIC_API_KEY is missing on the server.');
 
+  const model = opts.model ?? MODEL_FAST;
+  // Adaptive thinking is a large-model feature. Never send `effort` to the fast
+  // model: a rejection would cost a retry round-trip inside a 10s budget.
+  const effort = model === MODEL_DEEP ? opts.effort : undefined;
   const body = (withEffort: boolean, withWeb: boolean, withDomains: boolean) => JSON.stringify({
-    model: MODEL, max_tokens: opts.maxTokens, system,
-    ...(withEffort && opts.effort ? { effort: opts.effort } : {}),
+    model, max_tokens: opts.maxTokens, system,
+    ...(withEffort && effort ? { effort } : {}),
     ...(withWeb && opts.webUses
       ? { tools: [{
           type: WEB_TOOL_VERSIONS[webToolIdx], name: 'web_search', max_uses: opts.webUses,
@@ -436,7 +450,7 @@ async function claude(system: string, userMsg: string, opts: ClaudeOpts): Promis
       res = await post(effortSupported, useWeb, useDomains);
       continue;
     }
-    if (effortSupported && opts.effort && /effort/i.test(errText)) {
+    if (effortSupported && effort && /effort/i.test(errText)) {
       effortSupported = false;
       res = await post(false, useWeb, useDomains);
       continue;
@@ -447,7 +461,7 @@ async function claude(system: string, userMsg: string, opts: ClaudeOpts): Promis
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
     if (res.status === 401) throw new Error('Gavel API key is invalid (401). Check ANTHROPIC_API_KEY.');
-    if (res.status === 404) throw new Error(`Gavel model "${MODEL}" is unavailable to this key (404).`);
+    if (res.status === 404) throw new Error(`Gavel model "${model}" is unavailable to this key (404).`);
     if (res.status === 429) throw new Error('Gavel is rate-limited or out of API credits (429).');
     throw new Error(`Gavel API error ${res.status}: ${errText.slice(0, 120)}`);
   }
