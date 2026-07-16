@@ -20,7 +20,9 @@ import { detectTopic, type Topic } from './gavelSources';
 
 const CONTACT = 'gavel@rostrums.site';
 const UA = `TheRostrum/Gavel (${CONTACT})`;
-const PER_SOURCE_TIMEOUT_MS = 3000;   // ceiling; the caller's budget can lower it
+// A hanging index silently steals the model's budget, so this ceiling is
+// deliberately tight: better to judge on 3 fast sources than wait for a 4th.
+const PER_SOURCE_TIMEOUT_MS = 1800;   // ceiling; the caller's budget can lower it
 
 export interface Evidence extends FactSource { abstract: string }
 /** Per-source outcome, so a retrieval failure is never silent again. */
@@ -64,13 +66,9 @@ export function buildSearchQuery(text: string, max = 8): string {
 }
 
 /** fetch with a hard timeout; resolves null instead of throwing. */
-/** Wall-clock ceiling for the CURRENT retrieval pass; set by retrieveEvidence
- *  from the caller's remaining budget so a slow index can never overrun it. */
-let currentTimeout = PER_SOURCE_TIMEOUT_MS;
-
-async function get(url: string, headers: Record<string, string> = {}): Promise<any | null> {
+async function get(url: string, timeoutMs: number, headers: Record<string, string> = {}): Promise<any | null> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), currentTimeout);
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(url, { headers: { 'User-Agent': UA, ...headers }, signal: ctrl.signal });
     if (!res.ok) return null;
@@ -85,8 +83,8 @@ const clean = (s: string) => String(s || '').replace(/<[^>]*>/g, '').replace(/\s
 // ---------------------------------------------------------------------
 
 /** OpenAlex — open scholarly index (250M+ works). */
-export async function searchOpenAlex(q: string, n = 4): Promise<Evidence[]> {
-  const d = await get(`https://api.openalex.org/works?search=${encodeURIComponent(q)}&per_page=${n}&sort=relevance_score:desc&mailto=${encodeURIComponent(CONTACT)}`);
+export async function searchOpenAlex(q: string, n = 4, ms = PER_SOURCE_TIMEOUT_MS): Promise<Evidence[]> {
+  const d = await get(`https://api.openalex.org/works?search=${encodeURIComponent(q)}&per_page=${n}&sort=relevance_score:desc&mailto=${encodeURIComponent(CONTACT)}`, ms);
   const works = Array.isArray(d?.results) ? d.results : [];
   return works.map((w: any): Evidence => {
     const auths = (w.authorships || []).slice(0, 3).map((a: any) => a.author?.display_name).filter(Boolean);
@@ -102,9 +100,9 @@ export async function searchOpenAlex(q: string, n = 4): Promise<Evidence[]> {
 }
 
 /** Semantic Scholar — AI-powered academic search. */
-export async function searchSemanticScholar(q: string, n = 4): Promise<Evidence[]> {
+export async function searchSemanticScholar(q: string, n = 4, ms = PER_SOURCE_TIMEOUT_MS): Promise<Evidence[]> {
   const fields = 'title,abstract,year,authors,venue,citationCount,url,externalIds';
-  const d = await get(`https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(q)}&limit=${n}&fields=${fields}`);
+  const d = await get(`https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(q)}&limit=${n}&fields=${fields}`, ms);
   const items = Array.isArray(d?.data) ? d.data : [];
   return items.map((p: any): Evidence => ({
     title: clean(p.title), year: p.year ?? null,
@@ -117,8 +115,8 @@ export async function searchSemanticScholar(q: string, n = 4): Promise<Evidence[
 }
 
 /** Crossref — DOI + scholarly metadata. */
-export async function searchCrossref(q: string, n = 3): Promise<Evidence[]> {
-  const d = await get(`https://api.crossref.org/works?query=${encodeURIComponent(q)}&rows=${n}&select=title,author,issued,container-title,URL,abstract,is-referenced-by-count&mailto=${encodeURIComponent(CONTACT)}`);
+export async function searchCrossref(q: string, n = 3, ms = PER_SOURCE_TIMEOUT_MS): Promise<Evidence[]> {
+  const d = await get(`https://api.crossref.org/works?query=${encodeURIComponent(q)}&rows=${n}&select=title,author,issued,container-title,URL,abstract,is-referenced-by-count&mailto=${encodeURIComponent(CONTACT)}`, t);
   const items = Array.isArray(d?.message?.items) ? d.message.items : [];
   return items.map((w: any): Evidence => ({
     title: clean(Array.isArray(w.title) ? w.title[0] : w.title),
@@ -132,9 +130,9 @@ export async function searchCrossref(q: string, n = 3): Promise<Evidence[]> {
 }
 
 /** arXiv — physics, AI, math, CS preprints (Atom XML, parsed leniently). */
-export async function searchArxiv(q: string, n = 3): Promise<Evidence[]> {
+export async function searchArxiv(q: string, n = 3, ms = PER_SOURCE_TIMEOUT_MS): Promise<Evidence[]> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), currentTimeout);
+  const timer = setTimeout(() => ctrl.abort(), ms);
   try {
     const res = await fetch(`https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(q)}&max_results=${n}`,
       { headers: { 'User-Agent': UA }, signal: ctrl.signal });
@@ -159,11 +157,11 @@ export async function searchArxiv(q: string, n = 3): Promise<Evidence[]> {
 // ---------------------------------------------------------------------
 
 /** PubMed — medicine, biology, health (NCBI E-utilities; two hops). */
-export async function searchPubMed(q: string, n = 4): Promise<Evidence[]> {
-  const s = await get(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(q)}&retmode=json&retmax=${n}&sort=relevance`);
+export async function searchPubMed(q: string, n = 4, ms = PER_SOURCE_TIMEOUT_MS): Promise<Evidence[]> {
+  const s = await get(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(q)}&retmode=json&retmax=${n}&sort=relevance`, ms);
   const ids: string[] = s?.esearchresult?.idlist ?? [];
   if (!ids.length) return [];
-  const d = await get(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${ids.join(',')}&retmode=json`);
+  const d = await get(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${ids.join(',')}&retmode=json`, ms);
   const result = d?.result;
   if (!result) return [];
   return ids.map((id): Evidence | null => {
@@ -184,8 +182,8 @@ export async function searchPubMed(q: string, n = 4): Promise<Evidence[]> {
 // Wikipedia is continuously updated, so it also covers present-day facts
 // that journals structurally cannot.
 // ---------------------------------------------------------------------
-export async function searchWikipedia(q: string, n = 3): Promise<Evidence[]> {
-  const d = await get(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&format=json&srlimit=${n}&origin=*`);
+export async function searchWikipedia(q: string, n = 3, ms = PER_SOURCE_TIMEOUT_MS): Promise<Evidence[]> {
+  const d = await get(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&format=json&srlimit=${n}&origin=*`, ms);
   const hits = d?.query?.search ?? [];
   return hits.map((h: any): Evidence => ({
     title: clean(h.title), year: null, authors: 'en.wikipedia.org', journal: 'Wikipedia',
@@ -198,17 +196,19 @@ export async function searchWikipedia(q: string, n = 3): Promise<Evidence[]> {
 // ---------------------------------------------------------------------
 // Orchestration — pick 2-3 indexes by topic and run them in PARALLEL.
 // ---------------------------------------------------------------------
-interface Retriever { name: string; fn: (q: string) => Promise<Evidence[]> }
+interface Retriever { name: string; fn: (q: string, ms: number) => Promise<Evidence[]> }
 
 export function retrieversFor(topic: Topic, fresh: boolean): Retriever[] {
-  const OA = (n: number): Retriever => ({ name: 'OpenAlex', fn: q => searchOpenAlex(q, n) });
-  const S2 = (n: number): Retriever => ({ name: 'SemanticScholar', fn: q => searchSemanticScholar(q, n) });
-  const WK = (n: number): Retriever => ({ name: 'Wikipedia', fn: q => searchWikipedia(q, n) });
-  const PM = (n: number): Retriever => ({ name: 'PubMed', fn: q => searchPubMed(q, n) });
-  const AX = (n: number): Retriever => ({ name: 'arXiv', fn: q => searchArxiv(q, n) });
+  const OA = (n: number): Retriever => ({ name: 'OpenAlex', fn: (q, ms) => searchOpenAlex(q, n, ms) });
+  const CR = (n: number): Retriever => ({ name: 'Crossref', fn: (q, ms) => searchCrossref(q, n, ms) });
+  const WK = (n: number): Retriever => ({ name: 'Wikipedia', fn: (q, ms) => searchWikipedia(q, n, ms) });
+  const PM = (n: number): Retriever => ({ name: 'PubMed', fn: (q, ms) => searchPubMed(q, n, ms) });
+  const AX = (n: number): Retriever => ({ name: 'arXiv', fn: (q, ms) => searchArxiv(q, n, ms) });
 
-  // Present-day claims: journals can't answer, so lead with continuously
-  // updated references and keep one scholarly index for corroboration.
+  // NOTE: Semantic Scholar is deliberately NOT routed. Its unauthenticated API
+  // throttles after ~2 calls and then hangs to the timeout, stealing the model's
+  // budget — the cause of "first two checks work, the rest time out". The client
+  // is kept below and can be re-enabled if you ever add an S2 API key.
   if (fresh) return [WK(4), OA(2)];
 
   switch (topic) {
@@ -216,10 +216,10 @@ export function retrieversFor(topic: Topic, fresh: boolean): Retriever[] {
     case 'science':    return [AX(3), OA(3), WK(2)];
     case 'law':
     case 'history':
-    case 'religion':   return [OA(4), WK(3), S2(3)];
-    case 'economics':  return [OA(3), S2(3), WK(2)];
-    case 'philosophy': return [OA(3), S2(3), WK(2)];
-    default:           return [OA(3), S2(3), WK(2)];
+    case 'religion':   return [OA(4), WK(3)];
+    case 'economics':  return [OA(3), WK(2), CR(2)];
+    case 'philosophy': return [OA(3), WK(2)];
+    default:           return [OA(3), WK(2), CR(2)];
   }
 }
 
@@ -240,17 +240,17 @@ export async function retrieveEvidence(
   const started = Date.now();
   const budget = Math.max(1200, opts.budgetMs ?? PER_SOURCE_TIMEOUT_MS);
   const remaining = () => budget - (Date.now() - started);
-  currentTimeout = Math.min(PER_SOURCE_TIMEOUT_MS, budget);
+  const passTimeout = Math.min(PER_SOURCE_TIMEOUT_MS, budget);
 
   const topic = detectTopic(claim);
   const retrievers = retrieversFor(topic, !!opts.fresh);
 
-  const runAll = async (q: string) => {
+  const runAll = async (q: string, ms: number) => {
     const diag: RetrievalDiag[] = [];
     const settled = await Promise.allSettled(retrievers.map(async r => {
       const t0 = Date.now();
       try {
-        const out = await r.fn(q);
+        const out = await r.fn(q, ms);
         diag.push({ source: r.name, count: out.length, ms: Date.now() - t0 });
         return out;
       } catch (e: any) {
@@ -264,16 +264,15 @@ export async function retrieveEvidence(
   };
 
   let query = buildSearchQuery(claim, 8);
-  let { all, diag } = await runAll(query);
+  let { all, diag } = await runAll(query, passTimeout);
 
   // Loosen once if nothing matched — but ONLY if the budget can afford it.
   // (An unconditional retry used to double retrieval time and blow the limit.)
   if (all.length === 0 && remaining() > 1200) {
     const looser = buildSearchQuery(claim, 4);
     if (looser && looser !== query) {
-      currentTimeout = Math.min(currentTimeout, remaining());
       query = looser;
-      const retry = await runAll(looser);
+      const retry = await runAll(looser, Math.min(passTimeout, remaining()));
       all = retry.all;
       diag = [...diag, ...retry.diag.map(d => ({ ...d, source: d.source + ' (retry)' }))];
     }

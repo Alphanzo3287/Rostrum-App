@@ -64,6 +64,9 @@ export type RequestBucket = 'fact' | 'analysis' | 'research' | 'chat';
 // ---- Central token budgets (single source of truth; truncation-safe) ----
 // With effort "low" the model spends little on thinking, so these budgets
 // leave ample room for the actual answer. "High" budgets add thinking room.
+/** The verdict call must never be starved below this, whatever retrieval did. */
+const MODEL_FLOOR_MS = 4500;
+
 const BUDGET = {
   factPrep: 900,        // JSON: checkable + query (low effort)
   verdictFast: 1500,    // JSON verdict, simple claim (low effort)
@@ -79,6 +82,9 @@ const BUDGET = {
 // at 10s, so these are tuned for speed first — 2 well-targeted searches against
 // a curated allow-list beat 4 scattershot ones.
 const WEB_USES = { verdict: 2, verdictRecent: 2, assist: 1, sources: 2 } as const;
+
+/** Below this, the model cannot realistically answer — fail fast and say so. */
+const MIN_MODEL_MS = 2800;
 
 /** Claims about the present that scholarly literature cannot answer. */
 const RECENCY_RE = /\b(current|currently|now|today|todays?|this (year|month|week)|latest|recent(ly)?|202[4-9]|20[3-9]\d|still|as of|newest|just (announced|released|passed)|president|prime minister|ceo|election|price|stock)\b/i;
@@ -163,8 +169,9 @@ export async function runFactCheck(claimRaw: string, opts: { deadlineMs?: number
   //    The claim is reduced to KEYWORDS first: these indexes full-text match the
   //    query, so a natural-language sentence matches nothing.
   // Reserve the majority of the budget for the model; retrieval gets the rest.
+  // Retrieval is capped hard: it must never eat the model's share of the budget.
   const { evidence, diag, query } = await retrieveEvidence(claimRaw, {
-    fresh, limit: 4, budgetMs: Math.min(2500, Math.max(1200, remaining() - 4000)),
+    fresh, limit: 4, budgetMs: Math.min(2000, Math.max(1200, remaining() - 4200)),
   });
 
   if (evidence.length === 0) {
@@ -189,6 +196,14 @@ export async function runFactCheck(claimRaw: string, opts: { deadlineMs?: number
     `${e.abstract ? ` Abstract: ${e.abstract.slice(0, 360)}` : ''}`
   ).join('\n\n');
 
+  // Fail FAST rather than firing a call that cannot possibly finish. The old
+  // floor (max(2500, ...)) fired a doomed request whose only outcome was the
+  // "timed out" message — which read like a bug rather than a budget problem.
+  if (remaining() < MIN_MODEL_MS) {
+    console.error('gavel: budget exhausted before verdict', JSON.stringify({ remaining: remaining(), diag }));
+    throw new Error('Gavel ran out of time fetching evidence. Please try that claim again.');
+  }
+
   const call = await claude(
     // Rules (1)-(5) are Gavel's fairness / anti-manipulation core. Do not trim.
     `You are Gavel, an impartial fact-checker for a live debate. Assess the CLAIM against the numbered SOURCES, ` +
@@ -209,12 +224,13 @@ export async function runFactCheck(claimRaw: string, opts: { deadlineMs?: number
       model: depth === 'deep' ? MODEL_DEEP : MODEL_FAST,
       maxTokens: depth === 'deep' ? BUDGET.verdictDeep : BUDGET.verdictFast,
       effort: depth === 'deep' ? 'high' : 'low',
-      deadlineMs: Math.max(2500, remaining() - 300),   // whatever time is left
+      deadlineMs: remaining() - 250,   // exactly what's left; never a doomed floor
     },
   );
 
   const v = parseJson(call.text);
   if (!v) throw new Error('Gavel could not reach a verdict. Please rephrase and try again.');
+  void retrievalMs;
 
   if (v.checkable === false) {
     return { verdict: 'NotFactual', confidence: null, confidence_pct: null,
@@ -426,7 +442,7 @@ async function claude(system: string, userMsg: string, opts: ClaudeOpts): Promis
         signal: ctrl.signal,
       });
     } catch (e: any) {
-      if (e?.name === 'AbortError') throw new Error('Gavel timed out while searching. Try Quick mode or a shorter claim.');
+      if (e?.name === 'AbortError') throw new Error(`Gavel timed out after ${deadline}ms on the ${model} call. Try again.`);
       throw new Error(`Gavel could not reach the API: ${String(e?.message || e).slice(0, 100)}`);
     } finally { clearTimeout(timer); }
   };

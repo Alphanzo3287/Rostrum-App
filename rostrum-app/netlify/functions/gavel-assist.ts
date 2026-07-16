@@ -14,6 +14,7 @@ const TOOLS = new Set(['chat', 'summarize', 'fallacies', 'steelman', 'rebuttal',
 const MODES = new Set(['quick', 'detailed', 'deep']);
 
 export const handler: Handler = async (event) => {
+  const t0 = Date.now();   // wall clock — auth + the Pro gate spend real time
   if (event.httpMethod !== 'POST') return json(405, { error: 'method not allowed' });
   const user = await userFromToken(event.headers.authorization || event.headers.Authorization);
   if (!user) return json(401, { error: 'invalid session' });
@@ -40,7 +41,8 @@ export const handler: Handler = async (event) => {
 
     const tool = TOOLS.has(rawTool) ? rawTool : 'chat';
     if ((tool === 'chat' || tool === 'explain') && !question.trim()) return json(400, { error: 'enter a claim or question' });
-    const { answer, sources } = await assist(tool, { transcript, topic, question, mode });
+    const { answer, sources } = await assist(tool, { transcript, topic, question, mode,
+      deadlineMs: Math.max(4000, 8500 - (Date.now() - t0)) });
     return json(200, { answer, sources });
   } catch (err: any) {
     console.error('gavel-assist error:', err?.message ?? err);

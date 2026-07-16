@@ -16,13 +16,11 @@ import { requirePro } from '../../src/server/proAccess';
 const COOLDOWN_MS = 35_000;   // at most one auto-check per debate per 35s
 
 export const handler: Handler = async (event) => {
+  const t0 = Date.now();
+  const elapsed = () => Date.now() - t0;
   if (event.httpMethod !== 'POST') return json(405, { error: 'method not allowed' });
   const user = await userFromToken(event.headers.authorization || event.headers.Authorization);
   if (!user) return json(401, { error: 'invalid session' });
-
-  // Auto-check runs on the toggler's behalf — same paid gate.
-  const gate = await requirePro(user.id);
-  if (!gate.ok) return json(402, { error: gate.reason, upgrade: true });
 
   const body = safeBody(event.body);
   const debateId = String(body.debateId || '');
@@ -31,12 +29,18 @@ export const handler: Handler = async (event) => {
   if (transcript.length < 40) return json(200, { skipped: 'not enough transcript yet' });
 
   try {
-    // Per-debate cooldown: skip if an auto-check ran very recently.
+    // Auto-check runs on the toggler's behalf — same paid gate. Run it
+    // CONCURRENTLY with the cooldown read; both are independent DB round-trips
+    // and this function shares the same ~10s ceiling.
     const since = new Date(Date.now() - COOLDOWN_MS).toISOString();
-    const { count } = await supabaseAdmin.from('fact_checks')
-      .select('id', { count: 'exact', head: true })
-      .eq('debate_id', debateId).eq('source', 'auto').gte('created_at', since);
-    if ((count ?? 0) > 0) return json(200, { skipped: 'cooldown' });
+    const [gate, cool] = await Promise.all([
+      requirePro(user.id),
+      supabaseAdmin.from('fact_checks')
+        .select('id', { count: 'exact', head: true })
+        .eq('debate_id', debateId).eq('source', 'auto').gte('created_at', since),
+    ]);
+    if (!gate.ok) return json(402, { error: gate.reason, upgrade: true });
+    if ((cool.count ?? 0) > 0) return json(200, { skipped: 'cooldown' });
 
     const claim = await extractClaimFromTranscript(transcript);
     if (!claim) return json(200, { skipped: 'no check-worthy claim' });
@@ -48,9 +52,13 @@ export const handler: Handler = async (event) => {
     const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
     if ((recent ?? []).some(r => norm(r.claim) === norm(claim))) return json(200, { skipped: 'duplicate' });
 
-    const result = await runFactCheck(claim, { deadlineMs: 7000 });
+    // Only the time genuinely left: this path also spends a call extracting
+    // the claim before the pipeline runs.
+    const result = await runFactCheck(claim, { deadlineMs: Math.max(4000, 8500 - elapsed() - 500) });
     const { data, error } = await supabaseAdmin.from('fact_checks').insert({
-      debate_id: debateId, requested_by: null, claim, source: 'auto',
+      debate_id: debateId, requested_by: null, claim,
+      claim_norm: claim.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim(),
+      source: 'auto',
       verdict: result.verdict, confidence: result.confidence, confidence_pct: result.confidence_pct, explanation: result.explanation, sources: result.sources,
     }).select().single();
     if (error) return json(500, { error: 'could not save the verdict' });
