@@ -18,7 +18,7 @@ let webToolSupported = true;
 export default async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') return new Response('method not allowed', { status: 405 });
 
-  const user = await userFromToken(req.headers.get('authorization'));
+  const user = await userFromToken(req.headers.get('authorization') ?? undefined);
   if (!user) return new Response('unauthorized', { status: 401 });
   if (!process.env.ANTHROPIC_API_KEY) return new Response('Gavel is not configured (missing ANTHROPIC_API_KEY).', { status: 503 });
 

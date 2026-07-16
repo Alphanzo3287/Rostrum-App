@@ -45,9 +45,10 @@ export const handler: Handler = async (event) => {
       deadlineMs: Math.max(4000, 8500 - (Date.now() - t0)) });
     return json(200, { answer, sources });
   } catch (err: any) {
-    console.error('gavel-assist error:', err?.message ?? err);
-    const msg = String(err?.message || '');
-    return json(503, { error: msg.startsWith('Gavel') ? msg : 'Gavel is temporarily unavailable. Please try again.' });
+    const raw = String(err?.message ?? err);
+    console.error('gavel-assist error:', raw, '| stack:', String(err?.stack ?? '').slice(0, 400));
+    const msg = raw.startsWith('Gavel') ? raw : `Gavel hit an unexpected error: ${raw.slice(0, 180)}`;
+    return json(503, { error: msg });
   }
 };
 

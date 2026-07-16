@@ -116,7 +116,7 @@ export async function searchSemanticScholar(q: string, n = 4, ms = PER_SOURCE_TI
 
 /** Crossref — DOI + scholarly metadata. */
 export async function searchCrossref(q: string, n = 3, ms = PER_SOURCE_TIMEOUT_MS): Promise<Evidence[]> {
-  const d = await get(`https://api.crossref.org/works?query=${encodeURIComponent(q)}&rows=${n}&select=title,author,issued,container-title,URL,abstract,is-referenced-by-count&mailto=${encodeURIComponent(CONTACT)}`, t);
+  const d = await get(`https://api.crossref.org/works?query=${encodeURIComponent(q)}&rows=${n}&select=title,author,issued,container-title,URL,abstract,is-referenced-by-count&mailto=${encodeURIComponent(CONTACT)}`, ms);
   const items = Array.isArray(d?.message?.items) ? d.message.items : [];
   return items.map((w: any): Evidence => ({
     title: clean(Array.isArray(w.title) ? w.title[0] : w.title),

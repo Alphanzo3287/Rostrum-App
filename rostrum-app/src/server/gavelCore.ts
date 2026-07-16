@@ -230,7 +230,6 @@ export async function runFactCheck(claimRaw: string, opts: { deadlineMs?: number
 
   const v = parseJson(call.text);
   if (!v) throw new Error('Gavel could not reach a verdict. Please rephrase and try again.');
-  void retrievalMs;
 
   if (v.checkable === false) {
     return { verdict: 'NotFactual', confidence: null, confidence_pct: null,

@@ -89,9 +89,14 @@ export const handler: Handler = async (event) => {
     if (error) return json(500, { error: 'could not save the verdict' });
     return json(200, { factCheck: data });
   } catch (err: any) {
-    console.error('gavel-factcheck error:', err?.message ?? err, `(${elapsed()}ms elapsed)`);
-    const msg = String(err?.message || '');
-    return json(503, { error: msg.startsWith('Gavel') ? msg : 'Gavel is temporarily unavailable. Please try again.' });
+    // NEVER hide the real reason. A generic "temporarily unavailable" made this
+    // feature impossible to debug: it swallowed the one piece of information
+    // needed to fix it. Gavel is Pro-gated and these messages never contain
+    // secrets, so surface the truth to the person who hit it.
+    const raw = String(err?.message ?? err);
+    console.error('gavel-factcheck error:', raw, '| stack:', String(err?.stack ?? '').slice(0, 400), `| ${elapsed()}ms`);
+    const msg = raw.startsWith('Gavel') ? raw : `Gavel hit an unexpected error: ${raw.slice(0, 180)}`;
+    return json(503, { error: msg });
   }
 };
 
