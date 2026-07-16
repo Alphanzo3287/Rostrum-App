@@ -7,30 +7,45 @@
 // =====================================================================
 import type { Handler } from '@netlify/functions';
 import { userFromToken } from '../../src/server/supabaseAdmin';
-import { assist } from '../../src/server/gavelCore';
+import { assist, findSources, type GavelMode } from '../../src/server/gavelCore';
+import { requirePro } from '../../src/server/proAccess';
 
-const TOOLS = new Set(['chat', 'summarize', 'fallacies', 'steelman', 'rebuttal', 'context']);
-const HOURLY_LIMIT_NOTE = true; void HOURLY_LIMIT_NOTE;
+const TOOLS = new Set(['chat', 'summarize', 'fallacies', 'steelman', 'rebuttal', 'context', 'explain']);
+const MODES = new Set(['quick', 'detailed', 'deep']);
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'method not allowed' });
   const user = await userFromToken(event.headers.authorization || event.headers.Authorization);
   if (!user) return json(401, { error: 'invalid session' });
 
+  // PAID FEATURE — enforced server-side, not just in the UI.
+  const gate = await requirePro(user.id);
+  if (!gate.ok) return json(402, { error: gate.reason, upgrade: true });
+
   const body = safeBody(event.body);
-  const tool = TOOLS.has(String(body.tool)) ? String(body.tool) : 'chat';
+  const rawTool = String(body.tool || 'chat');
+  const mode = (MODES.has(String(body.mode)) ? String(body.mode) : 'quick') as GavelMode;
   const question = String(body.question || '').slice(0, 1000);
   const transcript = String(body.transcript || '').slice(0, 8000);
   const topic = String(body.topic || '').slice(0, 400);
 
-  if (tool === 'chat' && !question.trim()) return json(400, { error: 'ask a question' });
-
   try {
-    const answer = await assist(tool, { transcript, topic, question });
-    return json(200, { answer });
+    // Retrieval-only: return real scholarly sources for the query (or topic).
+    if (rawTool === 'sources') {
+      const q = (question.trim() || topic.trim());
+      if (!q) return json(400, { error: 'enter a claim or topic to find sources for' });
+      const sources = await findSources(q);
+      return json(200, { sources });
+    }
+
+    const tool = TOOLS.has(rawTool) ? rawTool : 'chat';
+    if ((tool === 'chat' || tool === 'explain') && !question.trim()) return json(400, { error: 'enter a claim or question' });
+    const { answer, sources } = await assist(tool, { transcript, topic, question, mode });
+    return json(200, { answer, sources });
   } catch (err: any) {
     console.error('gavel-assist error:', err?.message ?? err);
-    return json(500, { error: 'Gavel is temporarily unavailable. Please try again.' });
+    const msg = String(err?.message || '');
+    return json(503, { error: msg.startsWith('Gavel') ? msg : 'Gavel is temporarily unavailable. Please try again.' });
   }
 };
 

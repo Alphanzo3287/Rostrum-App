@@ -6,6 +6,7 @@
 import type { Handler } from '@netlify/functions';
 import { supabaseAdmin, userFromToken } from '../../src/server/supabaseAdmin';
 import { runFactCheck } from '../../src/server/gavelCore';
+import { requirePro } from '../../src/server/proAccess';
 
 const MAX_CLAIM_LEN = 1000;
 const HOURLY_LIMIT = 15;
@@ -14,6 +15,10 @@ export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'method not allowed' });
   const user = await userFromToken(event.headers.authorization || event.headers.Authorization);
   if (!user) return json(401, { error: 'invalid session' });
+
+  // PAID FEATURE — enforced server-side, not just in the UI.
+  const gate = await requirePro(user.id);
+  if (!gate.ok) return json(402, { error: gate.reason, upgrade: true });
 
   const body = safeBody(event.body);
   const debateId = String(body.debateId || '');
@@ -28,7 +33,9 @@ export const handler: Handler = async (event) => {
       .select('id', { count: 'exact', head: true }).eq('requested_by', user.id).gte('created_at', since);
     if ((count ?? 0) >= HOURLY_LIMIT) return json(429, { error: "you've reached the hourly fact-check limit — try again later" });
 
-    const result = await runFactCheck(claim);
+    // Netlify kills sync functions at ~10s. Give the model a hard 8s so we can
+    // always return a readable JSON error instead of a platform HTML timeout.
+    const result = await runFactCheck(claim, { deadlineMs: 8600 });
     const { data, error } = await supabaseAdmin.from('fact_checks').insert({
       debate_id: debateId, requested_by: user.id, claim, source: 'manual',
       verdict: result.verdict, confidence: result.confidence, confidence_pct: result.confidence_pct, explanation: result.explanation, sources: result.sources,
@@ -37,7 +44,8 @@ export const handler: Handler = async (event) => {
     return json(200, { factCheck: data });
   } catch (err: any) {
     console.error('gavel-factcheck error:', err?.message ?? err);
-    return json(500, { error: 'Gavel is temporarily unavailable. Please try again.' });
+    const msg = String(err?.message || '');
+    return json(503, { error: msg.startsWith('Gavel') ? msg : 'Gavel is temporarily unavailable. Please try again.' });
   }
 };
 

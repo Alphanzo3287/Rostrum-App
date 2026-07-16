@@ -15,8 +15,8 @@ const SITE = process.env.PUBLIC_SITE_URL || 'https://rostrums.site';
 // Pricing lives here so it can never be tampered with from the client.
 // Adjust these freely — they're the single source of truth for Pro pricing.
 export const PRO_PLANS = {
-  monthly: { price_cents: 1500,  interval: 'month' as const, interval_count: 1, label: 'Rostrum Pro · Monthly' },
-  annual:  { price_cents: 15000, interval: 'year'  as const, interval_count: 1, label: 'Rostrum Pro · Annual' },
+  monthly: { price_cents: 2000,  interval: 'month' as const, interval_count: 1, label: 'Rostrum Pro · Monthly' },
+  annual:  { price_cents: 20000, interval: 'year'  as const, interval_count: 1, label: 'Rostrum Pro · Annual' },
 } as const;
 export type ProPlanId = keyof typeof PRO_PLANS;
 

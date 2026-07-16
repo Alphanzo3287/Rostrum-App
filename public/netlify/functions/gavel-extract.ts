@@ -11,6 +11,7 @@
 import type { Handler } from '@netlify/functions';
 import { supabaseAdmin, userFromToken } from '../../src/server/supabaseAdmin';
 import { runFactCheck, extractClaimFromTranscript } from '../../src/server/gavelCore';
+import { requirePro } from '../../src/server/proAccess';
 
 const COOLDOWN_MS = 35_000;   // at most one auto-check per debate per 35s
 
@@ -18,6 +19,10 @@ export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'method not allowed' });
   const user = await userFromToken(event.headers.authorization || event.headers.Authorization);
   if (!user) return json(401, { error: 'invalid session' });
+
+  // Auto-check runs on the toggler's behalf — same paid gate.
+  const gate = await requirePro(user.id);
+  if (!gate.ok) return json(402, { error: gate.reason, upgrade: true });
 
   const body = safeBody(event.body);
   const debateId = String(body.debateId || '');
@@ -43,7 +48,7 @@ export const handler: Handler = async (event) => {
     const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
     if ((recent ?? []).some(r => norm(r.claim) === norm(claim))) return json(200, { skipped: 'duplicate' });
 
-    const result = await runFactCheck(claim);
+    const result = await runFactCheck(claim, { deadlineMs: 7000 });
     const { data, error } = await supabaseAdmin.from('fact_checks').insert({
       debate_id: debateId, requested_by: null, claim, source: 'auto',
       verdict: result.verdict, confidence: result.confidence, confidence_pct: result.confidence_pct, explanation: result.explanation, sources: result.sources,
