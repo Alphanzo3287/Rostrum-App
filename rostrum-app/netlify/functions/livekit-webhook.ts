@@ -47,21 +47,28 @@ export const handler: Handler = async (event) => {
   // ── Egress (recording) ──────────────────────────────────────────────
   if (e.event === 'egress_ended') {
     const fr = e.egressInfo?.fileResults?.[0] ?? e.egressInfo?.file;
-    // S3/R2 uploads populate `filename` (the object key); `location` is often
-    // empty for S3 outputs. Accept either so the library link always lands.
-    const loc = fr?.location || fr?.filename;
-    if (loc && room) {
+    // Prefer the bare object key; objectKey() in replay.ts handles either form.
+    const loc = fr?.filename || fr?.location;
+    // egress_ended payloads can arrive with no room on the event OR the egress
+    // info. The filename embeds it (livekit-control names files `${room}-${ts}.mp4`),
+    // so recover it from there as a last resort.
+    let egRoom: string = room || e.egressInfo?.roomName || (e.egressInfo as any)?.room_name || '';
+    if (!egRoom && fr?.filename) {
+      const m = String(fr.filename).match(/^(.+)-\d+\.mp4$/);
+      if (m) egRoom = m[1];
+    }
+    if (loc && egRoom) {
       await supabaseAdmin.from('debates')
-        .update({ recording_url: loc }).eq('livekit_room', room);
+        .update({ recording_url: loc }).eq('livekit_room', egRoom);
       try { await supabaseAdmin.from('webhook_log').insert({
         has_auth: true, body_len: 0, sig_ok: true,
-        event_type: 'recording_saved', note: `room=${room} loc=${String(loc).slice(0, 180)}`,
+        event_type: 'recording_saved', note: `room=${egRoom} loc=${String(loc).slice(0, 180)}`,
       }); } catch { /* diagnostics must never break the webhook */ }
     } else {
       // Never fail silently again: record exactly what the payload offered.
       try { await supabaseAdmin.from('webhook_log').insert({
         has_auth: true, body_len: 0, sig_ok: true,
-        event_type: 'egress_no_location', note: `room=${room ?? '?'} fr=${JSON.stringify(fr ?? null).slice(0, 220)}`,
+        event_type: 'egress_no_location', note: `room=${egRoom || '?'} fr=${JSON.stringify(fr ?? null).slice(0, 220)}`,
       }); } catch { /* noop */ }
     }
   }
