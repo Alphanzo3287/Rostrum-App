@@ -144,10 +144,11 @@ export function useRoom(debateId: string | null): UseRoom {
     const room = roomRef.current;
     if (!room || !room.localParticipant.permissions?.canPublish) return; // audience can't
     const next = !micOn;
-    // Honour the participant's saved microphone choice when turning it on.
-    const mic = savedMicId();
-    await room.localParticipant.setMicrophoneEnabled(
-      next, mic ? { deviceId: mic } : undefined);
+    await room.localParticipant.setMicrophoneEnabled(next);
+    // Apply the saved device (if any) once the track exists. Passing the
+    // deviceId INTO setMicrophoneEnabled has a fragile options shape, so we
+    // switch explicitly here — the reliable path the gear already uses.
+    if (next) { const mic = savedMicId(); if (mic) { try { await room.switchActiveDevice('audioinput', mic); } catch { /* device gone */ } } }
     setMicOn(next);
   }, [micOn]);
 
@@ -155,9 +156,8 @@ export function useRoom(debateId: string | null): UseRoom {
     const room = roomRef.current;
     if (!room || !room.localParticipant.permissions?.canPublish) return;
     const next = !camOn;
-    const cam = savedCameraId();
-    await room.localParticipant.setCameraEnabled(
-      next, cam ? { deviceId: cam } : undefined);
+    await room.localParticipant.setCameraEnabled(next);
+    if (next) { const cam = savedCameraId(); if (cam) { try { await room.switchActiveDevice('videoinput', cam); } catch { /* device gone */ } } }
     setCamOn(next);
   }, [camOn]);
 
