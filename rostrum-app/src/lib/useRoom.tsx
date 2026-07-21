@@ -9,6 +9,7 @@ import {
   type RemoteTrack, type Participant, type TrackPublication,
 } from 'livekit-client';
 import { getRoomToken } from './livekit';
+import { savedCameraId, savedMicId } from './useMediaDevices';
 
 export interface RoomMember {
   identity: string;
@@ -36,6 +37,8 @@ interface UseRoom {
   toggleMic: () => Promise<void>;
   toggleCam: () => Promise<void>;
   setScreenShare: (on: boolean) => Promise<boolean>;
+  switchCamera: (deviceId: string) => Promise<void>;
+  switchMic: (deviceId: string) => Promise<void>;
   room: Room | null;
 }
 
@@ -141,7 +144,10 @@ export function useRoom(debateId: string | null): UseRoom {
     const room = roomRef.current;
     if (!room || !room.localParticipant.permissions?.canPublish) return; // audience can't
     const next = !micOn;
-    await room.localParticipant.setMicrophoneEnabled(next);
+    // Honour the participant's saved microphone choice when turning it on.
+    const mic = savedMicId();
+    await room.localParticipant.setMicrophoneEnabled(
+      next, mic ? { deviceId: mic } : undefined);
     setMicOn(next);
   }, [micOn]);
 
@@ -149,9 +155,24 @@ export function useRoom(debateId: string | null): UseRoom {
     const room = roomRef.current;
     if (!room || !room.localParticipant.permissions?.canPublish) return;
     const next = !camOn;
-    await room.localParticipant.setCameraEnabled(next);
+    const cam = savedCameraId();
+    await room.localParticipant.setCameraEnabled(
+      next, cam ? { deviceId: cam } : undefined);
     setCamOn(next);
   }, [camOn]);
+
+  // Live device switching — used by the in-room gear. LiveKit republishes the
+  // track on the new device without dropping the connection.
+  const switchCamera = useCallback(async (deviceId: string) => {
+    const room = roomRef.current;
+    if (!room) return;
+    try { await room.switchActiveDevice('videoinput', deviceId); } catch { /* device gone */ }
+  }, []);
+  const switchMic = useCallback(async (deviceId: string) => {
+    const room = roomRef.current;
+    if (!room) return;
+    try { await room.switchActiveDevice('audioinput', deviceId); } catch { /* device gone */ }
+  }, []);
 
   const setScreenShare = useCallback(async (on: boolean) => {
     const room = roomRef.current;
@@ -160,5 +181,5 @@ export function useRoom(debateId: string | null): UseRoom {
     catch { return false; }
   }, []);
 
-  return { members, state, canPublish, micOn, camOn, toggleMic, toggleCam, setScreenShare, room: roomRef.current };
+  return { members, state, canPublish, micOn, camOn, toggleMic, toggleCam, setScreenShare, switchCamera, switchMic, room: roomRef.current };
 }
