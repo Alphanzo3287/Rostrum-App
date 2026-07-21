@@ -46,10 +46,23 @@ export const handler: Handler = async (event) => {
 
   // ── Egress (recording) ──────────────────────────────────────────────
   if (e.event === 'egress_ended') {
-    const loc = e.egressInfo?.fileResults?.[0]?.location ?? e.egressInfo?.file?.location;
+    const fr = e.egressInfo?.fileResults?.[0] ?? e.egressInfo?.file;
+    // S3/R2 uploads populate `filename` (the object key); `location` is often
+    // empty for S3 outputs. Accept either so the library link always lands.
+    const loc = fr?.location || fr?.filename;
     if (loc && room) {
       await supabaseAdmin.from('debates')
         .update({ recording_url: loc }).eq('livekit_room', room);
+      try { await supabaseAdmin.from('webhook_log').insert({
+        has_auth: true, body_len: 0, sig_ok: true,
+        event_type: 'recording_saved', note: `room=${room} loc=${String(loc).slice(0, 180)}`,
+      }); } catch { /* diagnostics must never break the webhook */ }
+    } else {
+      // Never fail silently again: record exactly what the payload offered.
+      try { await supabaseAdmin.from('webhook_log').insert({
+        has_auth: true, body_len: 0, sig_ok: true,
+        event_type: 'egress_no_location', note: `room=${room ?? '?'} fr=${JSON.stringify(fr ?? null).slice(0, 220)}`,
+      }); } catch { /* noop */ }
     }
   }
 
