@@ -309,8 +309,8 @@ function Stage({ layout, featured, debateId, cams, presenter, screenTrack, prese
   screenTrack?: any; presentType: 'slides'|'screen'|null; hasScreenShare: boolean; hasSlides: boolean;
 }) {
   const camTile = (m: any, big = true) => m
-    ? <><VideoTile member={m} active size={big ? 'stage' : 'tile'} />{big && <NamePlate m={m} />}</>
-    : <Placeholder text="Waiting for the floor…" />;
+    ? <VideoTile member={m} active size={big ? 'stage' : 'tile'} />
+    : <Placeholder text="Waiting for the floor…" />;;
 
   // The shared content pane (slides or live screen).
   const ScreenContent = hasScreenShare
