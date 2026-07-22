@@ -21,6 +21,7 @@ export function DevicePicker({
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [level, setLevel] = useState(0);          // 0..1 mic level
+  const [err, setErr] = useState<string | null>(null);
   const rafRef = useRef<number | null>(null);
   const acRef = useRef<AudioContext | null>(null);
 
@@ -32,16 +33,39 @@ export function DevicePicker({
     let cancelled = false;
     (async () => {
       stopPreview();
+      // Soft deviceId preference (NOT { exact } — exact hard-fails if the
+      // device is briefly busy, which blacks out the whole preview).
+      const constraints: MediaStreamConstraints = {
+        video: dev.cameraId ? { deviceId: dev.cameraId } : true,
+        audio: dev.micId ? { deviceId: dev.micId } : true,
+      };
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: dev.cameraId ? { deviceId: { exact: dev.cameraId } } : true,
-          audio: dev.micId ? { deviceId: { exact: dev.micId } } : true,
-        });
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
         if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); }
         startMeter(stream);
-      } catch { /* denied or device busy */ }
+        setErr(null);
+      } catch (e: any) {
+        // Don't fail silently. Retry once with a bare (unconstrained) request —
+        // handles the case where a specific deviceId is momentarily unavailable.
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
+          streamRef.current = stream;
+          if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); }
+          startMeter(stream);
+          setErr(null);
+        } catch (e2: any) {
+          const name = e2?.name || e?.name || '';
+          setErr(
+            name === 'NotAllowedError' ? 'Camera / mic permission was blocked. Click the camera icon in your browser\u2019s address bar to allow it, then reopen.'
+            : name === 'NotReadableError' ? 'Your camera or mic is in use by another app or tab. Close it (Zoom, Meet, another Rostrum tab) and reopen.'
+            : name === 'NotFoundError' ? 'No camera or microphone was found on this device.'
+            : 'Could not start your camera / mic. Check your browser permissions and that no other app is using them.'
+          );
+        }
+      }
     })();
     return () => { cancelled = true; stopPreview(); };
   }, [dev.cameraId, dev.micId]); // eslint-disable-line
@@ -102,10 +126,10 @@ export function DevicePicker({
         }}>
           <video ref={videoRef} muted playsInline
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-          {dev.permission === 'denied' && (
+          {(err || dev.permission === 'denied') && (
             <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
-              color: C.faint, fontSize: 13, textAlign: 'center', padding: 20 }}>
-              Camera / mic access blocked. Allow it in your browser's address bar, then reopen.
+              color: C.faint, fontSize: 13, textAlign: 'center', padding: 20, lineHeight: 1.5 }}>
+              {err || 'Camera / mic access blocked. Allow it in your browser\u2019s address bar, then reopen.'}
             </div>
           )}
         </div>
