@@ -52,7 +52,6 @@ interface Props {
   beginLabel?: string;
   hideYouTube?: boolean;
   hideCamera?: boolean;
-  deviceGear?: React.ReactNode;   // camera/mic settings button (in-room picker)
 }
 
 export function RoleDock(p: Props) {
@@ -94,7 +93,6 @@ export function RoleDock(p: Props) {
         <Btn active={p.micOn} disabled={!p.canPublish}
           label={p.canPublish ? (p.micOn ? 'Mic on' : 'Mic off') : 'Mic'} onClick={p.toggleMic} accent={C.jade} />
         {!p.hideCamera && <Btn active={p.camOn} disabled={!p.canPublish} label="Camera" onClick={p.toggleCam} />}
-        {p.canPublish && p.deviceGear}
         <Sep />
         {p.hasSegments !== false && (
           <>
@@ -139,7 +137,6 @@ export function RoleDock(p: Props) {
           label={p.canPublish ? (p.micOn ? 'Mic on' : 'Mic off') : 'Not your turn'}
           onClick={p.toggleMic} accent={C.jade} />
         <Btn active={p.camOn} disabled={!p.canPublish} label="Camera" onClick={p.toggleCam} />
-        {p.canPublish && p.deviceGear}
         <Sep />
         <Note>
           {p.canPublish ? 'You hold the floor — opponents are muted until their segment.'
@@ -155,7 +152,6 @@ export function RoleDock(p: Props) {
         <Btn label="Scorecard" accent={C.gold} active onClick={() => p.setTab('score')} />
         <Btn disabled={!p.canPublish} label="Mic (Q&A)" onClick={p.toggleMic} />
         <Btn active={p.camOn} disabled={!p.canPublish} label="Camera" onClick={p.toggleCam} />
-        {p.canPublish && p.deviceGear}
         <Sep />
         <Note>Submit your ballot before closing statements end.</Note>
       </Dock>

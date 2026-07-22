@@ -25,14 +25,12 @@ import { getDebateReward, type DebateReward } from '../lib/rewards';
 import { DebateRewardCard } from '../components/DebateRewardCard';
 import { GiftModal } from '../components/GiftModal';
 import { VideoTile } from '../components/VideoTile';
-import { GreenRoom } from '../components/GreenRoom';
 import { SlideStage } from '../components/SlideStage';
 import { ScreenTile } from '../components/ScreenTile';
 import { SafePanel } from '../components/SafePanel';
 import { ContextRail } from '../components/ContextRail';
 import { GavelFab } from '../components/GavelFab';
 import { RoleDock } from '../components/RoleDock';
-import { DeviceGear } from '../components/DeviceGear';
 import { WinnerOverlay } from '../components/WinnerOverlay';
 import { BroadcastBar } from '../components/BroadcastBar';
 import { ShareButton } from '../components/ShareSheet';
@@ -57,9 +55,6 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
   const openProfile = (handle?: string | null) => { if (handle) nav(`/u/${handle}`); };
   const [tab, setTab] = useState('vote');
   const [railOpen, setRailOpen] = useState(true);   // mobile: collapse the bottom panel to reveal the stage
-  // Pre-join green room: publishers confirm camera/mic before entering.
-  // Shown once per chamber visit; pure spectators can skip via "Back".
-  const [readied, setReadied] = useState(false);
 
   // Mirror the live broadcast composition so the host's preview matches what
   // YouTube sees, and the layout strip gives immediate visual feedback.
@@ -233,19 +228,8 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
     try { const t = await castVote(debateId, side); setTally(t); } catch { /* noop */ }
   };
 
-  // Green room shows for anyone who can publish (host/debater/moderator/judge)
-  // and hasn't yet confirmed devices this visit. Audience skips it entirely.
-  const showGreenRoom = room.canPublish && !readied;
-
   return (
     <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', background:C.base }}>
-      {showGreenRoom && (
-        <GreenRoom
-          motion={dz.debate?.motion ?? 'Live debate'}
-          onEnter={() => setReadied(true)}
-          onCancel={() => setReadied(true)}
-        />
-      )}
       {reward && <DebateRewardCard reward={reward} onContinue={() => { setReward(null); onEnded(); }} />}
       {/* ---- tally bar ---- */}
       <div style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 20px',
@@ -399,7 +383,6 @@ export function ChamberScreen({ debateId, onLeave, onEnded }: {
         camOn={room.camOn}
         toggleMic={room.toggleMic}
         toggleCam={room.toggleCam}
-        deviceGear={<DeviceGear onCamera={room.switchCamera} onMic={room.switchMic} />}
         onGoLive={() => dz.goLive(room.members)}
         onNextSegment={() => dz.nextSegment(room.members)}
         onToggleTimer={dz.toggleTimer}
