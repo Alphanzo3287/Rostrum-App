@@ -11,6 +11,19 @@ import {
 import { getRoomToken } from './livekit';
 import { savedCameraId, savedMicId } from './useMediaDevices';
 
+// Turn a getUserMedia/SDK failure into a message a presenter can act on.
+// Silent rejections here are what made "dead" mic/cam buttons undiagnosable.
+function mediaErrorMessage(kind: 'camera' | 'microphone', e: any): string {
+  const name = e?.name || e?.cause?.name || '';
+  if (name === 'NotAllowedError' || name === 'SecurityError')
+    return `Your browser is blocking ${kind} access for this site.\n\nClick the icon next to the address bar → Site settings → set Camera and Microphone to Allow, then reload.`;
+  if (name === 'NotReadableError' || name === 'AbortError')
+    return `Your ${kind} is in use by another app or tab (Zoom, Meet, OBS…). Close it and try again.`;
+  if (name === 'NotFoundError' || name === 'OverconstrainedError')
+    return `No usable ${kind} was found. Check it's connected, then pick it via the ⚙ settings button.`;
+  return `Couldn't start your ${kind} (${name || 'unknown error'}). Check browser permissions and that no other app is using it.`;
+}
+
 export interface RoomMember {
   identity: string;
   name: string;
@@ -144,7 +157,12 @@ export function useRoom(debateId: string | null): UseRoom {
     const room = roomRef.current;
     if (!room || !room.localParticipant.permissions?.canPublish) return; // audience can't
     const next = !micOn;
-    await room.localParticipant.setMicrophoneEnabled(next);
+    try {
+      await room.localParticipant.setMicrophoneEnabled(next);
+    } catch (e: any) {
+      alert(mediaErrorMessage('microphone', e));
+      return;
+    }
     // Apply the saved device (if any) once the track exists. Passing the
     // deviceId INTO setMicrophoneEnabled has a fragile options shape, so we
     // switch explicitly here — the reliable path the gear already uses.
@@ -156,7 +174,12 @@ export function useRoom(debateId: string | null): UseRoom {
     const room = roomRef.current;
     if (!room || !room.localParticipant.permissions?.canPublish) return;
     const next = !camOn;
-    await room.localParticipant.setCameraEnabled(next);
+    try {
+      await room.localParticipant.setCameraEnabled(next);
+    } catch (e: any) {
+      alert(mediaErrorMessage('camera', e));
+      return;
+    }
     if (next) { const cam = savedCameraId(); if (cam) { try { await room.switchActiveDevice('videoinput', cam); } catch { /* device gone */ } } }
     setCamOn(next);
   }, [camOn]);
