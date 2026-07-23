@@ -86,6 +86,17 @@ export const handler: Handler = async (event) => {
       await lapseProSubscription(stripeEvent.data.object as Stripe.Subscription);
     }
 
+    // ── Refunds & disputes ──────────────────────────────────────────────
+    // Without this, a refunded or disputed payment leaves its transactions
+    // row at 'succeeded' forever: the Earnings screen and admin revenue
+    // overstate, and the ledger-vs-Stripe reconciliation silently breaks.
+    // Direct charges (tips, PPV) emit these on the CONNECTED account, so
+    // they arrive via the Connect endpoint with event.account set; Pro
+    // refunds arrive on the platform endpoint without it.
+    if (stripeEvent.type === 'charge.refunded' || stripeEvent.type === 'charge.dispute.created') {
+      await handleChargeReversal(stripeEvent);
+    }
+
     return { statusCode: 200, body: 'ok' };
   } catch (err: any) {
     console.error('stripe-webhook processing error:', err?.message ?? err);
@@ -257,4 +268,52 @@ async function recordEarning(o: {
   if (error && !/duplicate key|unique/i.test(error.message ?? '')) {
     console.error('stripe-webhook: could not record earning', error.message, o);
   }
+}
+
+/** Mark the matching ledger row refunded/disputed. my_earnings and the
+ * admin financials only count status='succeeded', so flipping the status
+ * makes every earnings number self-correct with no other changes. */
+async function handleChargeReversal(event: Stripe.Event) {
+  const obj = event.data.object as any;
+  const isRefund = event.type === 'charge.refunded';
+
+  // Partial refunds exist but the ledger has no partial-amount column; only
+  // a FULL refund flips the row. Partials are logged for manual follow-up.
+  if (isRefund && obj.amount_refunded < obj.amount) {
+    console.warn('stripe-webhook: PARTIAL refund needs manual review', {
+      charge: obj.id, refunded: obj.amount_refunded, total: obj.amount,
+    });
+    return;
+  }
+
+  const paymentIntent = typeof obj.payment_intent === 'string'
+    ? obj.payment_intent : obj.payment_intent?.id;
+  if (!paymentIntent) return;
+
+  // Resolve payment intent -> checkout session. For connected-account
+  // events the lookup must run AS that account.
+  const opts = (event as any).account ? { stripeAccount: (event as any).account as string } : undefined;
+  let sessionId: string | undefined;
+  try {
+    const sessions = await stripe.checkout.sessions.list({ payment_intent: paymentIntent, limit: 1 }, opts);
+    sessionId = sessions.data[0]?.id;
+  } catch (err: any) {
+    // Transient API failure: 500 so Stripe redelivers and we try again.
+    console.error('stripe-webhook: session lookup failed for reversal', err?.message);
+    throw err;
+  }
+  if (!sessionId) {
+    // No session (e.g. a payment made outside Checkout). Nothing to flip;
+    // returning cleanly avoids a three-day retry storm over a no-op.
+    console.warn('stripe-webhook: reversal with no checkout session', { paymentIntent, type: event.type });
+    return;
+  }
+
+  const newStatus = isRefund ? 'refunded' : 'disputed';
+  const { data, error } = await supabaseAdmin.from('transactions')
+    .update({ status: newStatus })
+    .eq('stripe_session_id', sessionId)
+    .select('id');
+  if (error) throw error;
+  console.log('stripe-webhook: marked transaction', newStatus, { sessionId, rows: data?.length ?? 0 });
 }

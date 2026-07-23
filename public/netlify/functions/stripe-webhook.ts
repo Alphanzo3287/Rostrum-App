@@ -1,18 +1,22 @@
 // =====================================================================
 // The Rostrum · netlify/functions/stripe-webhook.ts
-// Point Stripe's webhook at /.netlify/functions/stripe-webhook, listening
-// for checkout.session.completed. This is the ONLY place D-Bucks get
-// credited for a real-money purchase — the browser never touches this,
-// and the signature check means nobody can call it directly and fake a
-// payment. Idempotent: dbucks_move() has a unique constraint on the
-// idempotency key, so even if Stripe retries delivery (it does, by
-// design), the same event can never be credited twice.
+// Point Stripe's webhook at /.netlify/functions/stripe-webhook. This is
+// the ONLY place a payment is allowed to change state — the browser never
+// touches it, and the signature check means nobody can call it directly
+// and fake a payment.
+//
+// Everything here is direct-payment: tips and pay-per-view are direct
+// charges on the creator's connected account, and Pro is a platform
+// subscription. The retired D-Bucks ledger branches have been removed.
 // =====================================================================
 import type { Handler } from '@netlify/functions';
 import Stripe from 'stripe';
 import { supabaseAdmin } from '../../src/server/supabaseAdmin';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+
+// Must match the application_fee_amount the checkout functions charge.
+const PLATFORM_FEE_BPS = 2000;          // 20% platform fee
 // Two Stripe endpoints point at this URL and each has its OWN signing secret:
 //   · Account endpoint  → platform events (Rostrum Pro subscriptions)
 //   · Connect endpoint  → connected-account events (tips + PPV are DIRECT
@@ -57,36 +61,16 @@ export const handler: Handler = async (event) => {
       const session = stripeEvent.data.object as Stripe.Checkout.Session;
       const kind = session.metadata?.kind;
 
-      if (kind === 'buyback_purchase') {
-        await handleBuybackPurchase(session);
-      } else if (kind === 'gift_purchase') {
-        await handleGiftPurchase(session);
-      } else if (kind === 'gift_direct') {
+      if (kind === 'gift_direct') {
         await handleGiftDirect(session);
       } else if (kind === 'debate_entry') {
         await handleDebateEntry(session);
       } else if (kind === 'pro_subscription') {
         await handleProCheckout(session);
       } else {
-        // dbucks_purchase — the original Phase 3 flow.
-        const userId = session.metadata?.user_id;
-        const dbucksAmount = Number(session.metadata?.dbucks_amount ?? 0);
-
-        if (userId && dbucksAmount > 0) {
-          const { error } = await supabaseAdmin.rpc('dbucks_move', {
-            p_from: 'treasury',
-            p_to: `user:${userId}`,
-            p_amount: dbucksAmount,
-            p_color: 'redeemable',
-            p_reason: 'purchase',
-            p_ref: { stripe_session_id: session.id, package_id: session.metadata?.package_id ?? null },
-            p_idem: `stripe_checkout:${session.id}`,
-          });
-          // A unique-constraint violation here means this exact event was
-          // already processed (Stripe redelivered it) — that's success,
-          // not a real error, so we don't want to trigger a Stripe retry.
-          if (error && !/duplicate key|idempotency/i.test(error.message ?? '')) throw error;
-        }
+        // Unrecognised kind. Log it rather than silently returning 200 — a
+        // mislabelled checkout should be visible, not vanish.
+        console.warn('stripe-webhook: unhandled checkout kind', { kind, session: session.id });
       }
     }
 
@@ -100,6 +84,17 @@ export const handler: Handler = async (event) => {
     }
     if (stripeEvent.type === 'customer.subscription.deleted') {
       await lapseProSubscription(stripeEvent.data.object as Stripe.Subscription);
+    }
+
+    // ── Refunds & disputes ──────────────────────────────────────────────
+    // Without this, a refunded or disputed payment leaves its transactions
+    // row at 'succeeded' forever: the Earnings screen and admin revenue
+    // overstate, and the ledger-vs-Stripe reconciliation silently breaks.
+    // Direct charges (tips, PPV) emit these on the CONNECTED account, so
+    // they arrive via the Connect endpoint with event.account set; Pro
+    // refunds arrive on the platform endpoint without it.
+    if (stripeEvent.type === 'charge.refunded' || stripeEvent.type === 'charge.dispute.created') {
+      await handleChargeReversal(stripeEvent);
     }
 
     return { statusCode: 200, body: 'ok' };
@@ -136,14 +131,41 @@ async function syncProSubscription(sub: Stripe.Subscription) {
   if (sub.metadata?.kind !== 'pro_subscription' || !userId) return;
 
   const active = sub.status === 'active' || sub.status === 'trialing';
-  const proUntil = active && sub.current_period_end
-    ? new Date(sub.current_period_end * 1000).toISOString()
-    : null;
 
-  await supabaseAdmin.from('profiles').update({
-    pro_until: proUntil,
+  // The paid-through date lives on the Subscription in older Stripe API
+  // versions and on each Subscription Item in newer ones. The webhook
+  // endpoint's API version decides which shape we receive, so read whichever
+  // is present — otherwise a version bump silently zeroes out Pro access.
+  const anySub = sub as any;
+  const periodEnd: number | null =
+    anySub.current_period_end ??
+    anySub.items?.data?.[0]?.current_period_end ??
+    null;
+
+  const base = {
     pro_subscription_id: sub.id,
     stripe_customer_id: (sub.customer as string) ?? null,
+  };
+
+  // Fail LOUD, not silent. If the subscription is paying but we can't find the
+  // renewal date, do NOT clear pro_until — revoking a paying member's access
+  // because of a payload-shape change is the worst possible outcome. Keep the
+  // existing access, record the ids, and shout in the logs.
+  if (active && !periodEnd) {
+    console.error(
+      'stripe-webhook: active Pro subscription with no readable period end — ' +
+      'check the webhook endpoint API version',
+      { subscription: sub.id, status: sub.status, fields: Object.keys(anySub) },
+    );
+    await supabaseAdmin.from('profiles').update(base).eq('id', userId);
+    return;
+  }
+
+  await supabaseAdmin.from('profiles').update({
+    ...base,
+    pro_until: active && periodEnd
+      ? new Date(periodEnd * 1000).toISOString()
+      : null,
   }).eq('id', userId);
 }
 
@@ -153,76 +175,6 @@ async function lapseProSubscription(sub: Stripe.Subscription) {
   if (!userId) return;
   await supabaseAdmin.from('profiles')
     .update({ pro_until: null, pro_subscription_id: null }).eq('id', userId);
-}
-
-/** Phase 4: payment for a creator's buyback listing confirmed. Retire the
- * D-Bucks from the creator's wallet back to treasury, and mark the
- * listing sold. Money already moved directly to the creator's connected
- * account via the destination charge — nothing to do on that side here. */
-async function handleBuybackPurchase(session: Stripe.Checkout.Session) {
-  const listingId = session.metadata?.listing_id;
-  const creatorId = session.metadata?.creator_id;
-  const buyerId = session.metadata?.buyer_id;
-  const dbucksAmount = Number(session.metadata?.dbucks_amount ?? 0);
-  if (!listingId || !creatorId || !buyerId || dbucksAmount <= 0) return;
-
-  const { error } = await supabaseAdmin.rpc('dbucks_move', {
-    p_from: `user:${creatorId}`,
-    p_to: 'treasury',
-    p_amount: dbucksAmount,
-    p_color: 'redeemable',
-    p_reason: 'buyback',
-    p_ref: { stripe_session_id: session.id, listing_id: listingId, buyer_id: buyerId },
-    p_idem: `stripe_buyback:${session.id}`,
-  });
-  if (error && !/duplicate key|idempotency/i.test(error.message ?? '')) throw error;
-
-  // Only mark the listing sold on the FIRST successful processing of this
-  // event (dbucks_move is idempotent and no-ops on retries, but this
-  // update isn't — guard it the same way rather than double-write).
-  if (!error) {
-    await supabaseAdmin.from('buyback_listings')
-      .update({ status: 'sold', buyer_id: buyerId, stripe_session_id: session.id, sold_at: new Date().toISOString() })
-      .eq('id', listingId).eq('status', 'active');
-  }
-}
-
-/** Buy-and-send gift: credit the recipient's redeemable D-Bucks directly
- * from treasury (no wallet hop for the buyer needed) and log it exactly
- * like a normal in-app gift so it shows up the same way everywhere. */
-async function handleGiftPurchase(session: Stripe.Checkout.Session) {
-  const tierId = session.metadata?.tier_id;
-  const fromId = session.metadata?.from_id;
-  const toId = session.metadata?.to_id;
-  const dbucksAmount = Number(session.metadata?.dbucks_amount ?? 0);
-  const debateId = session.metadata?.debate_id || null;
-  if (!tierId || !fromId || !toId || dbucksAmount <= 0) return;
-
-  const { error } = await supabaseAdmin.rpc('dbucks_move', {
-    p_from: 'treasury',
-    p_to: `user:${toId}`,
-    p_amount: dbucksAmount,
-    p_color: 'redeemable',
-    p_reason: 'gift',
-    p_ref: { stripe_session_id: session.id, tier_id: tierId, debate_id: debateId },
-    p_idem: `stripe_gift:${session.id}`,
-  });
-  if (error && !/duplicate key|idempotency/i.test(error.message ?? '')) throw error;
-
-  if (!error) {
-    const { data: tier } = await supabaseAdmin.from('gift_tiers').select('name, amount_cents').eq('id', tierId).maybeSingle();
-    await supabaseAdmin.from('gifts').insert({
-      debate_id: debateId, from_id: fromId, to_id: toId,
-      kind: tier?.name ?? tierId, amount_cents: tier?.amount_cents ?? 0,
-    });
-    const { data: fromProfile } = await supabaseAdmin.from('profiles').select('display_name').eq('id', fromId).maybeSingle();
-    await supabaseAdmin.from('notifications').insert({
-      user_id: toId, type: 'gift',
-      title: `${fromProfile?.display_name ?? 'Someone'} sent you a gift`,
-      body: `${tier?.name ?? 'A gift'} · ${dbucksAmount} D-Bucks`,
-      link: debateId ? `/debate/${debateId}` : '/store',
-    });
-  }
 }
 
 /** Direct-cash tip confirmed. The money already went straight to the creator's
@@ -244,6 +196,14 @@ async function handleGiftDirect(session: Stripe.Checkout.Session) {
   await supabaseAdmin.from('gifts').insert({
     debate_id: debateId, from_id: fromId, to_id: toId,
     kind: 'tip', amount_cents: amountCents, stripe_session_id: session.id,
+  });
+
+  // Record the creator's earning. `gifts` is the social record; `transactions`
+  // is the money ledger my_earnings() sums for the Earnings screen. Writing
+  // only to `gifts` is why earnings previously read $0.00 forever.
+  await recordEarning({
+    payerId: fromId, creatorId: toId, type: 'gift',
+    amountCents, debateId, sessionId: session.id,
   });
 
   const { data: fromProfile } = await supabaseAdmin.from('profiles').select('display_name').eq('id', fromId).maybeSingle();
@@ -272,4 +232,88 @@ async function handleDebateEntry(session: Stripe.Checkout.Session) {
     await supabaseAdmin.from('debate_participants')
       .insert({ debate_id: debateId, user_id: userId, role: 'audience', can_publish: false, paid: true });
   }
+
+  // The host is the merchant of record on a PPV direct charge, so they are
+  // the counterparty who earned it.
+  const { data: debate } = await supabaseAdmin.from('debates')
+    .select('host_id, price_cents').eq('id', debateId).maybeSingle();
+  if (debate?.host_id && debate.price_cents) {
+    await recordEarning({
+      payerId: userId, creatorId: debate.host_id, type: 'entry',
+      amountCents: debate.price_cents, debateId, sessionId: session.id,
+    });
+  }
+}
+
+/** Write one row to the `transactions` ledger. Idempotent via the unique
+ *  index on stripe_session_id, so a Stripe redelivery is a no-op rather
+ *  than a double-count. Never throws the webhook into a retry loop over a
+ *  duplicate — the payment itself already succeeded. */
+async function recordEarning(o: {
+  payerId: string; creatorId: string; type: 'gift' | 'entry';
+  amountCents: number; debateId: string | null; sessionId: string;
+}) {
+  const feeCents = Math.round(o.amountCents * PLATFORM_FEE_BPS / 10000);
+  const { error } = await supabaseAdmin.from('transactions').insert({
+    user_id: o.payerId,
+    counterparty_id: o.creatorId,
+    type: o.type,
+    amount_cents: o.amountCents,
+    fee_cents: feeCents,
+    debate_id: o.debateId,
+    stripe_session_id: o.sessionId,
+    status: 'succeeded',
+    currency: 'usd',
+  });
+  if (error && !/duplicate key|unique/i.test(error.message ?? '')) {
+    console.error('stripe-webhook: could not record earning', error.message, o);
+  }
+}
+
+/** Mark the matching ledger row refunded/disputed. my_earnings and the
+ * admin financials only count status='succeeded', so flipping the status
+ * makes every earnings number self-correct with no other changes. */
+async function handleChargeReversal(event: Stripe.Event) {
+  const obj = event.data.object as any;
+  const isRefund = event.type === 'charge.refunded';
+
+  // Partial refunds exist but the ledger has no partial-amount column; only
+  // a FULL refund flips the row. Partials are logged for manual follow-up.
+  if (isRefund && obj.amount_refunded < obj.amount) {
+    console.warn('stripe-webhook: PARTIAL refund needs manual review', {
+      charge: obj.id, refunded: obj.amount_refunded, total: obj.amount,
+    });
+    return;
+  }
+
+  const paymentIntent = typeof obj.payment_intent === 'string'
+    ? obj.payment_intent : obj.payment_intent?.id;
+  if (!paymentIntent) return;
+
+  // Resolve payment intent -> checkout session. For connected-account
+  // events the lookup must run AS that account.
+  const opts = (event as any).account ? { stripeAccount: (event as any).account as string } : undefined;
+  let sessionId: string | undefined;
+  try {
+    const sessions = await stripe.checkout.sessions.list({ payment_intent: paymentIntent, limit: 1 }, opts);
+    sessionId = sessions.data[0]?.id;
+  } catch (err: any) {
+    // Transient API failure: 500 so Stripe redelivers and we try again.
+    console.error('stripe-webhook: session lookup failed for reversal', err?.message);
+    throw err;
+  }
+  if (!sessionId) {
+    // No session (e.g. a payment made outside Checkout). Nothing to flip;
+    // returning cleanly avoids a three-day retry storm over a no-op.
+    console.warn('stripe-webhook: reversal with no checkout session', { paymentIntent, type: event.type });
+    return;
+  }
+
+  const newStatus = isRefund ? 'refunded' : 'disputed';
+  const { data, error } = await supabaseAdmin.from('transactions')
+    .update({ status: newStatus })
+    .eq('stripe_session_id', sessionId)
+    .select('id');
+  if (error) throw error;
+  console.log('stripe-webhook: marked transaction', newStatus, { sessionId, rows: data?.length ?? 0 });
 }
