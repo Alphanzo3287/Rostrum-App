@@ -276,15 +276,6 @@ export async function setQuestionStatus(id: string, status: Question['status']) 
   if (error) throw error;
 }
 
-/* ----------------------------- GIFTS ----------------------------- */
-
-export async function sendGift(debateId: string, toId: string, kind: string, amountCents: number) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('not authenticated');
-  const { error } = await supabase.from('gifts')
-    .insert({ debate_id: debateId, from_id: user.id, to_id: toId, kind, amount_cents: amountCents });
-  if (error) throw error; // real-money capture happens via Stripe webhook before insert in prod
-}
 
 /* --------------------------- PROFILES ---------------------------- */
 

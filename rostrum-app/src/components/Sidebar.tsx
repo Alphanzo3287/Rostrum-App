@@ -1,7 +1,7 @@
 // =====================================================================
 // The Rostrum · Sidebar.tsx
 // Premium left-side navigation matching the 2026 redesign.
-// Logo · nav items · live badge · D-Bucks card · Rostrum Pro card.
+// Logo · nav items · live badge · Rostrum Pro card.
 // On mobile collapses to a hamburger-driven sheet.
 // =====================================================================
 import { useEffect, useState } from 'react';
