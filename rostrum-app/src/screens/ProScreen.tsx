@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { isPro, subscribeToPro, openBillingPortal, PRO_PRICING, type ProPlanId } from '../lib/pro';
+import { isPro, subscribeToPro, openBillingPortal, useProPricing, type ProPlanId } from '../lib/pro';
 import { C, ui, display, a, solidGold, ghostBtn } from '../lib/theme';
 
 type Row = { label: string; free: string | boolean; pro: string | boolean };
@@ -56,6 +56,8 @@ export function ProScreen() {
   const { profile } = useAuth();
   const [params] = useSearchParams();
   const [plan, setPlan] = useState<ProPlanId>('annual');
+  // Live figures from Stripe; renders the built-in fallback until they land.
+  const { pricing } = useProPricing();
   const [busy, setBusy] = useState(false);
   const [portalBusy, setPortalBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -161,11 +163,11 @@ export function ProScreen() {
                     border: 'none', fontFamily: ui, fontSize: 13.5, fontWeight: 700,
                     color: on ? C.base : C.dim,
                     background: on ? `linear-gradient(135deg, ${C.gold}, ${C.cyan})` : 'transparent' }}>
-                  {PRO_PRICING[p].label}
-                  {PRO_PRICING[p].note && (
+                  {pricing[p].label}
+                  {pricing[p].note && (
                     <span style={{ marginLeft: 7, fontSize: 10.5, fontWeight: 800, padding: '2px 6px', borderRadius: 6,
                       background: on ? a('#000000', '22') : a(C.jade, '20'), color: on ? C.base : C.jadeHi }}>
-                      {PRO_PRICING[p].note}
+                      {pricing[p].note}
                     </span>
                   )}
                 </button>
@@ -174,8 +176,8 @@ export function ProScreen() {
           </div>
 
           <div style={{ textAlign: 'center' }}>
-            <span style={{ fontFamily: display, fontSize: 40, fontWeight: 700, color: C.ink }}>{PRO_PRICING[plan].price}</span>
-            <span style={{ fontFamily: ui, fontSize: 15, color: C.faint }}>{PRO_PRICING[plan].per}</span>
+            <span style={{ fontFamily: display, fontSize: 40, fontWeight: 700, color: C.ink }}>{pricing[plan].price}</span>
+            <span style={{ fontFamily: ui, fontSize: 15, color: C.faint }}>{pricing[plan].per}</span>
           </div>
 
           {err && <p style={{ fontFamily: ui, fontSize: 13, color: C.garnetHi, margin: 0 }}>{err}</p>}
