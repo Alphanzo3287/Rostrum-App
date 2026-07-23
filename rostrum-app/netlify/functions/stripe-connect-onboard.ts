@@ -25,6 +25,20 @@ export const handler: Handler = async (event) => {
 
     let accountId = existing?.stripe_account_id as string | undefined;
 
+    // A stored id is only reusable if THIS platform key can still see it.
+    // Accounts created under a different (or test-mode) platform survive in
+    // our table and make every later call fail with "does not have access to
+    // account ..." — including this one, which would otherwise leave the
+    // creator permanently unable to re-onboard. Verify, and re-create if not.
+    if (accountId) {
+      try {
+        await stripe.accounts.retrieve(accountId);
+      } catch {
+        console.warn('stripe-connect-onboard: dropping unreachable account', { userId: user.id, accountId });
+        accountId = undefined;
+      }
+    }
+
     if (!accountId) {
       // Both card_payments + transfers are required together for Express accounts.
       const account = await stripe.accounts.create({
@@ -40,6 +54,12 @@ export const handler: Handler = async (event) => {
       await supabaseAdmin.from('creator_accounts').upsert({
         user_id: user.id,
         stripe_account_id: accountId,
+        // A fresh account has earned nothing yet. Clearing these matters:
+        // stale charges_enabled=true is what let the tip modal offer a
+        // payout account that could not actually take a payment.
+        charges_enabled: false,
+        payouts_enabled: false,
+        details_submitted: false,
         updated_at: new Date().toISOString(),
       });
     }
@@ -54,8 +74,11 @@ export const handler: Handler = async (event) => {
     return json(200, { url: link.url });
   } catch (err: any) {
     // Surface the real Stripe error message so it shows in the UI.
-    const msg = err?.raw?.message ?? err?.message ?? 'stripe onboarding failed';
-    console.error('stripe-connect-onboard error:', msg, err?.raw ?? err);
+    // Log the real Stripe error; never return it. Raw messages have
+    // included masked-but-partial API keys and internal account ids.
+    const detail = err?.raw?.message ?? err?.message ?? 'stripe onboarding failed';
+    const msg = 'Could not start payout setup. Please try again.';
+    console.error('stripe-connect-onboard error:', detail, err?.raw ?? err);
     return json(500, { error: msg });
   }
 };

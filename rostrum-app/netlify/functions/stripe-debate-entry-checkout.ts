@@ -63,8 +63,11 @@ export const handler: Handler = async (event) => {
     }, { stripeAccount: account.stripe_account_id });
     return json(200, { url: session.url });
   } catch (err: any) {
-    const msg = err?.raw?.message ?? err?.message ?? 'entry checkout failed';
-    console.error('stripe-debate-entry-checkout error:', msg, err?.raw ?? err);
+    // Log the real Stripe error; never return it. Raw messages have
+    // included masked-but-partial API keys and internal account ids.
+    const detail = err?.raw?.message ?? err?.message ?? 'entry checkout failed';
+    const msg = 'Could not start this payment. Please try again.';
+    console.error('stripe-debate-entry-checkout error:', detail, err?.raw ?? err);
     return json(500, { error: msg });
   }
 };

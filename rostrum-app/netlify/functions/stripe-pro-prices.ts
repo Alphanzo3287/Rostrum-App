@@ -68,8 +68,11 @@ export const handler: Handler = async (event) => {
       'cache-control': 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400',
     });
   } catch (err: any) {
-    const msg = err?.raw?.message ?? err?.message ?? 'could not load pricing';
-    console.error('stripe-pro-prices error:', msg, err?.raw ?? err);
+    // Log the real Stripe error; never return it. Raw messages have
+    // included masked-but-partial API keys and internal account ids.
+    const detail = err?.raw?.message ?? err?.message ?? 'could not load pricing';
+    const msg = 'Could not load pricing.';
+    console.error('stripe-pro-prices error:', detail, err?.raw ?? err);
     return json(500, { error: msg });
   }
 };

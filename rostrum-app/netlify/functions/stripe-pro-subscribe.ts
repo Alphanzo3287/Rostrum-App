@@ -68,8 +68,11 @@ export const handler: Handler = async (event) => {
     });
     return json(200, { url: session.url });
   } catch (err: any) {
-    const msg = err?.raw?.message ?? err?.message ?? 'stripe checkout failed';
-    console.error('stripe-pro-subscribe error:', msg, err?.raw ?? err);
+    // Log the real Stripe error; never return it. Raw messages have
+    // included masked-but-partial API keys and internal account ids.
+    const detail = err?.raw?.message ?? err?.message ?? 'stripe checkout failed';
+    const msg = 'Could not start checkout. Please try again.';
+    console.error('stripe-pro-subscribe error:', detail, err?.raw ?? err);
     return json(500, { error: msg });
   }
 };

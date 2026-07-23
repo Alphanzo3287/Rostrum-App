@@ -87,8 +87,11 @@ export const handler: Handler = async (event) => {
 
     return json(200, { url: session.url });
   } catch (err: any) {
-    const msg = err?.raw?.message ?? err?.message ?? 'gift checkout failed';
-    console.error('stripe-gift-checkout error:', msg, err?.raw ?? err);
+    // Log the real Stripe error; never return it. Raw messages have
+    // included masked-but-partial API keys and internal account ids.
+    const detail = err?.raw?.message ?? err?.message ?? 'gift checkout failed';
+    const msg = 'Could not start this payment. Please try again.';
+    console.error('stripe-gift-checkout error:', detail, err?.raw ?? err);
     return json(500, { error: msg });
   }
 };

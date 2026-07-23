@@ -10,6 +10,11 @@ import { getGiftTiers, startGiftCheckout, type GiftTier } from '../lib/payments'
 import { C, ui, mono, display, a } from '../lib/theme';
 
 const PLATFORM_PCT = 0.20;
+// Stripe won't process trivially small charges, and the breakdown is
+// meaningless below a dollar. Presets and validation share these bounds so
+// a tier row can never render a button that silently refuses to select.
+const MIN_CENTS = 100;
+const MAX_CENTS = 50000;
 const usd = (c: number) => `$${(c / 100).toFixed(2)}`;
 // Stripe US card processing estimate: 2.9% + 30¢.
 const estStripe = (c: number) => (c > 0 ? Math.round(c * 0.029 + 30) : 0);
@@ -24,9 +29,15 @@ export function GiftModal({ debateId, toUserId, toName, onClose }: {
 
   useEffect(() => { getGiftTiers().then(setTiers).catch(() => {}); }, []);
 
-  const presets = Array.from(new Set(tiers.map(t => t.amount_cents))).filter(c => c > 0).sort((a, b) => a - b);
+  // gift_tiers still carries legacy D-Bucks amounts (Rose = 5, Applause =
+  // 25). Read as cents those are $0.05 / $0.25 — under the minimum, so
+  // tapping them set an amount that failed validation and looked like a
+  // dead button. Anything below the floor simply isn't offered.
+  const presets = Array.from(new Set(tiers.map(t => t.amount_cents)))
+    .filter(c => c >= MIN_CENTS && c <= MAX_CENTS)
+    .sort((x, y) => x - y);
   const cents = custom.trim() ? Math.round(parseFloat(custom) * 100) : amount;
-  const valid = Number.isFinite(cents) && cents >= 100 && cents <= 50000;
+  const valid = Number.isFinite(cents) && cents >= MIN_CENTS && cents <= MAX_CENTS;
 
   const platform = Math.round(cents * PLATFORM_PCT);
   const stripe = estStripe(cents);
@@ -96,7 +107,11 @@ export function GiftModal({ debateId, toUserId, toName, onClose }: {
           style={{ width: '100%', padding: '13px', borderRadius: 11, border: 'none', cursor: valid && !busy ? 'pointer' : 'default',
             fontFamily: ui, fontSize: 14, fontWeight: 700, color: '#fff', opacity: valid && !busy ? 1 : 0.5,
             background: `linear-gradient(135deg, ${C.gold}, ${C.cyan})` }}>
-          {busy ? 'Redirecting…' : valid ? `Tip ${usd(cents)}` : 'Choose an amount'}
+          {busy ? 'Redirecting…'
+            : valid ? `Tip ${usd(cents)}`
+            : cents > 0 && cents < MIN_CENTS ? `Minimum tip is ${usd(MIN_CENTS)}`
+            : cents > MAX_CENTS ? `Maximum tip is ${usd(MAX_CENTS)}`
+            : 'Choose an amount'}
         </button>
       </div>
     </div>
