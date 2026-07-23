@@ -1,9 +1,17 @@
 // =====================================================================
 // The Rostrum · netlify/functions/stripe-pro-subscribe.ts
 // Starts a Stripe Checkout Session (subscription mode) for Rostrum Pro.
-// Price is decided HERE, server-side — the client only sends a plan id
-// ('monthly' | 'annual'), never an amount. Activation happens in
-// stripe-webhook.ts on the subscription events, never from the browser.
+// The client only sends a plan id ('monthly' | 'annual'), never an
+// amount — the server maps that to a STORED Stripe Price. Activation
+// happens in stripe-webhook.ts on the subscription events, never from
+// the browser.
+//
+// These are real Price objects under product "Rostrum Pro"
+// (prod_UwJo0HotlkxB4n), not inline price_data. That is what lets the
+// Customer Billing Portal offer monthly <-> annual switching, and what
+// makes Stripe report revenue broken down by plan. To change what a
+// plan costs, create a NEW Price in Stripe and repoint the env var —
+// never edit a Price that existing subscribers are already on.
 // =====================================================================
 import type { Handler } from '@netlify/functions';
 import Stripe from 'stripe';
@@ -12,11 +20,17 @@ import { supabaseAdmin, userFromToken } from '../../src/server/supabaseAdmin';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const SITE = process.env.PUBLIC_SITE_URL || 'https://rostrums.site';
 
-// Pricing lives here so it can never be tampered with from the client.
-// Adjust these freely — they're the single source of truth for Pro pricing.
+// Plan id -> stored Stripe Price. Env vars win so the same code can run
+// against test-mode prices; the literals are the live-mode defaults.
 export const PRO_PLANS = {
-  monthly: { price_cents: 2000,  interval: 'month' as const, interval_count: 1, label: 'Rostrum Pro · Monthly' },
-  annual:  { price_cents: 20000, interval: 'year'  as const, interval_count: 1, label: 'Rostrum Pro · Annual' },
+  monthly: {
+    price_id: process.env.STRIPE_PRICE_PRO_MONTHLY || 'price_1TwRB8LQOp6Yo5xcCUPUfV20',
+    label: 'Rostrum Pro · Monthly',
+  },
+  annual: {
+    price_id: process.env.STRIPE_PRICE_PRO_ANNUAL || 'price_1TwRBCLQOp6Yo5xcLTsaLZQR',
+    label: 'Rostrum Pro · Annual',
+  },
 } as const;
 export type ProPlanId = keyof typeof PRO_PLANS;
 
@@ -43,15 +57,7 @@ export const handler: Handler = async (event) => {
       mode: 'subscription',
       customer: me?.stripe_customer_id || undefined,
       customer_email: me?.stripe_customer_id ? undefined : (user.email ?? undefined),
-      line_items: [{
-        price_data: {
-          currency: 'usd',
-          product_data: { name: plan.label, description: 'Rostrum Pro membership' },
-          unit_amount: plan.price_cents,
-          recurring: { interval: plan.interval, interval_count: plan.interval_count },
-        },
-        quantity: 1,
-      }],
+      line_items: [{ price: plan.price_id, quantity: 1 }],
       // Metadata on the SUBSCRIPTION itself so lifecycle events (renew,
       // cancel) can always resolve back to the user.
       subscription_data: { metadata: { kind: 'pro_subscription', user_id: user.id } },
