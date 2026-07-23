@@ -1,15 +1,13 @@
 // =====================================================================
 // The Rostrum · src/components/InteractionBar.tsx
 // Batch C4 — Audience Interaction Bar (concept panel 5).
-// Every reaction here is ephemeral (see lib/reactions.ts) except the
-// wallet balance, which reads the real getMyWallet() RPC already used by
-// GiftPanel. "Question" opens the existing, real Q&A tab rather than
-// inventing a second question system.
+// Every reaction here is ephemeral (see lib/reactions.ts). "Question"
+// opens the existing, real Q&A tab rather than inventing a second
+// question system.
 // =====================================================================
 import { useEffect, useState } from 'react';
 import type { Room } from 'livekit-client';
 import { useReactions, type ReactionKind } from '../lib/reactions';
-import { getMyWallet } from '../lib/payments';
 import { C, ui, a } from '../lib/theme';
 
 const EMOJI_CHOICES = ['🔥', '💯', '🤔', '😂', '👏'];

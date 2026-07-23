@@ -36,7 +36,6 @@ import { TournamentsScreen } from './screens/TournamentsScreen';
 import { TournamentScreen } from './screens/TournamentScreen';
 import { DiscoverScreen } from './screens/DiscoverScreen';
 import { NotificationsScreen } from './screens/NotificationsScreen';
-import { StoreScreen } from './screens/StoreScreen';
 import { ProScreen } from './screens/ProScreen';
 import { EarningsScreen } from './screens/EarningsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
@@ -57,7 +56,7 @@ import { getDebate, getMyBan } from './lib/api';
 import { hasPaidDebateEntry, startDebateEntryCheckout } from './lib/payments';
 import type { DebateRole, Side } from './lib/types';
 import { C, ui, display, solidGold, ghostBtn, a } from './lib/theme';
-import { isPro, claimProStipend } from './lib/pro';
+import { isPro } from './lib/pro';
 
 export default function App() {
   return (

@@ -19,21 +19,12 @@ async function authedPost<T = any>(fn: string, body: unknown = {}): Promise<T> {
 }
 
 /* ---- Types ---- */
-export interface Wallet { promo: number; redeemable: number; total: number; }
 export interface Earnings { gross_cents: number; fee_cents: number; net_cents: number; currency: string; }
 export interface CreatorAccount {
   connected: boolean; charges_enabled: boolean; payouts_enabled: boolean; details_submitted: boolean;
 }
 export interface PlatformConfig { platform_fee_bps: number; currency: string; min_charge_cents: number; }
 export interface GiftTier { id: string; name: string; icon: string; amount_cents: number; price_dbucks: number; sort: number; }
-
-/* ---- D-Bucks wallet ---- */
-export async function getMyWallet(): Promise<Wallet> {
-  const { data, error } = await supabase.rpc('get_my_wallet');
-  if (error) throw error;
-  const row = Array.isArray(data) ? data[0] : data;
-  return row ?? { promo: 0, redeemable: 0, total: 0 };
-}
 
 /* ---- Gift tiers ---- */
 export async function getGiftTiers(): Promise<GiftTier[]> {
@@ -99,86 +90,6 @@ export async function getCreatorAccount(): Promise<CreatorAccount> {
 
 export const startPayoutOnboarding = () => authedPost<{ url: string }>('stripe-connect-onboard');
 export const refreshPayoutStatus = () => authedPost<CreatorAccount>('stripe-account-status');
-
-/* ---- Buy D-Bucks with real money ----
-   Display-only copy of the server's package map (netlify/functions/
-   stripe-checkout.ts is the source of truth for actual pricing — the
-   server never trusts anything the client sends about price). */
-export const DBUCKS_PACKAGES = [
-  { id: 'p500',  dbucks: 500,  priceCents: 500 },
-  { id: 'p1000', dbucks: 1000, priceCents: 1000 },
-  { id: 'p5000', dbucks: 5000, priceCents: 5000 },
-] as const;
-export const startDbucksCheckout = (packageId: string) => authedPost<{ url: string }>('stripe-checkout', { packageId });
-/* Store: buy a gift's D-Bucks value into your own wallet, to send later. */
-export const startGiftDbucksCheckout = (tierId: string) => authedPost<{ url: string }>('stripe-checkout', { tierId });
-
-/* ---- Phase 4: creator buy-back listings ----
-   One active listing per creator. Creator lists some of their redeemable
-   D-Bucks for sale with a digital product attached; a supporter buys it
-   for real money, split 85/15 straight to the creator's bank via Stripe
-   Connect, and the D-Bucks retire back to treasury. */
-export interface BuybackListing {
-  id: string; creator_id: string; dbucks_amount: number; price_cents: number;
-  product_name: string; product_file_path: string; status: 'active' | 'sold' | 'cancelled';
-  buyer_id: string | null; created_at: string; sold_at: string | null;
-}
-
-export async function getMyListing(): Promise<BuybackListing | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data } = await supabase.from('buyback_listings').select('*')
-    .eq('creator_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
-  return (data as BuybackListing) ?? null;
-}
-
-export async function getCreatorListing(creatorId: string): Promise<BuybackListing | null> {
-  const { data } = await supabase.from('buyback_listings').select('*')
-    .eq('creator_id', creatorId).eq('status', 'active').maybeSingle();
-  return (data as BuybackListing) ?? null;
-}
-
-export async function createBuybackListing(
-  dbucks: number, priceCents: number, productName: string, file: File,
-): Promise<BuybackListing> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('not signed in');
-  const ext = file.name.split('.').pop() ?? 'pdf';
-  const path = `${user.id}/${Date.now()}.${ext}`;
-  const { error: upErr } = await supabase.storage.from('creator-products').upload(path, file);
-  if (upErr) throw upErr;
-  const { data, error } = await supabase.rpc('create_buyback_listing', {
-    p_dbucks: dbucks, p_price_cents: priceCents, p_product_name: productName, p_file_path: path,
-  });
-  if (error) throw error;
-  return data as BuybackListing;
-}
-
-export async function cancelBuybackListing(listingId: string): Promise<void> {
-  const { error } = await supabase.rpc('cancel_buyback_listing', { p_listing: listingId });
-  if (error) throw error;
-}
-
-export const startBuybackCheckout = (listingId: string) => authedPost<{ url: string }>('stripe-buyback-checkout', { listingId });
-export const getBuybackDownloadUrl = (listingId: string) => authedPost<{ url: string }>('buyback-download', { listingId });
-
-/* ---- Cash-out: convert redeemable D-Bucks to a real payout ---- */
-export interface Withdrawal {
-  id: string; dbucks_amount: number; gross_cents: number; fee_cents: number; net_cents: number;
-  status: 'pending' | 'paid' | 'failed'; created_at: string; paid_at: string | null;
-}
-export const WITHDRAW_MIN_DBUCKS = 5000; // $50.00
-export const WITHDRAW_FEE_BPS = 1500;    // 15% kept at cash-out
-
-export const requestWithdrawal = (dbucks: number) =>
-  authedPost<{ ok: boolean; net_cents: number; fee_cents: number; gross_cents: number }>('stripe-withdraw', { dbucks });
-
-export async function getMyWithdrawals(): Promise<Withdrawal[]> {
-  const { data } = await supabase.from('withdrawals')
-    .select('id, dbucks_amount, gross_cents, fee_cents, net_cents, status, created_at, paid_at')
-    .order('created_at', { ascending: false }).limit(20);
-  return (data as Withdrawal[]) ?? [];
-}
 
 /* ---- Buy & send a gift directly with real money (no wallet top-up step) ---- */
 export const startGiftCheckout = (toUserId: string, opts: { tierId?: string; amountCents?: number; debateId?: string }) =>

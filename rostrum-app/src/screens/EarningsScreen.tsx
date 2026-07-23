@@ -5,16 +5,13 @@
 // manage payouts. Real transactions and the gift/access checkout arrive in
 // the next slice; this screen is the payout foundation.
 // =====================================================================
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useAuth } from '../lib/auth';
-import { isPro } from '../lib/pro';
 import {
   getMyEarnings, getCreatorAccount, getPlatformConfig, startPayoutOnboarding, refreshPayoutStatus,
-  getMyProgress, getMyWallet,
-  type Earnings, type CreatorAccount, type PlatformConfig, type Progress, type Wallet,
+  type Earnings, type CreatorAccount, type PlatformConfig,
 } from '../lib/payments';
-import { C, ui, display, mono, solidGold, field } from '../lib/theme';
+import { C, ui, display, mono, solidGold } from '../lib/theme';
 import { Scroll, Center, ghostBtn } from '../components/ui';
 
 export function EarningsScreen({ onBack }: { onBack?: () => void }) {
@@ -24,8 +21,6 @@ export function EarningsScreen({ onBack }: { onBack?: () => void }) {
   const [cfg, setCfg] = useState<PlatformConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [progress, setProgress] = useState<Progress | null>(null);
-  const [wallet, setWallet] = useState<Wallet | null>(null);
 
   const justReturned = params.get('onboarding'); // 'done' | 'refresh' | null
 
@@ -33,10 +28,10 @@ export function EarningsScreen({ onBack }: { onBack?: () => void }) {
     try {
       // If the user just came back from Stripe, pull live status first.
       if (justReturned) { try { await refreshPayoutStatus(); } catch { /* fall through */ } }
-      const [e, a, c, p, w] = await Promise.all([
-        getMyEarnings(), getCreatorAccount(), getPlatformConfig(), getMyProgress(), getMyWallet(),
+      const [e, a, c] = await Promise.all([
+        getMyEarnings(), getCreatorAccount(), getPlatformConfig(),
       ]);
-      setEarn(e); setAcct(a); setCfg(c); setProgress(p); setWallet(w);
+      setEarn(e); setAcct(a); setCfg(c);
     } catch (e: any) {
       setErr(e?.message ?? 'Could not load your earnings');
     } finally {
@@ -157,15 +152,6 @@ export function EarningsScreen({ onBack }: { onBack?: () => void }) {
       </p>
       {!earn && !err && <Center><span style={{ color: C.faint, fontFamily: ui }}>Loading…</span></Center>}
     </Scroll>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontFamily: ui, fontSize: 11.5, fontWeight: 600, color: C.dim }}>
-      {label}
-      {children}
-    </label>
   );
 }
 
