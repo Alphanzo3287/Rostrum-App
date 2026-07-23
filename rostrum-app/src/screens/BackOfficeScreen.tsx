@@ -1,8 +1,7 @@
 // =====================================================================
 // The Rostrum · src/screens/BackOfficeScreen.tsx
-// Admin-only command center. Tabs: Financials (charts), Transactions
-// (categorized money feed), plus the relocated Reports, Analytics and
-// Moderation surfaces.
+// Admin-only command center. Tabs: Financials (charts), plus the
+// relocated Reports, Analytics and Moderation surfaces.
 //
 // There is no Payout Requests tab: creators are paid by direct charge
 // straight to their own connected account, so the platform never holds a
@@ -14,8 +13,8 @@ import {
   BarChart, Bar,
 } from 'recharts';
 import {
-  adminFinancialSummary, adminFinancialTimeseries, adminTransactions,
-  type FinancialSummary, type FinancialPoint, type AdminTxn,
+  adminFinancialSummary, adminFinancialTimeseries,
+  type FinancialSummary, type FinancialPoint,
 } from '../lib/payments';
 import {
   adminListBugReports, adminUpdateBugStatus, adminListAbuseReports,
@@ -27,10 +26,9 @@ import { Scroll, Center } from '../components/ui';
 import { AdminPortalScreen } from './AdminPortalScreen';
 import { ModerationScreen } from './ModerationScreen';
 
-type Tab = 'financials' | 'transactions' | 'reports' | 'analytics' | 'moderation';
+type Tab = 'financials' | 'reports' | 'analytics' | 'moderation';
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'financials',   label: 'Financials',   icon: '📈' },
-  { key: 'transactions', label: 'Transactions', icon: '🧾' },
   { key: 'reports',      label: 'Reports',      icon: '🐞' },
   { key: 'analytics',    label: 'Analytics',    icon: '📊' },
   { key: 'moderation',   label: 'Moderation',   icon: '🛡️' },
@@ -63,7 +61,6 @@ export function BackOfficeScreen() {
       </div>
       <div style={{ flex: 1, minHeight: 0 }}>
         {tab === 'financials' && <FinancialsPanel />}
-        {tab === 'transactions' && <TransactionsPanel />}
         {tab === 'reports' && <ReportsPanel />}
         {tab === 'analytics' && <AdminPortalScreen />}
         {tab === 'moderation' && <ModerationScreen />}
@@ -132,50 +129,6 @@ function FinancialsPanel() {
           </Panel>
         </>
       )}
-    </Scroll>
-  );
-}
-
-/* ---------------- Transactions ---------------- */
-function TransactionsPanel() {
-  const [rows, setRows] = useState<AdminTxn[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [cat, setCat] = useState<string>('All');
-
-  useEffect(() => { (async () => {
-    try { setRows(await adminTransactions(200)); } finally { setLoading(false); }
-  })(); }, []);
-
-  const cats = ['All', ...Array.from(new Set(rows.map(r => r.category)))];
-  const shown = cat === 'All' ? rows : rows.filter(r => r.category === cat);
-
-  return (
-    <Scroll>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-        {cats.map(c => <Chip key={c} active={cat === c} onClick={() => setCat(c)}>{c}</Chip>)}
-      </div>
-      {loading ? <Center><span style={{ color: C.faint, fontFamily: ui }}>Loading…</span></Center>
-        : shown.length === 0 ? <Empty label="No transactions yet." />
-        : (
-          <div style={{ background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 14, overflow: 'hidden' }}>
-            {shown.map((r, i) => (
-              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px',
-                borderTop: i ? `1px solid ${C.hair}` : 'none' }}>
-                <span style={{ fontFamily: ui, fontSize: 11, fontWeight: 700, color: C.gold, background: C.base2,
-                  padding: '3px 8px', borderRadius: 20, whiteSpace: 'nowrap' }}>{r.category}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: ui, fontSize: 13, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {r.from_label} → {r.to_label}
-                  </div>
-                  <div style={{ fontFamily: mono, fontSize: 10.5, color: C.faint }}>{new Date(r.created_at).toLocaleString()}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontFamily: mono, fontSize: 13, color: C.ink }}>{money(r.amount_cents)}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
     </Scroll>
   );
 }

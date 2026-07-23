@@ -108,18 +108,9 @@ export async function getMyProgress(): Promise<Progress> {
 }
 
 /* ============ Back Office (admin) ============ */
-export interface AdminTxn {
-  id: string; created_at: string; category: string; from_label: string; to_label: string;
-  amount_cents: number; reason: string;
-}
 export interface FinancialSummary { gift_revenue_cents: number; platform_fees_cents: number; }
 export interface FinancialPoint { day: string; gift_cents: number; }
 
-export async function adminTransactions(limit = 100): Promise<AdminTxn[]> {
-  const { data, error } = await supabase.rpc('admin_transactions', { p_limit: limit });
-  if (error) throw error;
-  return (data as AdminTxn[]) ?? [];
-}
 export async function adminFinancialSummary(): Promise<FinancialSummary> {
   const { data, error } = await supabase.rpc('admin_financial_summary');
   if (error) throw error;
