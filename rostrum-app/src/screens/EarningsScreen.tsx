@@ -153,7 +153,7 @@ export function EarningsScreen({ onBack }: { onBack?: () => void }) {
       </div>
 
       <p style={{ fontFamily: mono, fontSize: 11, color: C.faint, textAlign: 'center', marginTop: 22 }}>
-        Powered by Stripe 
+        Powered by Stripe
       </p>
       {!earn && !err && <Center><span style={{ color: C.faint, fontFamily: ui }}>Loading…</span></Center>}
     </Scroll>
