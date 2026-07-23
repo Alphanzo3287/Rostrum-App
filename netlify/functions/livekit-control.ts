@@ -9,12 +9,20 @@
 //   remove          — eject a participant
 // =====================================================================
 import type { Handler } from '@netlify/functions';
+import { createHmac } from 'crypto';
 import {
   RoomServiceClient, EgressClient,
   EncodedFileOutput, EncodedFileType, S3Upload,
-  StreamOutput, StreamProtocol,
+  StreamOutput, StreamProtocol, AccessToken, EncodingOptionsPreset,
 } from 'livekit-server-sdk';
 import { supabaseAdmin, userFromToken } from '../../src/server/supabaseAdmin';
+
+const SITE = process.env.PUBLIC_SITE_URL || process.env.URL || 'https://rostrums.site';
+
+/** Same signature scheme as broadcast-token.ts so the page can self-authorize. */
+function broadcastSig(debateId: string): string {
+  return createHmac('sha256', process.env.LIVEKIT_API_SECRET!).update(`broadcast:${debateId}`).digest('hex').slice(0, 32);
+}
 
 const httpUrl = (process.env.LIVEKIT_URL || '')
   .replace('wss://', 'https://').replace('ws://', 'http://');
@@ -38,7 +46,10 @@ export const handler: Handler = async (event) => {
   const { data: debate } = await supabaseAdmin
     .from('debates').select('id, host_id, livekit_room').eq('id', debateId).single();
   if (!debate) return json(404, { error: 'debate not found' });
-  if (debate.host_id !== user.id) return json(403, { error: 'host only' });
+
+  const isHost = debate.host_id === user.id;
+  const isSelfDemote = action === 'demote_to_audience' && payload.identity === user.id;
+  if (!isHost && !isSelfDemote) return json(403, { error: 'host only' });
 
   const room = debate.livekit_room as string;
 
@@ -61,24 +72,54 @@ export const handler: Handler = async (event) => {
         return json(200, { ok: true });
       }
 
-      // start recording to MP4. LiveKit Cloud users can drop the S3 block and
-      // use built-in egress storage instead.
+      // Start recording to MP4. Records the branded broadcast page (same proven
+      // path as YouTube), so Pro hosts get clean HD (1080p) and free hosts get
+      // 720p with a "Recorded on The Rostrum" watermark. Works with any
+      // S3-compatible store — set S3_ENDPOINT to switch to path-style.
       case 'recording_start': {
+        // HD + watermark are gated by the HOST's Pro status (looked up
+        // server-side so it can't be spoofed from the client).
+        const { data: deb } = await supabaseAdmin.from('debates').select('host_id').eq('id', debateId).maybeSingle();
+        let hostPro = false;
+        if (deb?.host_id) {
+          const { data: hp } = await supabaseAdmin.rpc('is_pro', { p_user: deb.host_id });
+          hostPro = !!hp;
+        }
+
         const file = new EncodedFileOutput({
           fileType: EncodedFileType.MP4,
-          filepath: `recordings/${room}-${Date.now()}.mp4`,
+          filepath: `${room}-${Date.now()}.mp4`,
           output: { case: 's3', value: new S3Upload({
             accessKey: process.env.S3_ACCESS_KEY!,
             secret:    process.env.S3_SECRET!,
-            bucket:    process.env.S3_BUCKET!,
+            bucket:    process.env.S3_BUCKET || 'recordings',
             region:    process.env.S3_REGION!,
+            ...(process.env.S3_ENDPOINT
+              ? { endpoint: process.env.S3_ENDPOINT, forcePathStyle: true }
+              : {}),
           }) },
         });
-        const info = await egress.startRoomCompositeEgress(room, { file }, { layout: 'speaker-dark' });
+
+        // Hidden, subscribe-only token for the egress browser (same as YouTube).
+        const rec = new AccessToken(KEY, SECRET, { identity: `rec-${debateId.slice(0, 8)}`, name: 'Recorder', ttl: '6h' });
+        rec.addGrant({ roomJoin: true, room, canSubscribe: true, canPublish: false, canPublishData: false, hidden: true });
+        const recToken = await rec.toJwt();
+        const recUrl =
+          `${SITE}/broadcast/${debateId}?t=${encodeURIComponent(recToken)}` +
+          `&u=${encodeURIComponent(process.env.LIVEKIT_URL || '')}` +
+          (hostPro ? '' : '&wm=1');                 // watermark for free hosts
+
+        const info = await egress.startWebEgress(recUrl, { file }, {
+          encodingOptions: hostPro ? EncodingOptionsPreset.H264_1080P_30 : EncodingOptionsPreset.H264_720P_30,
+        });
         return json(200, { egressId: info.egressId });
       }
 
-      // simulcast the room to YouTube Live via RTMP ingest
+      // simulcast the room to YouTube Live via RTMP ingest.
+      // Uses WEB egress pointed at our branded broadcast page, so YouTube
+      // viewers see the full show (slides, name plates, audience) — not a
+      // raw video grid. The page connects to the room with a hidden,
+      // subscribe-only token minted here.
       case 'youtube_start': {
         let key = payload.streamKey as string | undefined;
         if (!key) {
@@ -87,11 +128,32 @@ export const handler: Handler = async (event) => {
           key = data?.youtube_stream_key ?? undefined;
         }
         if (!key) return json(200, { skipped: true });   // no simulcast configured
+        const rtmpUrl = /^rtmps?:\/\//i.test(key)
+          ? key
+          : `rtmp://a.rtmp.youtube.com/live2/${key}`;
+
+        // Mint a hidden, subscribe-only token for the egress browser.
+        const viewer = new AccessToken(KEY, SECRET, {
+          identity: `egress-${debateId.slice(0, 8)}`,
+          name: 'Broadcast',
+          ttl: '6h',
+        });
+        viewer.addGrant({
+          roomJoin: true, room,
+          canSubscribe: true, canPublish: false, canPublishData: false,
+          hidden: true,                  // don't appear in the participant list
+        });
+        const viewerToken = await viewer.toJwt();
+
+        const broadcastUrl =
+          `${SITE}/broadcast/${debateId}?t=${encodeURIComponent(viewerToken)}` +
+          `&u=${encodeURIComponent(process.env.LIVEKIT_URL || '')}`;
+
         const stream = new StreamOutput({
           protocol: StreamProtocol.RTMP,
-          urls: [`rtmp://a.rtmp.youtube.com/live2/${key}`],
+          urls: [rtmpUrl],
         });
-        const info = await egress.startRoomCompositeEgress(room, { stream }, { layout: 'grid' });
+        const info = await egress.startWebEgress(broadcastUrl, { stream });
         return json(200, { egressId: info.egressId });
       }
 
@@ -102,6 +164,29 @@ export const handler: Handler = async (event) => {
       case 'remove':
         await rooms.removeParticipant(room, payload.identity);
         return json(200, { ok: true });
+
+      // host: return a seated participant (host/mod/debater/judge) to
+      // audience — pushes new metadata live (so the UI updates without a
+      // reconnect) and revokes publish in the same call.
+      case 'demote_to_audience': {
+        const list = await rooms.listParticipants(room);
+        const p = list.find(pp => pp.identity === payload.identity);
+        const md = p ? parseMeta(p.metadata) : {};
+        const nextMeta = JSON.stringify({ ...md, role: 'audience', side: null });
+        await rooms.updateParticipant(room, payload.identity, nextMeta, PUBLISH(false));
+        return json(200, { ok: true });
+      }
+
+      // host: promote an audience member into a stage role — the inverse
+      // of demote_to_audience. Pushes new metadata live and grants publish.
+      case 'promote_to_role': {
+        const list = await rooms.listParticipants(room);
+        const p = list.find(pp => pp.identity === payload.identity);
+        const md = p ? parseMeta(p.metadata) : {};
+        const nextMeta = JSON.stringify({ ...md, role: payload.role, side: payload.side ?? null });
+        await rooms.updateParticipant(room, payload.identity, nextMeta, PUBLISH(true));
+        return json(200, { ok: true });
+      }
 
       default:
         return json(400, { error: `unknown action: ${action}` });
