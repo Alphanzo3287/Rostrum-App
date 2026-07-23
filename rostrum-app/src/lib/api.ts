@@ -7,7 +7,7 @@
 import { supabase } from './supabaseClient';
 import type {
   Debate, Segment, Participant, Tally, DebateResult, Question,
-  Profile, Team, TeamMember, Perk, Achievement, DebateFormat, Visibility, Side, DebateRole, TeamRole,
+  Profile, Team, TeamMember, Achievement, DebateFormat, Visibility, Side, DebateRole, TeamRole,
 } from './types';
 
 // Every realtime subscription gets a UNIQUE channel name. Supabase reuses a
@@ -363,15 +363,6 @@ export async function removeTeamMember(teamId: string, userId: string) {
 
 /* ----------------------------- STORE ----------------------------- */
 
-export async function listPerks(): Promise<Perk[]> {
-  const { data, error } = await supabase.from('perks').select('*').order('cost');
-  if (error) throw error;
-  return (data ?? []) as Perk[];
-}
-export async function redeemPerk(perkId: string) {
-  const { error } = await supabase.rpc('redeem_perk', { p_perk: perkId });
-  if (error) throw error;
-}
 
 /* -------------------- PROFILE / STORE EXTRAS --------------------- */
 
@@ -386,12 +377,6 @@ export async function getAchievements(userId: string): Promise<(Achievement & { 
   return (data ?? []).map((r: any) => ({ ...r.achievement, earned_at: r.earned_at }));
 }
 
-export async function myPerkIds(): Promise<string[]> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
-  const { data } = await supabase.from('user_perks').select('perk_id').eq('user_id', user.id);
-  return (data ?? []).map((r: any) => r.perk_id);
-}
 
 export async function amFollowing(targetId: string): Promise<boolean> {
   const { data: { user } } = await supabase.auth.getUser();

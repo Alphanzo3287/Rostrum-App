@@ -14,6 +14,9 @@ import Stripe from 'stripe';
 import { supabaseAdmin } from '../../src/server/supabaseAdmin';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+
+// Must match the application_fee_amount the checkout functions charge.
+const PLATFORM_FEE_BPS = 2000;          // 20% platform fee
 // Two Stripe endpoints point at this URL and each has its OWN signing secret:
 //   · Account endpoint  → platform events (Rostrum Pro subscriptions)
 //   · Connect endpoint  → connected-account events (tips + PPV are DIRECT
@@ -184,6 +187,14 @@ async function handleGiftDirect(session: Stripe.Checkout.Session) {
     kind: 'tip', amount_cents: amountCents, stripe_session_id: session.id,
   });
 
+  // Record the creator's earning. `gifts` is the social record; `transactions`
+  // is the money ledger my_earnings() sums for the Earnings screen. Writing
+  // only to `gifts` is why earnings previously read $0.00 forever.
+  await recordEarning({
+    payerId: fromId, creatorId: toId, type: 'gift',
+    amountCents, debateId, sessionId: session.id,
+  });
+
   const { data: fromProfile } = await supabaseAdmin.from('profiles').select('display_name').eq('id', fromId).maybeSingle();
   const dollars = (amountCents / 100).toFixed(2);
   await supabaseAdmin.from('notifications').insert({
@@ -209,5 +220,41 @@ async function handleDebateEntry(session: Stripe.Checkout.Session) {
   if (!updated || updated.length === 0) {
     await supabaseAdmin.from('debate_participants')
       .insert({ debate_id: debateId, user_id: userId, role: 'audience', can_publish: false, paid: true });
+  }
+
+  // The host is the merchant of record on a PPV direct charge, so they are
+  // the counterparty who earned it.
+  const { data: debate } = await supabaseAdmin.from('debates')
+    .select('host_id, price_cents').eq('id', debateId).maybeSingle();
+  if (debate?.host_id && debate.price_cents) {
+    await recordEarning({
+      payerId: userId, creatorId: debate.host_id, type: 'entry',
+      amountCents: debate.price_cents, debateId, sessionId: session.id,
+    });
+  }
+}
+
+/** Write one row to the `transactions` ledger. Idempotent via the unique
+ *  index on stripe_session_id, so a Stripe redelivery is a no-op rather
+ *  than a double-count. Never throws the webhook into a retry loop over a
+ *  duplicate — the payment itself already succeeded. */
+async function recordEarning(o: {
+  payerId: string; creatorId: string; type: 'gift' | 'entry';
+  amountCents: number; debateId: string | null; sessionId: string;
+}) {
+  const feeCents = Math.round(o.amountCents * PLATFORM_FEE_BPS / 10000);
+  const { error } = await supabaseAdmin.from('transactions').insert({
+    user_id: o.payerId,
+    counterparty_id: o.creatorId,
+    type: o.type,
+    amount_cents: o.amountCents,
+    fee_cents: feeCents,
+    debate_id: o.debateId,
+    stripe_session_id: o.sessionId,
+    status: 'succeeded',
+    currency: 'usd',
+  });
+  if (error && !/duplicate key|unique/i.test(error.message ?? '')) {
+    console.error('stripe-webhook: could not record earning', error.message, o);
   }
 }
