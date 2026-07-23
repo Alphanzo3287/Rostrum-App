@@ -136,14 +136,41 @@ async function syncProSubscription(sub: Stripe.Subscription) {
   if (sub.metadata?.kind !== 'pro_subscription' || !userId) return;
 
   const active = sub.status === 'active' || sub.status === 'trialing';
-  const proUntil = active && sub.current_period_end
-    ? new Date(sub.current_period_end * 1000).toISOString()
-    : null;
 
-  await supabaseAdmin.from('profiles').update({
-    pro_until: proUntil,
+  // The paid-through date lives on the Subscription in older Stripe API
+  // versions and on each Subscription Item in newer ones. The webhook
+  // endpoint's API version decides which shape we receive, so read whichever
+  // is present — otherwise a version bump silently zeroes out Pro access.
+  const anySub = sub as any;
+  const periodEnd: number | null =
+    anySub.current_period_end ??
+    anySub.items?.data?.[0]?.current_period_end ??
+    null;
+
+  const base = {
     pro_subscription_id: sub.id,
     stripe_customer_id: (sub.customer as string) ?? null,
+  };
+
+  // Fail LOUD, not silent. If the subscription is paying but we can't find the
+  // renewal date, do NOT clear pro_until — revoking a paying member's access
+  // because of a payload-shape change is the worst possible outcome. Keep the
+  // existing access, record the ids, and shout in the logs.
+  if (active && !periodEnd) {
+    console.error(
+      'stripe-webhook: active Pro subscription with no readable period end — ' +
+      'check the webhook endpoint API version',
+      { subscription: sub.id, status: sub.status, fields: Object.keys(anySub) },
+    );
+    await supabaseAdmin.from('profiles').update(base).eq('id', userId);
+    return;
+  }
+
+  await supabaseAdmin.from('profiles').update({
+    ...base,
+    pro_until: active && periodEnd
+      ? new Date(periodEnd * 1000).toISOString()
+      : null,
   }).eq('id', userId);
 }
 
