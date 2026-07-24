@@ -209,13 +209,16 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
             )}
             <div style={{ height:22 }} />
             <Label>Cover thumbnail</Label>
+            <div style={{ fontFamily:ui, fontSize:12, color:C.faint, marginTop:4 }}>
+              Also used as your YouTube thumbnail if you stream this debate.
+            </div>
             <label style={{ display:'block', marginTop:9, cursor:'pointer' }}>
               <input type="file" accept="image/*" style={{ display:'none' }}
                 onChange={e => { const f = e.target.files?.[0]; if (f) { setThumb(f); setThumbPrev(URL.createObjectURL(f)); } }} />
-              <div style={{ height:170, borderRadius:8, overflow:'hidden', display:'grid', placeItems:'center',
+              <div style={{ aspectRatio:'16 / 9', borderRadius:8, overflow:'hidden', display:'grid', placeItems:'center',
                 border:`1px ${thumb ? 'solid' : 'dashed'} ${thumb ? C.hair : C.hairHi}`,
                 background: thumb ? '#000' : `linear-gradient(150deg, ${a(C.jade,'1f')}, ${C.base} 72%)` }}>
-                {thumbPrev ? <img src={thumbPrev} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                {thumbPrev ? <img src={thumbPrev} alt="" style={{ width:'100%', height:'100%', objectFit:'contain' }} />
                   : <span style={{ fontFamily:ui, fontSize:13, color:C.faint }}>Upload a 16:9 cover</span>}
               </div>
             </label>
@@ -395,9 +398,10 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
                       </div>
                     </div>
                     <p style={{ fontFamily:ui, fontSize:11.5, color:C.faint, margin:0 }}>
-                      The broadcast is created on your YouTube channel automatically when you create this debate.
-                      When you press go live in the studio, streaming starts instantly — no stream key needed.
-                      {ytPrivacy !== 'public' && ` Set to ${ytPrivacy} — ${ytPrivacy === 'private' ? 'only you can see it' : 'only people with the link can watch'}.`}
+                      The broadcast is created on your YouTube channel automatically when you create this debate, using the cover from step 1 as its thumbnail.
+                      If you schedule the debate for later, it appears on YouTube as an upcoming stream at that time — but only Public streams show on your channel and notify subscribers.
+                      When you press the YouTube button in the room, that same broadcast goes live — no stream key needed.
+                      {ytPrivacy !== 'public' && ` Set to ${ytPrivacy} — ${ytPrivacy === 'private' ? 'only you can see it' : 'only people with the link can watch, and it will not appear on your channel'}.`}
                     </p>
                   </div>
                 )}
