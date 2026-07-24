@@ -4,9 +4,11 @@
 // =====================================================================
 import { useState } from 'react';
 import { submitBugReport } from '../lib/reports';
+import { useDraggable, bottomRight } from '../lib/useDraggable';
 import { C, ui, display, solidGold } from '../lib/theme';
 
 export function BugReportButton() {
+  const { pos, onPointerDown, wasDragged } = useDraggable('rostrum.bugfab', bottomRight(96));
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
@@ -24,10 +26,10 @@ export function BugReportButton() {
 
   return (
     <>
-      <button onClick={() => setOpen(true)} title="Report a bug"
+      <button onPointerDown={onPointerDown} onClick={() => { if (!wasDragged()) setOpen(true); }} title="Report a bug (drag to move)"
         style={{
-          position: 'fixed', right: 20, bottom: 20, zIndex: 50, display: 'flex', alignItems: 'center', gap: 8,
-          padding: '10px 15px', borderRadius: 999, cursor: 'pointer', fontFamily: ui, fontSize: 13, fontWeight: 700,
+          position: 'fixed', left: pos.x, top: pos.y, zIndex: 50, display: 'flex', alignItems: 'center', gap: 8,
+          padding: '10px 15px', borderRadius: 999, cursor: 'grab', touchAction: 'none', fontFamily: ui, fontSize: 13, fontWeight: 700,
           color: C.ink, background: C.panel, border: `1px solid ${C.hair}`, boxShadow: '0 8px 24px rgba(0,0,0,0.28)',
         }}>
         <span style={{ fontSize: 15 }}>🐞</span> Bug

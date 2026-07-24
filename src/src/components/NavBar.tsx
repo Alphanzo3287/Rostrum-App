@@ -12,11 +12,10 @@ import { Avatar } from './ui';
 import { NotificationsBell } from './NotificationsBell';
 import { ThemeToggle } from './ThemeToggle';
 import { useIsMobile } from '../lib/useMediaQuery';
-import { getMyWallet } from '../lib/payments';
 
 const LINKS: [string, string][] = [
   ['/', 'Lobby'], ['/leaderboard', 'Leaderboard'], ['/teams', 'Teams'],
-  ['/store', 'Store'], ['/earnings', 'Earnings'], ['/support', 'Help'], ['/settings', 'Settings'],
+  ['/earnings', 'Earnings'], ['/support', 'Help'], ['/settings', 'Settings'],
 ];
 
 export function NavBar() {
@@ -39,9 +38,6 @@ export function NavBar() {
     window.addEventListener('rostrum:unread', load);
     return () => { on = false; off(); window.removeEventListener('rostrum:unread', load); };
   }, []);
-
-  const [dbucks, setDbucks] = useState<number | null>(null);
-  useEffect(() => { getMyWallet().then(w => setDbucks(w.total)).catch(() => {}); }, []);
 
   const isAdmin = !!(profile as any)?.is_admin;
   const allLinks: [string, string][] = [
@@ -81,11 +77,6 @@ export function NavBar() {
                 <div style={{ fontFamily:ui, fontSize:14, fontWeight:700, color:C.ink }}>{profile?.display_name ?? 'You'}</div>
                 <div style={{ fontFamily:ui, fontSize:11, color:C.faint }}>View profile</div>
               </div>
-              {dbucks !== null && (
-                <span style={{ marginLeft:'auto', fontFamily:mono, fontSize:13, fontWeight:700, color:C.gold }}>
-                  {dbucks.toLocaleString()} <span style={{ fontSize:9, color:C.faint }}>D-BUCKS</span>
-                </span>
-              )}
             </button>
             <div style={{ height:1, background:C.hair, margin:'4px 0' }} />
             {allLinks.map(([to, label]) => (
@@ -136,14 +127,6 @@ export function NavBar() {
         </Link>
       </nav>
       <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:14 }}>
-        {dbucks !== null && (
-          <button onClick={() => nav('/store')} title="Your D-Bucks" style={{ display:'flex', alignItems:'center',
-            gap:6, padding:'5px 11px', borderRadius:999, border:`1px solid ${a(C.gold,'44')}`,
-            background:a(C.gold,'14'), cursor:'pointer' }}>
-            <span style={{ fontFamily:ui, fontSize:10, color:C.faint, textTransform:'uppercase' }}>D-Bucks</span>
-            <span style={{ fontFamily:mono, fontSize:13, fontWeight:700, color:C.gold }}>{dbucks.toLocaleString()}</span>
-          </button>
-        )}
         <NotificationsBell />
         <button onClick={() => window.dispatchEvent(new Event('rostrum:tour'))} title="Take the tour"
           style={{ width:30, height:30, borderRadius:'50%', border:`1px solid ${C.hair}`, background:'transparent',

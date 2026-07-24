@@ -15,7 +15,7 @@ import { EditProfileModal } from '../components/EditProfileModal';
 import type { Profile, Achievement, Team } from '../lib/types';
 import { C, ui, display, mono, solidGold, a } from '../lib/theme';
 import { Avatar, RankBadge, Section, Scroll, Center, Empty, pill, ghostBtn, hrefFor } from '../components/ui';
-import { getMyWallet, getMyProgress, getCreatorListing, startBuybackCheckout, type Wallet, type Progress, type BuybackListing } from '../lib/payments';
+import { getMyProgress, type Progress } from '../lib/payments';
 
 export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
   handle?: string; onBack?: () => void; onOpenStore?: () => void; onMessage?: (handle: string) => void;
@@ -27,12 +27,9 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
   const [following, setFollowing] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [wallet, setWallet] = useState<Wallet | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [editing, setEditing] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
-  const [listing, setListing] = useState<BuybackListing | null>(null);
-  const [buyBusy, setBuyBusy] = useState(false);
   const [replays, setReplays] = useState<ReplayItem[]>([]);
   const nav = useNavigate();
 
@@ -48,12 +45,10 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
     if (!isSelf) amFollowing(profile.id).then(setFollowing);
     if (!isSelf) amIBlocking(profile.id).then(setBlocked).catch(() => {});
     getUserTeams(profile.id).then(setTeams).catch(() => {});
-    if (!isSelf) getCreatorListing(profile.id).then(setListing).catch(() => {});
   }, [profile, isSelf]);
 
   useEffect(() => {
     if (isSelf) {
-      getMyWallet().then(setWallet).catch(() => {});
       getMyProgress().then(setProgress).catch(() => {});
     }
   }, [isSelf]);
@@ -160,24 +155,6 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
         </div>
       </div>
 
-      {listing && (
-        <div style={{ display:'flex', alignItems:'center', gap:16, padding:'18px 20px', borderRadius:14,
-          border:`1px solid ${a(C.gold,'44')}`, background:a(C.gold,'0D'), marginBottom:22, flexWrap:'wrap' }}>
-          <div style={{ flex:1, minWidth:200 }}>
-            <div style={{ fontFamily:ui, fontSize:11, fontWeight:700, letterSpacing:'.06em', textTransform:'uppercase', color:C.goldHi }}>
-              Support {profile.display_name}</div>
-            <div style={{ fontFamily:display, fontSize:16, fontWeight:600, color:C.ink, marginTop:3 }}>{listing.product_name}</div>
-          </div>
-          <button onClick={async () => {
-            setBuyBusy(true);
-            try { const { url } = await startBuybackCheckout(listing.id); window.location.href = url; }
-            catch (e: any) { alert(e?.message ?? 'Could not start checkout'); setBuyBusy(false); }
-          }} disabled={buyBusy} style={{ ...solidGold, opacity: buyBusy ? .6 : 1, whiteSpace:'nowrap' }}>
-            {buyBusy ? '…' : `Buy for $${(listing.price_cents / 100).toFixed(2)}`}
-          </button>
-        </div>
-      )}
-
       {/* record — editorial stat cards */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))', gap:12, marginBottom:22 }}>
         {[
@@ -195,21 +172,9 @@ export function ProfileScreen({ handle, onBack, onOpenStore, onMessage }: {
         ))}
       </div>
 
-      {/* D-Bucks wallet + XP progress (self only) */}
+      {/* XP progress (self only) */}
       {isSelf && (
         <div style={{ marginTop:22, display:'flex', gap:14, flexWrap:'wrap' }}>
-          {/* Wallet */}
-          <div style={{ flex:'1 1 220px', padding:'16px 18px', borderRadius:18, border:`1px solid ${C.hair}`, background:C.panel }}>
-            <div style={{ fontFamily:ui, fontSize:11, letterSpacing:'.6px', textTransform:'uppercase', color:C.faint }}>D-Bucks</div>
-            <div style={{ fontFamily:mono, fontSize:26, fontWeight:700, color:C.gold, marginTop:4 }}>
-              {wallet ? wallet.total.toLocaleString() : '...'}
-            </div>
-            <div style={{ display:'flex', gap:14, marginTop:8 }}>
-              <span style={{ fontFamily:ui, fontSize:11, color:C.faint }}>Spendable <span style={{ color:C.gold, fontFamily:mono }}>{wallet?.promo ?? 0}</span></span>
-              <span style={{ fontFamily:ui, fontSize:11, color:C.faint }}>Redeemable <span style={{ color:C.jadeHi, fontFamily:mono }}>{wallet?.redeemable ?? 0}</span></span>
-            </div>
-            {onOpenStore && <button onClick={onOpenStore} style={{ ...ghostBtn, marginTop:12 }}>Visit the store</button>}
-          </div>
           {/* XP + Level progress */}
           {progress && (() => {
             const curLevelXP = 50 * progress.level * (progress.level + 1);

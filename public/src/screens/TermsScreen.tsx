@@ -45,14 +45,20 @@ export function TermsScreen({ embedded }: { embedded?: boolean }) {
         <P>Downloaded replay files (MP4) are provided for the host's own use, including sharing on other platforms.
         You're responsible for complying with applicable law and any rights of other participants when you do so.</P>
 
-        <H>4. D-Bucks, gifts, and payments</H>
-        <P>The Rostrum uses an in-app currency ("D-Bucks") that can be purchased, earned, gifted, and — once you meet
-        the platform's eligibility criteria — cashed out for real money, minus applicable platform fees, via Stripe.
-        D-Bucks have no cash value except through this cash-out process and are non-refundable once spent, except
-        where required by law. We may adjust D-Bucks pricing, earning rates, or cash-out terms going forward, and
-        will make reasonable efforts to notify you of material changes.</P>
-        <P>Payments and payouts are processed by Stripe. By using paid features, you also agree to Stripe's terms
-        governing the payment services it provides on our behalf.</P>
+        <H>4. Tips, pay-per-view, and payments</H>
+        <P>The Rostrum does not use any virtual currency. Support for creators is sent as real money: tips and
+        pay-per-view entries are paid directly to the recipient creator through their own connected Stripe account.
+        The Rostrum never holds these funds — the money is the creator's the moment a payment succeeds, and there is
+        no in-app balance to buy or cash out.</P>
+        <P>On each such payment, The Rostrum retains a platform fee of 20% of the amount charged. Stripe also charges
+        its own payment-processing fee (for example, roughly 2.9% plus $0.30 per transaction), which is deducted from
+        the creator's portion. The creator therefore receives the amount charged, less the 20% platform fee and less
+        Stripe's processing fee. All amounts are shown before you pay, and are finalized by Stripe at checkout.</P>
+        <P>Payments and payouts are processed by Stripe. Creators receiving payments are the merchant of record for
+        their own transactions and are responsible for any applicable taxes on the money they receive. Payments are
+        generally non-refundable once completed, except where required by law. We may adjust the platform fee or paid
+        features going forward, and will make reasonable efforts to notify you of material changes. By using paid
+        features, you also agree to Stripe's terms governing the payment services it provides.</P>
 
         <H>5. Community Guidelines</H>
         <P>To keep The Rostrum a place for genuine debate, you agree not to:</P>
@@ -82,8 +88,8 @@ export function TermsScreen({ embedded }: { embedded?: boolean }) {
 
         <H>8. Limitation of liability</H>
         <P>To the maximum extent permitted by law, The Rostrum and its operators aren't liable for indirect,
-        incidental, or consequential damages arising from your use of the Service, including loss of data,
-        recordings, or D-Bucks balance.</P>
+        incidental, or consequential damages arising from your use of the Service, including loss of data
+        or recordings.</P>
 
         <H>9. Changes to these Terms</H>
         <P>We may update these Terms from time to time. If we make material changes, we'll make reasonable efforts

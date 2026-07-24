@@ -154,6 +154,7 @@ export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; not
               <>
                 <Labeled label="email" lower>
                   <input value={email} onChange={e => setEmail(e.target.value)} placeholder="email"
+                    type="email" autoCapitalize="none" autoCorrect="off" autoComplete="email" spellCheck={false} inputMode="email"
                     style={field} onFocus={focusField} onBlur={blurField}
                     onKeyDown={e => { if (e.key === 'Enter') sendReset(); }} />
                 </Labeled>
@@ -198,11 +199,13 @@ export function AuthScreen({ onSignedUp, notice }: { onSignedUp: () => void; not
           )}
           <Labeled label="email" lower>
             <input value={email} onChange={e => setEmail(e.target.value)} placeholder="email"
+              type="email" autoCapitalize="none" autoCorrect="off" autoComplete="email" spellCheck={false} inputMode="email"
               style={field} onFocus={focusField} onBlur={blurField} />
           </Labeled>
           <Labeled label="Password">
             <div style={{ position: 'relative' }}>
               <input value={pw} onChange={e => setPw(e.target.value)} type={showPw ? 'text' : 'password'} placeholder="••••••••"
+                autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                 style={{ ...field, paddingRight: 46 }} onFocus={focusField} onBlur={blurField}
                 onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
               <button type="button" onClick={() => setShowPw(v => !v)} tabIndex={-1}

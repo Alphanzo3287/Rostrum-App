@@ -1,34 +1,34 @@
 // =====================================================================
 // The Rostrum · src/screens/BackOfficeScreen.tsx
-// Admin-only command center. Tabs: Financials (charts), Payout Requests
-// (manual approve/decline), Transactions (categorized money feed), plus
-// the relocated Analytics and Moderation surfaces.
+// Admin-only command center. Tabs: Financials (charts), plus the
+// relocated Reports, Analytics and Moderation surfaces.
+//
+// There is no Payout Requests tab: creators are paid by direct charge
+// straight to their own connected account, so the platform never holds a
+// balance to approve a withdrawal against.
 // =====================================================================
 import { useEffect, useState, useCallback } from 'react';
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
-  BarChart, Bar, Legend,
+  BarChart, Bar,
 } from 'recharts';
 import {
-  adminFinancialSummary, adminFinancialTimeseries, adminListPayoutRequests,
-  approvePayout, declinePayout, adminTransactions,
-  type FinancialSummary, type FinancialPoint, type PayoutRequest, type AdminTxn,
+  adminFinancialSummary, adminFinancialTimeseries,
+  type FinancialSummary, type FinancialPoint,
 } from '../lib/payments';
 import {
   adminListBugReports, adminUpdateBugStatus, adminListAbuseReports,
   type BugReport, type AbuseReport,
 } from '../lib/reports';
-import { C, ui, display, mono, solidGold, ghostBtn, a } from '../lib/theme';
+import { C, ui, display, mono, a } from '../lib/theme';
 import { supabase } from '../lib/supabaseClient';
 import { Scroll, Center } from '../components/ui';
 import { AdminPortalScreen } from './AdminPortalScreen';
 import { ModerationScreen } from './ModerationScreen';
 
-type Tab = 'financials' | 'payouts' | 'transactions' | 'reports' | 'analytics' | 'moderation';
+type Tab = 'financials' | 'reports' | 'analytics' | 'moderation';
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'financials',   label: 'Financials',   icon: '📈' },
-  { key: 'payouts',      label: 'Payout Requests', icon: '💸' },
-  { key: 'transactions', label: 'Transactions', icon: '🧾' },
   { key: 'reports',      label: 'Reports',      icon: '🐞' },
   { key: 'analytics',    label: 'Analytics',    icon: '📊' },
   { key: 'moderation',   label: 'Moderation',   icon: '🛡️' },
@@ -61,8 +61,6 @@ export function BackOfficeScreen() {
       </div>
       <div style={{ flex: 1, minHeight: 0 }}>
         {tab === 'financials' && <FinancialsPanel />}
-        {tab === 'payouts' && <PayoutsPanel />}
-        {tab === 'transactions' && <TransactionsPanel />}
         {tab === 'reports' && <ReportsPanel />}
         {tab === 'analytics' && <AdminPortalScreen />}
         {tab === 'moderation' && <ModerationScreen />}
@@ -75,7 +73,6 @@ export function BackOfficeScreen() {
 function FinancialsPanel() {
   const [sum, setSum] = useState<FinancialSummary | null>(null);
   const [series, setSeries] = useState<FinancialPoint[]>([]);
-  const [treasury, setTreasury] = useState<{ balance_redeemable: number; balance_promo: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -83,9 +80,6 @@ function FinancialsPanel() {
       try {
         const [s, t] = await Promise.all([adminFinancialSummary(), adminFinancialTimeseries(30)]);
         setSum(s); setSeries(t);
-        supabase.rpc('admin_treasury_balances').then(({ data }) => {
-          if (data && data[0]) setTreasury(data[0]);
-        });
       } finally { setLoading(false); }
     })();
   }, []);
@@ -93,7 +87,6 @@ function FinancialsPanel() {
   const chartData = series.map(p => ({
     day: new Date(p.day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     Revenue: (p.gift_cents ?? 0) / 100,
-    Payouts: (p.payout_cents ?? 0) / 100,
   }));
 
   return (
@@ -103,45 +96,22 @@ function FinancialsPanel() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 20 }}>
             <Stat label="Gift revenue" value={money(sum.gift_revenue_cents)} color={C.jadeHi} />
-            <Stat label="Paid out" value={money(sum.payouts_paid_cents)} color={C.gold} />
-            <Stat label="Pending payouts" value={money(sum.payouts_pending_cents)} sub={`${sum.pending_count} request${sum.pending_count === 1 ? '' : 's'}`} color={C.warning} />
             <Stat label="Platform fees kept" value={money(sum.platform_fees_cents)} color={C.cyan} />
-            <Stat label="D-Bucks in circulation" value={sum.circulating_dbucks.toLocaleString()} sub={money(sum.circulating_dbucks)} />
           </div>
 
-          {treasury && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-              <div style={{ padding: '15px 18px', borderRadius: 14, border: `1px solid ${a(C.jade, '40')}`, background: a(C.jade, '0C') }}>
-                <div style={{ fontFamily: ui, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em', color: C.jadeHi, marginBottom: 6 }}>Treasury · Redeemable reserve</div>
-                <div style={{ fontFamily: mono, fontSize: 22, fontWeight: 700, color: C.ink }}>{treasury.balance_redeemable.toLocaleString()}</div>
-                <div style={{ fontFamily: ui, fontSize: 11, color: C.faint, marginTop: 4 }}>Minting capacity for cashable D-Bucks (purchases).</div>
-              </div>
-              <div style={{ padding: '15px 18px', borderRadius: 14, border: `1px solid ${a(C.gold, '40')}`, background: a(C.gold, '0C') }}>
-                <div style={{ fontFamily: ui, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em', color: C.gold, marginBottom: 6 }}>Treasury · Promo reserve</div>
-                <div style={{ fontFamily: mono, fontSize: 22, fontWeight: 700, color: C.ink }}>{treasury.balance_promo.toLocaleString()}</div>
-                <div style={{ fontFamily: ui, fontSize: 11, color: C.faint, marginTop: 4 }}>Minting capacity for spend-only D-Bucks (bonuses, gifts, stipend).</div>
-              </div>
-            </div>
-          )}
-
-          <Panel title="Revenue vs. payouts · last 30 days">
+          <Panel title="Gift revenue · last 30 days">
             <ResponsiveContainer width="100%" height={240}>
               <AreaChart data={chartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                 <defs>
                   <linearGradient id="gRev" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={C.jadeHi} stopOpacity={0.4} /><stop offset="100%" stopColor={C.jadeHi} stopOpacity={0} />
                   </linearGradient>
-                  <linearGradient id="gPay" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={C.gold} stopOpacity={0.35} /><stop offset="100%" stopColor={C.gold} stopOpacity={0} />
-                  </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={C.hair} vertical={false} />
                 <XAxis dataKey="day" tick={{ fontSize: 11, fill: C.faint }} interval="preserveStartEnd" minTickGap={24} />
                 <YAxis tick={{ fontSize: 11, fill: C.faint }} width={44} tickFormatter={(v) => `$${v}`} />
                 <Tooltip formatter={(v: any) => `$${Number(v).toFixed(2)}`} contentStyle={{ fontFamily: ui, fontSize: 12, borderRadius: 10, border: `1px solid ${C.hair}` }} />
-                <Legend wrapperStyle={{ fontFamily: ui, fontSize: 12 }} />
                 <Area type="monotone" dataKey="Revenue" stroke={C.jadeHi} strokeWidth={2} fill="url(#gRev)" />
-                <Area type="monotone" dataKey="Payouts" stroke={C.gold} strokeWidth={2} fill="url(#gPay)" />
               </AreaChart>
             </ResponsiveContainer>
           </Panel>
@@ -159,133 +129,6 @@ function FinancialsPanel() {
           </Panel>
         </>
       )}
-    </Scroll>
-  );
-}
-
-/* ---------------- Payout requests ---------------- */
-const PAYOUT_TABS: { key: string; label: string }[] = [
-  { key: 'requested', label: 'Pending' }, { key: 'paid', label: 'Paid' },
-  { key: 'declined', label: 'Declined' }, { key: 'failed', label: 'Failed' },
-];
-function PayoutsPanel() {
-  const [status, setStatus] = useState('requested');
-  const [rows, setRows] = useState<PayoutRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [err, setErr] = useState('');
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try { setRows(await adminListPayoutRequests(status)); } catch (e: any) { setErr(e?.message ?? 'load failed'); }
-    finally { setLoading(false); }
-  }, [status]);
-  useEffect(() => { load(); }, [load]);
-
-  async function act(id: string, kind: 'approve' | 'decline') {
-    setBusy(id); setErr('');
-    try {
-      if (kind === 'approve') await approvePayout(id);
-      else await declinePayout(id);
-      await load();
-    } catch (e: any) { setErr(e?.message ?? `${kind} failed`); }
-    finally { setBusy(null); }
-  }
-
-  return (
-    <Scroll>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-        {PAYOUT_TABS.map(t => (
-          <Chip key={t.key} active={status === t.key} onClick={() => setStatus(t.key)}>{t.label}</Chip>
-        ))}
-      </div>
-      {err && <div style={{ fontFamily: ui, fontSize: 13, color: C.garnetHi, marginBottom: 12 }}>{err}</div>}
-      {loading ? <Center><span style={{ color: C.faint, fontFamily: ui }}>Loading…</span></Center>
-        : rows.length === 0 ? <Empty label="No requests here." />
-        : rows.map(r => (
-          <div key={r.id} style={{ background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 14, padding: 16, marginBottom: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontFamily: display, fontSize: 17, fontWeight: 600, color: C.ink }}>{money(r.net_cents)}</div>
-                <div style={{ fontFamily: ui, fontSize: 13, color: C.dim }}>
-                  to <b>{r.display_name}</b> <span style={{ color: C.faint }}>@{r.handle}</span>
-                </div>
-                <div style={{ fontFamily: mono, fontSize: 11, color: C.faint, marginTop: 2 }}>
-                  {new Date(r.created_at).toLocaleString()}
-                </div>
-              </div>
-              <StatusBadge status={r.status} />
-            </div>
-
-            {/* money trail */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0', flexWrap: 'wrap',
-              fontFamily: ui, fontSize: 12, color: C.dim, background: C.base2, borderRadius: 10, padding: '10px 12px' }}>
-              <Trace label="Gifts received" val={money(r.gross_cents)} />
-              <Arrow />
-              <Trace label={`@${r.handle} wallet`} val={`${r.cashable_redeemable.toLocaleString()} cashable`} />
-              <Arrow />
-              <Trace label="Platform fee 15%" val={`− ${money(r.fee_cents)}`} />
-              <Arrow />
-              <Trace label="Bank payout" val={money(r.net_cents)} strong />
-            </div>
-
-            {r.status === 'requested' && (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => act(r.id, 'approve')} disabled={busy === r.id}
-                  style={{ ...solidGold, opacity: busy === r.id ? 0.6 : 1 }}>
-                  {busy === r.id ? 'Working…' : `Approve & pay ${money(r.net_cents)}`}
-                </button>
-                <button onClick={() => act(r.id, 'decline')} disabled={busy === r.id}
-                  style={{ ...ghostBtn, color: C.garnetHi }}>Decline</button>
-              </div>
-            )}
-          </div>
-        ))}
-    </Scroll>
-  );
-}
-
-/* ---------------- Transactions ---------------- */
-function TransactionsPanel() {
-  const [rows, setRows] = useState<AdminTxn[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [cat, setCat] = useState<string>('All');
-
-  useEffect(() => { (async () => {
-    try { setRows(await adminTransactions(200)); } finally { setLoading(false); }
-  })(); }, []);
-
-  const cats = ['All', ...Array.from(new Set(rows.map(r => r.category)))];
-  const shown = cat === 'All' ? rows : rows.filter(r => r.category === cat);
-
-  return (
-    <Scroll>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-        {cats.map(c => <Chip key={c} active={cat === c} onClick={() => setCat(c)}>{c}</Chip>)}
-      </div>
-      {loading ? <Center><span style={{ color: C.faint, fontFamily: ui }}>Loading…</span></Center>
-        : shown.length === 0 ? <Empty label="No transactions yet." />
-        : (
-          <div style={{ background: C.panel, border: `1px solid ${C.hair}`, borderRadius: 14, overflow: 'hidden' }}>
-            {shown.map((r, i) => (
-              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px',
-                borderTop: i ? `1px solid ${C.hair}` : 'none' }}>
-                <span style={{ fontFamily: ui, fontSize: 11, fontWeight: 700, color: C.gold, background: C.base2,
-                  padding: '3px 8px', borderRadius: 20, whiteSpace: 'nowrap' }}>{r.category}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: ui, fontSize: 13, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {r.from_label} → {r.to_label}
-                  </div>
-                  <div style={{ fontFamily: mono, fontSize: 10.5, color: C.faint }}>{new Date(r.created_at).toLocaleString()}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontFamily: mono, fontSize: 13, color: C.ink }}>{r.dbucks.toLocaleString()} DB</div>
-                  <div style={{ fontFamily: mono, fontSize: 10.5, color: C.faint }}>{money(r.amount_cents)}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
     </Scroll>
   );
 }
@@ -426,15 +269,6 @@ function StatusBadge({ status }: { status: string }) {
     </span>
   );
 }
-function Trace({ label, val, strong }: { label: string; val: string; strong?: boolean }) {
-  return (
-    <div style={{ minWidth: 0 }}>
-      <div style={{ fontSize: 10.5, color: C.faint }}>{label}</div>
-      <div style={{ fontSize: 12.5, fontWeight: strong ? 800 : 600, color: strong ? C.gold : C.ink }}>{val}</div>
-    </div>
-  );
-}
-function Arrow() { return <span style={{ color: C.faint, fontSize: 14 }}>→</span>; }
 function Empty({ label }: { label: string }) {
   return <div style={{ textAlign: 'center', padding: '48px 0', fontFamily: ui, fontSize: 14, color: C.faint }}>{label}</div>;
 }

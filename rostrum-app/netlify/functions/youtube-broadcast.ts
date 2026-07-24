@@ -97,30 +97,12 @@ export const handler: Handler = async (event) => {
       // 3. Bind stream to broadcast
       await yt(`/liveBroadcasts/bind?id=${broadcast.id}&part=id&streamId=${stream.id}`, { method: 'POST', body: '{}' });
 
-      // 4. Optional thumbnail. Still best-effort (a bad image should never
-      // sink the broadcast), but failures are now LOGGED — the old silent
-      // catch hid a bug where this never once succeeded.
+      // 4. Optional thumbnail — see setThumbnailWithRetry. A freshly created
+      // broadcast is often not yet processable, so a single immediate set
+      // returns 404/processingFailure and silently no-ops. We retry with
+      // backoff here, and again after go_live where the video always exists.
       if (thumbnailUrl) {
-        try {
-          const imgRes = await fetch(thumbnailUrl);
-          if (!imgRes.ok) throw new Error(`image fetch ${imgRes.status}`);
-          const imgBuf = await imgRes.arrayBuffer();
-          if (imgBuf.byteLength > 2_000_000) throw new Error(`image ${imgBuf.byteLength}B exceeds YouTube's 2MB thumbnail limit`);
-          const contentType = imgRes.headers.get('content-type') ?? 'image/jpeg';
-          const setRes = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${broadcast.id}`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'content-type': contentType },
-            body: imgBuf,
-          });
-          const setBody = await setRes.json().catch(() => ({}));
-          if (!setRes.ok) {
-            // Most common cause: the channel isn't phone-verified — YouTube
-            // requires verification (youtube.com/verify) for custom thumbnails.
-            console.warn('youtube: thumbnail rejected', setRes.status, JSON.stringify(setBody?.error ?? setBody));
-          }
-        } catch (err: any) {
-          console.warn('youtube: thumbnail upload failed', err?.message);
-        }
+        await setThumbnailWithRetry(broadcast.id, thumbnailUrl, token!);
       }
 
       const rtmpUrl   = stream.cdn?.ingestionInfo?.ingestionAddress ?? '';
@@ -156,6 +138,14 @@ export const handler: Handler = async (event) => {
         `/liveBroadcasts/transition?broadcastStatus=live&id=${bc.broadcast_id}&part=status`,
         { method: 'POST', body: '{}' }
       );
+
+      // Second chance at the thumbnail: by go-live the video is fully
+      // processable, so a set that 404'd at create time will now stick.
+      const { data: dbRow } = await supabaseAdmin
+        .from('debates').select('thumbnail_url').eq('id', debateId).maybeSingle();
+      if (dbRow?.thumbnail_url) {
+        await setThumbnailWithRetry(bc.broadcast_id, dbRow.thumbnail_url, token!, 2);
+      }
       // YouTube returns an error object if the stream isn't ready (no data
       // arriving yet) or the broadcast is in the wrong state. Surface it so
       // the client can retry rather than falsely showing "live".
@@ -244,6 +234,48 @@ async function getFreshToken(userId: string): Promise<string | null> {
   }).eq('user_id', userId);
 
   return tokens.access_token;
+}
+
+/** Set a broadcast thumbnail, retrying while YouTube reports the video is
+ *  still processing. Best-effort: a bad image or an unverified channel must
+ *  never sink the broadcast, but every failure is logged with YouTube's
+ *  actual reason so it is diagnosable. */
+async function setThumbnailWithRetry(videoId: string, thumbnailUrl: string, token: string, attempts = 4) {
+  let imgBuf: ArrayBuffer; let contentType: string;
+  try {
+    const imgRes = await fetch(thumbnailUrl);
+    if (!imgRes.ok) { console.warn('youtube: thumbnail source fetch failed', imgRes.status, thumbnailUrl); return; }
+    imgBuf = await imgRes.arrayBuffer();
+    if (imgBuf.byteLength > 2_000_000) { console.warn('youtube: thumbnail exceeds 2MB', imgBuf.byteLength); return; }
+    contentType = imgRes.headers.get('content-type') ?? 'image/jpeg';
+  } catch (err: any) {
+    console.warn('youtube: thumbnail source fetch threw', err?.message); return;
+  }
+
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const setRes = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${videoId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'content-type': contentType },
+        body: imgBuf,
+      });
+      if (setRes.ok) { console.log('youtube: thumbnail set', { videoId, attempt: i + 1 }); return; }
+
+      const body = await setRes.json().catch(() => ({}));
+      const reason = body?.error?.errors?.[0]?.reason ?? body?.error?.message ?? String(setRes.status);
+
+      // Retry only the transient "still processing" case. 403 (unverified
+      // channel) and 400 (bad image) will never resolve on retry — log once
+      // and stop rather than burning the function's time budget.
+      const transient = setRes.status === 404 || /processingFailure|uploadLimitExceeded|backendError/i.test(reason);
+      console.warn('youtube: thumbnail rejected', setRes.status, reason, transient ? '(will retry)' : '(giving up)');
+      if (!transient) return;
+    } catch (err: any) {
+      console.warn('youtube: thumbnail set threw', err?.message);
+    }
+    await new Promise(r => setTimeout(r, 2500 * (i + 1)));  // 2.5s, 5s, 7.5s …
+  }
+  console.warn('youtube: thumbnail never accepted after retries', { videoId });
 }
 
 function json(statusCode: number, body: unknown) {

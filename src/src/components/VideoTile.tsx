@@ -48,7 +48,12 @@ export function VideoTile({ member, active, size = 'tile' }: {
 
   return (
     <div style={{
-      position: 'relative', aspectRatio: '4 / 3', borderRadius: 6, overflow: 'hidden',
+      // Stage tiles fill their pane (all stage consumers wrap in an absolute
+      // inset-0 container); small tiles keep the classic 4:3 card shape.
+      ...(size === 'stage'
+        ? { position: 'absolute' as const, inset: 0 }
+        : { position: 'relative' as const, aspectRatio: '4 / 3' }),
+      borderRadius: 6, overflow: 'hidden',
       border: `1px solid ${active ? tone.c : 'rgba(255,255,255,0.08)'}`,
       boxShadow: active ? `0 0 0 2px ${tone.c}55` : 'none',
       background: '#0A090C',

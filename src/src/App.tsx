@@ -36,7 +36,6 @@ import { TournamentsScreen } from './screens/TournamentsScreen';
 import { TournamentScreen } from './screens/TournamentScreen';
 import { DiscoverScreen } from './screens/DiscoverScreen';
 import { NotificationsScreen } from './screens/NotificationsScreen';
-import { StoreScreen } from './screens/StoreScreen';
 import { ProScreen } from './screens/ProScreen';
 import { EarningsScreen } from './screens/EarningsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
@@ -57,7 +56,7 @@ import { getDebate, getMyBan } from './lib/api';
 import { hasPaidDebateEntry, startDebateEntryCheckout } from './lib/payments';
 import type { DebateRole, Side } from './lib/types';
 import { C, ui, display, solidGold, ghostBtn, a } from './lib/theme';
-import { isPro, claimProStipend } from './lib/pro';
+import { isPro } from './lib/pro';
 
 export default function App() {
   return (
@@ -176,19 +175,7 @@ function Gate() {
 function Shell() {
   const isMobile = useIsTablet();
   const { profile, refreshProfile } = useAuth();
-  const [stipend, setStipend] = useState<number | null>(null);
-
-  // Grant the monthly Pro stipend once per session-load if it's due. The RPC
-  // is idempotent (once per calendar month), so calling on every mount is safe.
-  useEffect(() => {
-    if (!isPro(profile)) return;
-    let alive = true;
-    claimProStipend().then(amt => {
-      if (alive && amt > 0) { setStipend(amt); refreshProfile(); setTimeout(() => alive && setStipend(null), 6000); }
-    }).catch(() => {});
-    return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.id, profile?.pro_until]);
+  void refreshProfile;
 
   return (
     <div style={{ position:'absolute', inset:0, display:'flex', flexDirection: isMobile ? 'column' : 'row', overflow:'hidden' }}>
@@ -200,15 +187,6 @@ function Shell() {
         </div>
       </div>
       <WelcomeTour />
-      {stipend != null && (
-        <div style={{ position:'fixed', bottom:22, left:'50%', transform:'translateX(-50%)', zIndex:9999,
-          display:'flex', alignItems:'center', gap:10, padding:'12px 18px', borderRadius:12,
-          background:'#141118', border:`1px solid ${a(C.gold,'55')}`, boxShadow:`0 12px 40px ${a('#000000','66')}`,
-          fontFamily:ui, fontSize:13.5, color:C.ink }}>
-          <span style={{ fontSize:16 }}>👑</span>
-          Your monthly Pro stipend of <b style={{ color:C.gold }}>{stipend.toLocaleString()} D-Bucks</b> was added.
-        </div>
-      )}
     </div>
   );
 }
@@ -227,8 +205,8 @@ function TeamsRoute() {
   return <TeamsScreen onOpenProfile={h => nav(`/u/${h}`)} />;
 }
 function StoreRoute() {
-  const nav = useNavigate();
-  return <StoreScreen onBack={() => nav(-1)} />;
+  // The D-Bucks store is retired; send anyone with an old link to their profile.
+  return <Navigate to="/me" replace />;
 }
 function EarningsRoute() {
   const nav = useNavigate();

@@ -1,7 +1,6 @@
 // =====================================================================
 // The Rostrum · GlobalActivityMap.tsx
-// Faithful React recreation of the "Global Debate Activity" animation
-// designed in Claude Design. Animated SVG world map:
+// "Global Debate Activity" animation. Animated SVG world map:
 //   · real country shapes (world-atlas TopoJSON, fetched at runtime)
 //   · 10 glowing city nodes with radar-pulse rings
 //   · 12 animated comet arcs between cities
@@ -31,7 +30,7 @@ function useKeyframes() {
   }, []);
 }
 
-// ── city nodes + arcs (from the Claude Design source) ─────────────────
+// ── city nodes + arcs ─────────────────
 type Node = { id: string; name: string; lng: number; lat: number; color: string };
 const NODES: Node[] = [
   { id: 'dc',  name: 'Washington', lng: -77.0, lat: 38.9, color: '#22d3ee' },

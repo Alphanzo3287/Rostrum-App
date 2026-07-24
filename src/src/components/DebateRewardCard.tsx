@@ -59,7 +59,7 @@ export function DebateRewardCard({ reward, onContinue }: { reward: DebateReward;
               <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '9px 13px', borderRadius: 10, background: a(C.jade, '10'), border: `1px solid ${a(C.jade, '3A')}` }}>
                 <span style={{ fontFamily: ui, fontSize: 12.5, color: C.ink }}>🏆 Level {m.level} badge</span>
-                <span style={{ fontFamily: mono, fontSize: 12.5, fontWeight: 700, color: C.jadeHi }}>+{m.reward.toLocaleString()} D-Bucks</span>
+                <span style={{ fontFamily: ui, fontSize: 11.5, fontWeight: 700, color: C.jadeHi }}>Unlocked</span>
               </div>
             ))}
           </div>

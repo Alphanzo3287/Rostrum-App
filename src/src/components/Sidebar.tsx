@@ -1,7 +1,7 @@
 // =====================================================================
 // The Rostrum · Sidebar.tsx
 // Premium left-side navigation matching the 2026 redesign.
-// Logo · nav items · live badge · D-Bucks card · Rostrum Pro card.
+// Logo · nav items · live badge · Rostrum Pro card.
 // On mobile collapses to a hamburger-driven sheet.
 // =====================================================================
 import { useEffect, useState } from 'react';
@@ -11,7 +11,6 @@ import { isPro } from '../lib/pro';
 import { unreadTotal, subscribeInbox } from '../screens/MessagesScreen';
 import { C, ui, display, mono, solidGold, a } from '../lib/theme';
 import { Avatar } from './ui';
-import { getMyWallet } from '../lib/payments';
 import { ThemeToggle } from './ThemeToggle';
 import { useIsTablet } from '../lib/useMediaQuery';
 
@@ -30,7 +29,6 @@ const LibraryIcon = () => <Icon d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6
 const RankingsIcon = () => <Icon d="M3 21h18M5 21V10l4-4 4 4v11M13 21V14l4-4 4 4v7" />;
 const BellIcon = () => <Icon d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0" />;
 const MessagesIcon = () => <Icon d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z" />;
-const WalletIcon = () => <Icon d="M21 12V7H5a2 2 0 0 1 0-4h14v4M3 5v14a2 2 0 0 0 2 2h16v-5M18 12a2 2 0 0 0 0 4h4v-4z" />;
 const StoreIcon = () => <Icon d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0" />;
 const AnalyticsIcon = () => <Icon d="M3 3v18h18M7 15l4-4 3 3 5-6" />;
 const MenuIcon = () => <Icon d="M3 6h18M3 12h18M3 18h18" size={20} />;
@@ -41,18 +39,6 @@ const EarningsIcon = () => <Icon d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.
 const CrownIcon = ({ size = 24 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
     <path d="M5 16L3 7l5.5 4L12 5l3.5 6L21 7l-2 9H5zm0 2h14v2H5v-2z" />
-  </svg>
-);
-const DBucksIcon = () => (
-  <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-    <defs>
-      <linearGradient id="dbucksGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stopColor="#F4B740" />
-        <stop offset="100%" stopColor="#D9952A" />
-      </linearGradient>
-    </defs>
-    <circle cx="12" cy="12" r="10" fill="url(#dbucksGrad)" />
-    <text x="12" y="16" textAnchor="middle" fill="white" fontFamily="Inter" fontSize="11" fontWeight="800">$</text>
   </svg>
 );
 
@@ -76,8 +62,6 @@ export function Sidebar() {
     return () => { on = false; off(); window.removeEventListener('rostrum:unread', load); };
   }, []);
 
-  const [wallet, setWallet] = useState<{ promo: number; redeemable: number; total: number } | null>(null);
-  useEffect(() => { getMyWallet().then(setWallet).catch(() => {}); }, []);
 
   const isAdmin = !!(profile as any)?.is_admin;
   const active = (to: string) => to === '/' ? pathname === '/' : pathname.startsWith(to);
@@ -92,7 +76,6 @@ export function Sidebar() {
     ...(isPro(profile) ? [{ to: '/analytics', label: 'Analytics', icon: AnalyticsIcon }] as NavItem[] : []),
     { to: '/leaderboard',  label: 'Rankings',      icon: RankingsIcon },
     { to: '/messages',     label: 'Messages',      icon: MessagesIcon,    badge: unread || undefined },
-    { to: '/store',        label: 'Store',         icon: StoreIcon },
   ];
 
   const sidebarBody = (
@@ -154,32 +137,6 @@ export function Sidebar() {
           <span style={{ flex:1 }}>Tournaments</span>
         </Link>
       </nav>
-
-      {/* ── D-Bucks balance card ── */}
-      <div style={{ margin:'14px 12px 12px', padding:'14px 16px', borderRadius:16,
-        background: `linear-gradient(135deg, ${a(C.warning,'14')}, ${a(C.warning,'07')})`,
-        border: `1px solid ${a(C.warning,'2E')}` }}>
-        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
-          <DBucksIcon />
-          <div style={{ fontFamily:ui, fontSize:11, fontWeight:600, color:C.faint,
-            textTransform:'uppercase', letterSpacing:'.1em' }}>D-Bucks Balance</div>
-        </div>
-        <div style={{ fontFamily:ui, fontSize:24, fontWeight:700, color:C.ink, marginBottom:6, fontVariantNumeric:'tabular-nums' }}>
-          {wallet !== null ? wallet.total.toLocaleString() : '—'}
-        </div>
-        {wallet !== null && (wallet.redeemable > 0 || wallet.promo > 0) && (
-          <div style={{ display:'flex', gap:12, marginBottom:10, fontFamily:ui, fontSize:10.5 }}>
-            <span style={{ color:C.jadeHi }}>💵 {wallet.redeemable.toLocaleString()} cashable</span>
-            <span style={{ color:C.gold }}>🎁 {wallet.promo.toLocaleString()} rewards</span>
-          </div>
-        )}
-        <button onClick={() => nav('/store')}
-          style={{ width:'100%', padding:'8px 12px', borderRadius:10,
-            background:'transparent', border:`1px solid ${C.hair}`, color:C.dim,
-            fontFamily:ui, fontSize:12, fontWeight:600, cursor:'pointer' }}>
-          View Wallet
-        </button>
-      </div>
 
       {/* ── Rostrum Pro upsell ── */}
       {isPro(profile) ? (

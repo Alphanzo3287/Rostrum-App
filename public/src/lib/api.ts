@@ -7,7 +7,7 @@
 import { supabase } from './supabaseClient';
 import type {
   Debate, Segment, Participant, Tally, DebateResult, Question,
-  Profile, Team, TeamMember, Perk, Achievement, DebateFormat, Visibility, Side, DebateRole, TeamRole,
+  Profile, Team, TeamMember, Achievement, DebateFormat, Visibility, Side, DebateRole, TeamRole,
 } from './types';
 
 // Every realtime subscription gets a UNIQUE channel name. Supabase reuses a
@@ -276,15 +276,6 @@ export async function setQuestionStatus(id: string, status: Question['status']) 
   if (error) throw error;
 }
 
-/* ----------------------------- GIFTS ----------------------------- */
-
-export async function sendGift(debateId: string, toId: string, kind: string, amountCents: number) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('not authenticated');
-  const { error } = await supabase.from('gifts')
-    .insert({ debate_id: debateId, from_id: user.id, to_id: toId, kind, amount_cents: amountCents });
-  if (error) throw error; // real-money capture happens via Stripe webhook before insert in prod
-}
 
 /* --------------------------- PROFILES ---------------------------- */
 
@@ -372,15 +363,6 @@ export async function removeTeamMember(teamId: string, userId: string) {
 
 /* ----------------------------- STORE ----------------------------- */
 
-export async function listPerks(): Promise<Perk[]> {
-  const { data, error } = await supabase.from('perks').select('*').order('cost');
-  if (error) throw error;
-  return (data ?? []) as Perk[];
-}
-export async function redeemPerk(perkId: string) {
-  const { error } = await supabase.rpc('redeem_perk', { p_perk: perkId });
-  if (error) throw error;
-}
 
 /* -------------------- PROFILE / STORE EXTRAS --------------------- */
 
@@ -395,12 +377,6 @@ export async function getAchievements(userId: string): Promise<(Achievement & { 
   return (data ?? []).map((r: any) => ({ ...r.achievement, earned_at: r.earned_at }));
 }
 
-export async function myPerkIds(): Promise<string[]> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
-  const { data } = await supabase.from('user_perks').select('perk_id').eq('user_id', user.id);
-  return (data ?? []).map((r: any) => r.perk_id);
-}
 
 export async function amFollowing(targetId: string): Promise<boolean> {
   const { data: { user } } = await supabase.auth.getUser();
@@ -418,14 +394,35 @@ export async function amFollowing(targetId: string): Promise<boolean> {
 export async function uploadDeck(debateId: string, pages: File[]): Promise<string[]> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('not authenticated');
-  const urls: string[] = [];
-  for (let i = 0; i < pages.length; i++) {
+
+  // Upload the pages CONCURRENTLY instead of one-at-a-time. Files, format,
+  // paths and the resulting URLs are byte-for-byte identical to the old
+  // sequential loop — only the timing changes. We cap how many run at once so
+  // we don't overwhelm the connection on very large decks; urls[] is written
+  // by index so slide order is always preserved regardless of finish order.
+  const urls: string[] = new Array(pages.length);
+  const MAX_CONCURRENT = 6;
+
+  async function uploadOne(i: number): Promise<void> {
     const ext = pages[i].name.split('.').pop() ?? 'png';
-    const path = `${user.id}/deck/${debateId}/${String(i).padStart(3, '0')}.${ext}`;
+    const path = `${user!.id}/deck/${debateId}/${String(i).padStart(3, '0')}.${ext}`;
     const { error } = await supabase.storage.from('thumbnails').upload(path, pages[i], { upsert: true });
     if (error) throw error;
-    urls.push(supabase.storage.from('thumbnails').getPublicUrl(path).data.publicUrl);
+    urls[i] = supabase.storage.from('thumbnails').getPublicUrl(path).data.publicUrl;
   }
+
+  // Simple fixed-size worker pool: pull the next index until the queue drains.
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < pages.length) {
+      const i = next++;
+      await uploadOne(i);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(MAX_CONCURRENT, pages.length) }, () => worker())
+  );
+
   const { error: e2 } = await supabase.rpc('set_deck', { p_debate: debateId, p_urls: urls });
   if (e2) throw e2;
   return urls;

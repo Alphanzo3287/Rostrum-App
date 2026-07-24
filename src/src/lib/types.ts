@@ -27,7 +27,6 @@ export interface Profile {
   rank: string;
   level: number;
   points: number;
-  virtual_cash: number;
   wins: number;
   losses: number;
   follower_count: number;

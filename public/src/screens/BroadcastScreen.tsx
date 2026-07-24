@@ -128,6 +128,11 @@ function BroadcastInner() {
   const prop = debaters.filter(m => m.side === 'prop');
   const opp  = debaters.filter(m => m.side === 'opp');
 
+  // Single-speaker formats have no Proposition / Opposition sides — it's one
+  // presenter and their deck. Hide the two-sided rail (and pre-show benches)
+  // for these. Everything else keeps the classic debate layout.
+  const soloFormat = dz.debate?.format === 'lecture' || dz.debate?.format === 'speakers_corner';
+
   const assembling = dz.phase === 'assembly';
 
   const mm = String(Math.floor(dz.remaining / 60)).padStart(2, '0');
@@ -200,7 +205,7 @@ function BroadcastInner() {
 
       {/* ── Main area ── */}
       {assembling
-        ? <BroadcastAssembly host={host} prop={prop} opp={opp}
+        ? <BroadcastAssembly host={host} prop={prop} opp={opp} solo={soloFormat}
             mod={members.find(m => m.role === 'moderator')}
             judges={members.filter(m => m.role === 'judge')} audience={audience} />
         : cams.length === 0 && !hasScreenSource
@@ -208,7 +213,7 @@ function BroadcastInner() {
         : (
           <div style={{ flex:1, display:'flex', gap:12, padding:'4px 18px 12px', overflow:'hidden' }}>
             {/* Stage */}
-            <div style={{ flex: (layout==='group'||layout==='cinema') ? '1 1 100%' : '1 1 72%',
+            <div style={{ flex: (layout==='group'||layout==='cinema'||soloFormat) ? '1 1 100%' : '1 1 72%',
               display:'flex', gap:12, minWidth:0 }}>
               <SafePanel resetKey={`${layout}:${bs.presenterId ?? ''}:${hasScreenSource}`} label="Stage" fill>
                 <Stage layout={layout} featured={featured} debateId={debateId}
@@ -216,8 +221,8 @@ function BroadcastInner() {
                   presentType={bs.presentType} hasScreenShare={hasScreenShare} hasSlides={hasSlides} />
               </SafePanel>
             </div>
-            {/* Name plates (hidden for full-bleed layouts) */}
-            {layout!=='group' && layout!=='cinema' && (
+            {/* Name plates (hidden for full-bleed layouts and single-speaker formats) */}
+            {layout!=='group' && layout!=='cinema' && !soloFormat && (
               <div style={{ flex:'0 0 26%', display:'flex', flexDirection:'column', gap:10, minWidth:0 }}>
                 <SideCard label="Proposition" tone={C.jadeHi} members={prop} active={speakerSide==='prop'} />
                 <SideCard label="Opposition" tone={C.garnetHi} members={opp} active={speakerSide==='opp'} />
@@ -304,8 +309,8 @@ function Stage({ layout, featured, debateId, cams, presenter, screenTrack, prese
   screenTrack?: any; presentType: 'slides'|'screen'|null; hasScreenShare: boolean; hasSlides: boolean;
 }) {
   const camTile = (m: any, big = true) => m
-    ? <><VideoTile member={m} active size={big ? 'stage' : 'tile'} />{big && <NamePlate m={m} />}</>
-    : <Placeholder text="Waiting for the floor…" />;
+    ? <VideoTile member={m} active size={big ? 'stage' : 'tile'} />
+    : <Placeholder text="Waiting for the floor…" />;;
 
   // The shared content pane (slides or live screen).
   const ScreenContent = hasScreenShare
@@ -434,8 +439,8 @@ function SideCard({ label, tone, members, active }: {
 }
 
 /* ───────────── assembly seating view ────────────────────────────────── */
-function BroadcastAssembly({ host, mod, judges, prop, opp, audience }: {
-  host?: any; mod?: any; judges: any[]; prop: any[]; opp: any[]; audience: any[];
+function BroadcastAssembly({ host, mod, judges, prop, opp, audience, solo }: {
+  host?: any; mod?: any; judges: any[]; prop: any[]; opp: any[]; audience: any[]; solo?: boolean;
 }) {
   return (
     <div style={{ flex:1, display:'flex', flexDirection:'column', padding:'10px 26px 18px', overflow:'hidden' }}>
@@ -445,7 +450,9 @@ function BroadcastAssembly({ host, mod, judges, prop, opp, audience }: {
           The hall is filling — debate begins shortly
         </span>
         <span style={{ marginLeft:'auto', fontFamily:mono, fontSize:12.5, color:C.dim }}>
-          {prop.length + opp.length} debaters · {judges.length} judges · {audience.length} in the hall
+          {solo
+            ? `${judges.length} judges · ${audience.length} in the hall`
+            : `${prop.length + opp.length} debaters · ${judges.length} judges · ${audience.length} in the hall`}
         </span>
       </div>
       <div style={{ display:'flex', justifyContent:'center', gap:28, marginBottom:26, flexWrap:'wrap' }}>
@@ -456,8 +463,8 @@ function BroadcastAssembly({ host, mod, judges, prop, opp, audience }: {
                          : <BOpen accent={C.dim} label="Judge" />}
         </div>
       </div>
-      <div style={{ flex:1, display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:18, minHeight:0 }}>
-        <BBench title="Proposition" tone={C.jadeHi} people={prop} />
+      <div style={{ flex:1, display:'flex', alignItems:'flex-start', justifyContent:'center', gap:18, minHeight:0 }}>
+        {!solo && <BBench title="Proposition" tone={C.jadeHi} people={prop} />}
         <div style={{ textAlign:'center', flexShrink:0, paddingTop:24 }}>
           <div style={{ width:90, height:60, margin:'0 auto', borderRadius:'8px 8px 4px 4px',
             background:`linear-gradient(180deg, ${C.panel2}, ${C.base})`, border:`1px solid ${C.hairHi}`,
@@ -465,9 +472,9 @@ function BroadcastAssembly({ host, mod, judges, prop, opp, audience }: {
             <span style={{ position:'absolute', top:-9, left:'50%', transform:'translateX(-50%)', width:34, height:9,
               background:C.gold, borderRadius:3, opacity:.85 }} />
           </div>
-          <div style={{ fontSize:10.5, color:C.faint, marginTop:9, letterSpacing:'1.5px', textTransform:'uppercase' }}>The floor</div>
+          <div style={{ fontSize:10.5, color:C.faint, marginTop:9, letterSpacing:'1.5px', textTransform:'uppercase' }}>{solo ? 'The lectern' : 'The floor'}</div>
         </div>
-        <BBench title="Opposition" tone={C.garnetHi} people={opp} />
+        {!solo && <BBench title="Opposition" tone={C.garnetHi} people={opp} />}
       </div>
       <div style={{ marginTop:14, paddingTop:14, borderTop:`1px solid ${C.hair}` }}>
         <div style={{ fontSize:10.5, fontWeight:700, letterSpacing:'2.5px', textTransform:'uppercase', color:C.faint, marginBottom:10 }}>

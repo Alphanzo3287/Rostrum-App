@@ -6,19 +6,30 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { isPro, subscribeToPro, openBillingPortal, PRO_PRICING, type ProPlanId } from '../lib/pro';
+import { isPro, subscribeToPro, openBillingPortal, useProPricing, type ProPlanId } from '../lib/pro';
 import { C, ui, display, a, solidGold, ghostBtn } from '../lib/theme';
 
 type Row = { label: string; free: string | boolean; pro: string | boolean };
 
 const FEATURES: { group: string; rows: Row[] }[] = [
   {
+    group: 'Gavel · AI debate assistant',
+    rows: [
+      { label: 'See Gavel’s verdicts in any debate', free: true, pro: true },
+      { label: 'Fact-check claims against real academic sources', free: false, pro: 'Unlimited' },
+      { label: 'Auto-check live claims as they’re spoken', free: false, pro: true },
+      { label: 'Debate tools — summarize, fallacies, steelman, rebuttal', free: false, pro: true },
+      { label: 'Find scholarly sources & explain any claim', free: false, pro: true },
+      { label: 'Response depth', free: '—', pro: 'Quick · Detailed · Deep' },
+    ],
+  },
+  {
     group: 'Core experience',
     rows: [
       { label: 'Join & watch every debate', free: true, pro: true },
       { label: 'Host debates in all formats', free: true, pro: true },
       { label: 'Compete in tournaments & communities', free: true, pro: true },
-      { label: 'Earn & cash out D-Bucks', free: true, pro: true },
+      { label: 'Get paid directly for tips & pay-per-view', free: true, pro: true },
     ],
   },
   {
@@ -36,8 +47,6 @@ const FEATURES: { group: string; rows: Row[] }[] = [
     rows: [
       { label: 'Pro badge on profile & in rooms', free: false, pro: true },
       { label: 'Profile customization & priority visibility', free: false, pro: true },
-      { label: 'Cash-out platform fee', free: '15%', pro: '10%' },
-      { label: 'Monthly D-Bucks to gift & support debaters', free: false, pro: '500 / mo' },
       { label: 'Priority support & early access', free: false, pro: true },
     ],
   },
@@ -47,6 +56,8 @@ export function ProScreen() {
   const { profile } = useAuth();
   const [params] = useSearchParams();
   const [plan, setPlan] = useState<ProPlanId>('annual');
+  // Live figures from Stripe; renders the built-in fallback until they land.
+  const { pricing } = useProPricing();
   const [busy, setBusy] = useState(false);
   const [portalBusy, setPortalBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -81,9 +92,30 @@ export function ProScreen() {
         </h1>
         <p style={{ fontFamily: ui, fontSize: 15, color: C.faint, margin: '0 auto', maxWidth: 520, lineHeight: 1.55 }}>
           {alreadyPro
-            ? 'Thanks for supporting The Rostrum. Your Pro perks are active across the platform.'
-            : 'Everything on The Rostrum stays free. Pro makes you more powerful — more reach, more storage, better economics, and status that stands out.'}
+            ? 'Thanks for supporting The Rostrum. Your Pro perks are active across the platform — including Gavel, your AI debate assistant.'
+            : 'Everything on The Rostrum stays free. Pro adds Gavel — an impartial AI fact-checker that holds every claim to the academic record — plus more reach, more storage, and status that stands out.'}
         </p>
+      </div>
+
+      {/* ---- Gavel spotlight — the headline Pro feature ---- */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 18px', borderRadius: 18,
+        border: `1px solid ${a(C.gold, '3A')}`, background: `linear-gradient(135deg, ${a(C.gold, '12')}, ${a(C.cyan, '0A')})`,
+        marginBottom: 22 }}>
+        <img src="/gavel/gavel-avatar.png" alt="Gavel" width={62} height={62}
+          onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+          style={{ width: 62, height: 62, objectFit: 'contain', flexShrink: 0 }} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: display, fontSize: 17, fontWeight: 700, color: C.ink }}>Meet Gavel</span>
+            <span style={{ fontFamily: ui, fontSize: 9, fontWeight: 900, letterSpacing: '.08em', color: '#0b0e14',
+              padding: '2px 6px', borderRadius: 4, background: `linear-gradient(135deg, ${C.gold}, ${C.cyan})` }}>PRO</span>
+          </div>
+          <p style={{ fontFamily: ui, fontSize: 13, color: C.dim, lineHeight: 1.5, margin: '4px 0 0' }}>
+            Your AI debate assistant. Gavel checks any claim against live scholarly, government and primary
+            sources — then delivers an impartial verdict with citations, in front of the whole room. He’ll
+            tell either side when they’re wrong.
+          </p>
+        </div>
       </div>
 
       {justUpgraded && (
@@ -131,11 +163,11 @@ export function ProScreen() {
                     border: 'none', fontFamily: ui, fontSize: 13.5, fontWeight: 700,
                     color: on ? C.base : C.dim,
                     background: on ? `linear-gradient(135deg, ${C.gold}, ${C.cyan})` : 'transparent' }}>
-                  {PRO_PRICING[p].label}
-                  {PRO_PRICING[p].note && (
+                  {pricing[p].label}
+                  {pricing[p].note && (
                     <span style={{ marginLeft: 7, fontSize: 10.5, fontWeight: 800, padding: '2px 6px', borderRadius: 6,
                       background: on ? a('#000000', '22') : a(C.jade, '20'), color: on ? C.base : C.jadeHi }}>
-                      {PRO_PRICING[p].note}
+                      {pricing[p].note}
                     </span>
                   )}
                 </button>
@@ -144,8 +176,8 @@ export function ProScreen() {
           </div>
 
           <div style={{ textAlign: 'center' }}>
-            <span style={{ fontFamily: display, fontSize: 40, fontWeight: 700, color: C.ink }}>{PRO_PRICING[plan].price}</span>
-            <span style={{ fontFamily: ui, fontSize: 15, color: C.faint }}>{PRO_PRICING[plan].per}</span>
+            <span style={{ fontFamily: display, fontSize: 40, fontWeight: 700, color: C.ink }}>{pricing[plan].price}</span>
+            <span style={{ fontFamily: ui, fontSize: 15, color: C.faint }}>{pricing[plan].per}</span>
           </div>
 
           {err && <p style={{ fontFamily: ui, fontSize: 13, color: C.garnetHi, margin: 0 }}>{err}</p>}

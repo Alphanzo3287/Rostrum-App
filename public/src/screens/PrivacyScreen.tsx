@@ -32,16 +32,17 @@ export function PrivacyScreen({ embedded }: { embedded?: boolean }) {
         to other participants in real time via our video provider (LiveKit Cloud). If a host records the room, that
         recording is stored on our behalf in Cloudflare R2 storage. Recordings are private by default and only
         become accessible to others if the host explicitly makes them public.</P>
-        <P><b>Payment information:</b> if you purchase D-Bucks or request a payout, your payment details are
-        collected and processed directly by Stripe — we never see or store your full card number. We do store
-        records of your D-Bucks balance, transaction history, and payout requests.</P>
+        <P><b>Payment information:</b> if you send a tip, pay for entry to a debate, subscribe, or receive payments
+        as a creator, your payment and payout details are collected and processed directly by Stripe — we never see
+        or store your full card or bank-account numbers. We do store records of the transactions you take part in
+        (such as amounts, dates, and the parties involved) for accounting, tax, and support purposes.</P>
         <P><b>Usage information:</b> device/browser type, IP address, pages visited, and similar technical data,
         collected automatically to keep the Service running reliably and securely.</P>
 
         <H>2. How we use your information</H>
         <UL items={[
-          'To operate the Service — running live debates, matching you with rooms, processing votes and gifts.',
-          'To process payments and payouts through Stripe, including verifying eligibility for cash-outs.',
+          'To operate the Service — running live debates, matching you with rooms, and processing votes.',
+          'To process payments and creator payouts through Stripe.',
           'To keep the platform safe — investigating reports, enforcing our Terms and Community Guidelines, and preventing abuse.',
           'To communicate with you — account confirmations, security alerts, and (if you don\u2019t opt out) product updates.',
           'To improve the Service — understanding how features are used so we can fix problems and build better ones.',

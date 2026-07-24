@@ -93,14 +93,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp: AuthCtx['signUp'] = async ({ email, password, displayName, handle }) => {
     const { error } = await supabase.auth.signUp({
-      email, password,
+      email: email.trim().toLowerCase(), password,
       options: { data: { display_name: displayName, handle } }, // -> handle_new_user()
     });
     if (error) throw error;
   };
 
   const signIn: AuthCtx['signIn'] = async (email, password) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    // Normalize the email so casing/whitespace from mobile keyboards can't cause
+    // a spurious "Invalid credentials" on a device without saved autofill.
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
     if (error) throw error;
   };
 
@@ -108,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const resetPasswordForEmail: AuthCtx['resetPasswordForEmail'] = async (email) => {
     const redirectTo = `${window.location.origin}/?recovery=1`;
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo });
     if (error) throw error;
   };
 

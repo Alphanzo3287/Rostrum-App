@@ -73,6 +73,7 @@ export function TournamentsScreen() {
 function CreateTournamentModal({ onClose, onCreated }: { onClose: () => void; onCreated: (t: Tournament) => void }) {
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
+  const [kind, setKind] = useState<'individual' | 'team'>('individual');
   const [format, setFormat] = useState('oxford');
   const [size, setSize] = useState(8);
   const [startsAt, setStartsAt] = useState('');
@@ -85,7 +86,7 @@ function CreateTournamentModal({ onClose, onCreated }: { onClose: () => void; on
     try {
       const t = await createTournament({
         title: title.trim(), description: desc.trim() || undefined,
-        debateFormat: format, size, startsAt: startsAt ? new Date(startsAt).toISOString() : null,
+        debateFormat: format, size, startsAt: startsAt ? new Date(startsAt).toISOString() : null, kind,
       });
       onCreated(t);
     } catch (e: any) { setErr(e?.message ?? 'Could not create tournament'); setBusy(false); }
@@ -106,6 +107,12 @@ function CreateTournamentModal({ onClose, onCreated }: { onClose: () => void; on
         <L label="Title"><input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Spring Championship" style={field} maxLength={100} /></L>
         <L label="Description"><textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="What's this tournament about?" rows={2} style={{ ...field, resize: 'vertical' }} maxLength={400} /></L>
 
+        <L label="Type">
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Chip on={kind === 'individual'} onClick={() => setKind('individual')}>Individual</Chip>
+            <Chip on={kind === 'team'} onClick={() => setKind('team')}>Team</Chip>
+          </div>
+        </L>
         <L label="Debate format">
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {['oxford', 'legacy', 'speakers_corner'].map(f => <Chip key={f} on={format === f} onClick={() => setFormat(f)}>{FORMAT_LABEL[f]}</Chip>)}
@@ -113,7 +120,7 @@ function CreateTournamentModal({ onClose, onCreated }: { onClose: () => void; on
         </L>
         <L label="Bracket size">
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {[4, 8, 16, 32].map(s => <Chip key={s} on={size === s} onClick={() => setSize(s)}>{s} players</Chip>)}
+            {[4, 8, 16, 32].map(s => <Chip key={s} on={size === s} onClick={() => setSize(s)}>{s} {kind === 'team' ? 'teams' : 'players'}</Chip>)}
           </div>
         </L>
         <L label="Start time (optional)"><input type="datetime-local" value={startsAt} onChange={e => setStartsAt(e.target.value)} style={field} /></L>
@@ -123,9 +130,11 @@ function CreateTournamentModal({ onClose, onCreated }: { onClose: () => void; on
           <button onClick={onClose} style={{ ...ghostBtn, flex: 1 }}>Cancel</button>
           <button onClick={submit} disabled={busy} style={{ ...solidGold, flex: 2, opacity: busy ? 0.6 : 1 }}>{busy ? 'Creating…' : 'Create tournament'}</button>
         </div>
-        <div style={{ fontFamily: ui, fontSize: 11.5, color: C.faint, marginTop: 12, lineHeight: 1.5 }}>
-          Individual tournaments are live now. Team tournaments are coming soon.
-        </div>
+        {kind === 'team' && (
+          <div style={{ fontFamily: ui, fontSize: 11.5, color: C.faint, marginTop: 12, lineHeight: 1.5 }}>
+            Team owners register their team; all members debate together each round.
+          </div>
+        )}
       </div>
     </div>
   );
