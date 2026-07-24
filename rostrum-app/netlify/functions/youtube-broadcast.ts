@@ -241,13 +241,46 @@ async function getFreshToken(userId: string): Promise<string | null> {
  *  never sink the broadcast, but every failure is logged with YouTube's
  *  actual reason so it is diagnosable. */
 async function setThumbnailWithRetry(videoId: string, thumbnailUrl: string, token: string, attempts = 4) {
+  const LIMIT = 2_000_000;  // YouTube's hard 2MB thumbnail ceiling
   let imgBuf: ArrayBuffer; let contentType: string;
   try {
-    const imgRes = await fetch(thumbnailUrl);
+    let imgRes = await fetch(thumbnailUrl);
     if (!imgRes.ok) { console.warn('youtube: thumbnail source fetch failed', imgRes.status, thumbnailUrl); return; }
     imgBuf = await imgRes.arrayBuffer();
-    if (imgBuf.byteLength > 2_000_000) { console.warn('youtube: thumbnail exceeds 2MB', imgBuf.byteLength); return; }
     contentType = imgRes.headers.get('content-type') ?? 'image/jpeg';
+
+    // Over the limit? Re-fetch through Supabase's on-the-fly image transform,
+    // which downscales to <=1280x720 JPEG at quality 75 — comfortably under
+    // 2MB for any normal cover. This is why covers of any reasonable size
+    // "just work" instead of being silently dropped for being a few 100KB
+    // too big (the exact failure that left every broadcast on the channel
+    // fallback image).
+    if (imgBuf.byteLength > LIMIT) {
+      const transformed = thumbnailUrl.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/')
+        + (thumbnailUrl.includes('?') ? '&' : '?') + 'width=1280&height=720&resize=contain&quality=75&format=origin';
+      try {
+        const tRes = await fetch(transformed);
+        if (tRes.ok) {
+          const tBuf = await tRes.arrayBuffer();
+          if (tBuf.byteLength <= LIMIT) {
+            imgBuf = tBuf;
+            contentType = tRes.headers.get('content-type') ?? 'image/jpeg';
+            console.log('youtube: downscaled oversized thumbnail', { from: (imgBuf as ArrayBuffer).byteLength, to: tBuf.byteLength });
+          }
+        } else {
+          // Transform add-on likely not enabled on this project. Fall through
+          // to the size check below, which logs a clear, actionable reason.
+          console.warn('youtube: image transform unavailable', tRes.status);
+        }
+      } catch (err: any) {
+        console.warn('youtube: image transform threw', err?.message);
+      }
+    }
+
+    if (imgBuf.byteLength > LIMIT) {
+      console.warn('youtube: thumbnail still over 2MB after transform attempt — upload a smaller cover', imgBuf.byteLength);
+      return;
+    }
   } catch (err: any) {
     console.warn('youtube: thumbnail source fetch threw', err?.message); return;
   }
