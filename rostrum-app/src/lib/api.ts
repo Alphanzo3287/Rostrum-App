@@ -81,6 +81,23 @@ export async function getDebate(id: string): Promise<{ debate: Debate; segments:
 
 /* --------------------------- HOST A DEBATE ----------------------- */
 
+/** Move a scheduled debate to a new time. Host-only via RLS on debates.
+ *  Returns the updated row so the caller can keep YouTube in sync. */
+export async function rescheduleDebate(debateId: string, scheduledAtISO: string) {
+  const when = new Date(scheduledAtISO);
+  if (isNaN(when.getTime())) throw new Error('Invalid date/time');
+  if (when.getTime() < Date.now()) throw new Error('Scheduled time must be in the future');
+
+  const { data, error } = await supabase
+    .from('debates')
+    .update({ scheduled_at: when.toISOString(), status: 'scheduled' })
+    .eq('id', debateId)
+    .select('id, scheduled_at, status')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 export interface CreateDebateInput {
   motion: string;
   format: DebateFormat;

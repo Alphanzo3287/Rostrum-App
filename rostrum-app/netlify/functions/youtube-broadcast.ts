@@ -7,6 +7,7 @@
 //   go_live  → transitions the broadcast from ready → live.
 //   end      → transitions broadcast to complete.
 //   status   → returns current broadcast status.
+//   reschedule → moves the broadcast's scheduledStartTime (host only).
 //   disconnect → revokes Google token + removes youtube_tokens row.
 // =====================================================================
 import type { Handler } from '@netlify/functions';
@@ -56,6 +57,50 @@ export const handler: Handler = async (event) => {
       }
       await supabaseAdmin.from('youtube_tokens').delete().eq('user_id', user.id);
       return json(200, { disconnected: true });
+    }
+
+    // ── reschedule ────────────────────────────────────────────────────
+    // Moves an existing broadcast's start time. YouTube's PATCH replaces the
+    // whole snippet, so title/description MUST be re-sent from what we stored
+    // or they'd be wiped. Only the debate's host may do this.
+    if (action === 'reschedule') {
+      if (!debateId || !scheduledAt) return json(400, { error: 'debateId and scheduledAt required' });
+
+      const when = new Date(scheduledAt);
+      if (isNaN(when.getTime()) || when.getTime() < Date.now()) {
+        return json(400, { error: 'scheduledAt must be a valid future time' });
+      }
+
+      const { data: bc } = await supabaseAdmin
+        .from('youtube_broadcasts')
+        .select('broadcast_id, yt_title, yt_description, status')
+        .eq('debate_id', debateId).maybeSingle();
+      if (!bc) return json(404, { error: 'no broadcast for this debate' });
+      if (bc.status === 'live' || bc.status === 'complete') {
+        return json(409, { error: 'cannot reschedule a broadcast that is already live or finished' });
+      }
+
+      const upd = await yt('/liveBroadcasts?part=snippet', {
+        method: 'PUT',
+        body: JSON.stringify({
+          id: bc.broadcast_id,
+          snippet: {
+            title: bc.yt_title,
+            description: bc.yt_description ?? '',
+            scheduledStartTime: when.toISOString(),
+          },
+        }),
+      });
+      if (upd.error) {
+        console.error('reschedule PATCH rejected:', JSON.stringify(upd.error));
+        return json(502, { error: upd.error?.message ?? 'YouTube rejected the new time' });
+      }
+
+      await supabaseAdmin.from('youtube_broadcasts')
+        .update({ scheduled_at: when.toISOString(), updated_at: new Date().toISOString() })
+        .eq('debate_id', debateId);
+
+      return json(200, { rescheduled: true, scheduledAt: when.toISOString() });
     }
 
     // ── create ───────────────────────────────────────────────────────

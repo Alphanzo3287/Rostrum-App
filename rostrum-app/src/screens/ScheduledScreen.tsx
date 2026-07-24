@@ -5,7 +5,8 @@
 // When the host starts it, everyone here advances into the chamber.
 // =====================================================================
 import { useEffect, useState } from 'react';
-import { getDebate, getRsvp, setRsvp, clearRsvp, startDebate, subscribeDebate, type RsvpInfo } from '../lib/api';
+import { getDebate, getRsvp, setRsvp, clearRsvp, startDebate, subscribeDebate, rescheduleDebate, type RsvpInfo } from '../lib/api';
+import { rescheduleYouTubeBroadcast } from '../lib/youtube';
 import type { Debate } from '../lib/types';
 import { useAuth } from '../lib/auth';
 import { C, ui, display, mono, solidGold, a } from '../lib/theme';
@@ -52,6 +53,29 @@ export function ScheduledScreen({ debateId, onBack, onStarted }: {
     });
     try { if (next) await setRsvp(debateId, next); else await clearRsvp(debateId); }
     catch { getRsvp(debateId).then(setRsvpState).catch(() => {}); }
+  }
+
+  const [showResched, setShowResched] = useState(false);
+  const [reschedBusy, setReschedBusy] = useState(false);
+  const [reschedErr, setReschedErr] = useState<string | null>(null);
+
+  async function doReschedule(newISO: string) {
+    setReschedBusy(true); setReschedErr(null);
+    try {
+      await rescheduleDebate(debateId, newISO);
+      // Keep the YouTube broadcast in lockstep. Best-effort: if there's no
+      // broadcast attached, the backend returns 404 and we ignore it — the
+      // debate move still stands.
+      try { await rescheduleYouTubeBroadcast(debateId, newISO); }
+      catch (e: any) { if (!/no broadcast/i.test(e?.message ?? '')) throw e; }
+      const fresh = await getDebate(debateId);
+      setD(fresh);
+      setShowResched(false);
+    } catch (e: any) {
+      setReschedErr(e?.message ?? 'Could not reschedule');
+    } finally {
+      setReschedBusy(false);
+    }
   }
 
   async function start() {
@@ -123,9 +147,70 @@ export function ScheduledScreen({ debateId, onBack, onStarted }: {
                   {busy ? 'Opening…' : 'Open the doors now'}</button>
                 <p style={{ fontFamily:ui, fontSize:11.5, color:C.faint, textAlign:'center', margin:'8px 0 0' }}>
                   Starts the assembly — anyone waiting here joins automatically.</p>
+                {!live && when && (
+                  <button onClick={() => { setReschedErr(null); setShowResched(true); }}
+                    style={{ width:'100%', marginTop:10, padding:'11px', borderRadius:8, cursor:'pointer',
+                      fontFamily:ui, fontWeight:600, fontSize:13.5, color:C.dim,
+                      border:`1px solid ${C.hairHi}`, background:'transparent' }}>
+                    Change date &amp; time
+                  </button>
+                )}
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {showResched && when && (
+        <RescheduleModal
+          current={when}
+          busy={reschedBusy}
+          error={reschedErr}
+          onCancel={() => setShowResched(false)}
+          onSave={doReschedule}
+        />
+      )}
+    </div>
+  );
+}
+
+function RescheduleModal({ current, busy, error, onCancel, onSave }: {
+  current: Date; busy: boolean; error: string | null;
+  onCancel: () => void; onSave: (iso: string) => void;
+}) {
+  // datetime-local wants local time with no zone; format the current value so
+  // the picker opens on the existing slot rather than blank.
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const local = `${current.getFullYear()}-${pad(current.getMonth()+1)}-${pad(current.getDate())}T${pad(current.getHours())}:${pad(current.getMinutes())}`;
+  const [val, setVal] = useState(local);
+  const minLocal = (() => {
+    const d = new Date(Date.now() + 5*60000);
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  })();
+
+  return (
+    <div onClick={onCancel} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)',
+      display:'grid', placeItems:'center', zIndex:60, padding:20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width:'100%', maxWidth:420, borderRadius:14,
+        border:`1px solid ${C.hair}`, background:C.panel, padding:'22px' }}>
+        <h3 style={{ fontFamily:display, fontSize:20, color:C.ink, margin:'0 0 4px', fontWeight:600 }}>Change date &amp; time</h3>
+        <p style={{ fontFamily:ui, fontSize:12.5, color:C.faint, margin:'0 0 16px' }}>
+          Everyone who RSVP’d keeps their spot. If this debate streams to YouTube, the broadcast moves too.
+        </p>
+        <input type="datetime-local" value={val} min={minLocal}
+          onChange={e => setVal(e.target.value)}
+          style={{ width:'100%', padding:'11px', borderRadius:8, colorScheme:'dark',
+            border:`1px solid ${C.hairHi}`, background:C.panel2, color:C.ink, fontFamily:ui, fontSize:14 }} />
+        {error && <p style={{ fontFamily:ui, fontSize:12.5, color:C.garnetHi, margin:'10px 0 0' }}>{error}</p>}
+        <div style={{ display:'flex', gap:10, marginTop:18 }}>
+          <button onClick={onCancel} disabled={busy} style={{ flex:1, padding:'11px', borderRadius:8, cursor:'pointer',
+            fontFamily:ui, fontWeight:600, fontSize:13.5, color:C.dim, border:`1px solid ${C.hairHi}`, background:'transparent' }}>
+            Cancel
+          </button>
+          <button onClick={() => onSave(new Date(val).toISOString())} disabled={busy || !val}
+            style={{ ...solidGold, flex:1, opacity: (busy || !val) ? 0.6 : 1 }}>
+            {busy ? 'Moving…' : 'Save new time'}
+          </button>
         </div>
       </div>
     </div>

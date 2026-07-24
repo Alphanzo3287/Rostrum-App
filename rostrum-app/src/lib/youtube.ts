@@ -77,6 +77,9 @@ export const endYouTubeBroadcast = (debateId: string) =>
   authedPost('youtube-broadcast', { action: 'end', debateId });
 
 /** Get the broadcast status for a debate. */
+export const rescheduleYouTubeBroadcast = (debateId: string, scheduledAt: string) =>
+  authedPost<{ rescheduled: boolean; scheduledAt: string }>('youtube-broadcast', { action: 'reschedule', debateId, scheduledAt });
+
 export const getYouTubeBroadcastStatus = (debateId: string) =>
   authedPost<{ status: string; yt_title?: string; youtubeUrl?: string }>(
     'youtube-broadcast', { action: 'status', debateId }
