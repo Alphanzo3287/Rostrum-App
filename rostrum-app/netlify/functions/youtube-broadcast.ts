@@ -97,17 +97,30 @@ export const handler: Handler = async (event) => {
       // 3. Bind stream to broadcast
       await yt(`/liveBroadcasts/bind?id=${broadcast.id}&part=id&streamId=${stream.id}`, { method: 'POST', body: '{}' });
 
-      // 4. Optional thumbnail
+      // 4. Optional thumbnail. Still best-effort (a bad image should never
+      // sink the broadcast), but failures are now LOGGED — the old silent
+      // catch hid a bug where this never once succeeded.
       if (thumbnailUrl) {
         try {
           const imgRes = await fetch(thumbnailUrl);
+          if (!imgRes.ok) throw new Error(`image fetch ${imgRes.status}`);
           const imgBuf = await imgRes.arrayBuffer();
-          await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${broadcast.id}`, {
+          if (imgBuf.byteLength > 2_000_000) throw new Error(`image ${imgBuf.byteLength}B exceeds YouTube's 2MB thumbnail limit`);
+          const contentType = imgRes.headers.get('content-type') ?? 'image/jpeg';
+          const setRes = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${broadcast.id}`, {
             method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'content-type': 'image/jpeg' },
+            headers: { Authorization: `Bearer ${token}`, 'content-type': contentType },
             body: imgBuf,
           });
-        } catch { /* thumbnail is best-effort */ }
+          const setBody = await setRes.json().catch(() => ({}));
+          if (!setRes.ok) {
+            // Most common cause: the channel isn't phone-verified — YouTube
+            // requires verification (youtube.com/verify) for custom thumbnails.
+            console.warn('youtube: thumbnail rejected', setRes.status, JSON.stringify(setBody?.error ?? setBody));
+          }
+        } catch (err: any) {
+          console.warn('youtube: thumbnail upload failed', err?.message);
+        }
       }
 
       const rtmpUrl   = stream.cdn?.ingestionInfo?.ingestionAddress ?? '';

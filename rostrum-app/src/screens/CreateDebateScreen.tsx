@@ -129,7 +129,10 @@ export function CreateDebateScreen({ onCancel, onCreated }: {
           title: ytTitle.trim() || motion,
           description: ytDesc.trim() || undefined,
           privacy: ytPrivacy,
-          thumbnailUrl: thumbPrev ?? undefined,
+          // The debate's uploaded cover (a public storage URL). NOT thumbPrev:
+          // that is a blob: URL that only exists in this browser tab, which
+          // the server can never fetch — the original silent-failure bug.
+          thumbnailUrl: debate.thumbnail_url ?? undefined,
           scheduledAt: scheduledAt ?? undefined,
         });
       }
