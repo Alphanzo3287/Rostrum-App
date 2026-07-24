@@ -28,7 +28,18 @@ export const handler: Handler = async (event) => {
   try {
     // ── Token helpers ────────────────────────────────────────────────
     const token = await getFreshToken(user.id);
-    if (!token && action !== 'disconnect') return json(403, { error: 'YouTube not connected' });
+    if (!token && action !== 'disconnect') {
+      // Distinguish "never connected" from "connected but Google refused the
+      // refresh" — the second needs a reconnect, and telling the user they
+      // aren't connected while Settings says they are is a dead end.
+      const { data: hasRow } = await supabaseAdmin
+        .from('youtube_tokens').select('user_id').eq('user_id', user.id).maybeSingle();
+      return json(403, {
+        error: hasRow
+          ? 'YouTube session expired — disconnect and reconnect YouTube in Settings'
+          : 'YouTube not connected',
+      });
+    }
 
     const yt = (path: string, opts?: RequestInit) =>
       fetch(`${YT}${path}`, {
@@ -196,7 +207,21 @@ async function getFreshToken(userId: string): Promise<string | null> {
     }),
   });
   const tokens = await res.json();
-  if (!tokens.access_token) return null;
+  if (!tokens.access_token) {
+    // Surface WHY Google refused — this was previously swallowed, making
+    // every refresh failure look like "not connected" with no trace.
+    console.error('youtube: token refresh failed', {
+      userId, error: tokens.error, description: tokens.error_description,
+    });
+    // invalid_grant = the refresh token itself is dead (revoked, or expired
+    // by Google's 7-day limit for OAuth apps in Testing mode). The row is
+    // unusable; delete it so the UI honestly shows "not connected" instead
+    // of a connected-looking Settings page over a broken stream button.
+    if (tokens.error === 'invalid_grant') {
+      await supabaseAdmin.from('youtube_tokens').delete().eq('user_id', userId);
+    }
+    return null;
+  }
 
   const expiresAt = new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString();
   await supabaseAdmin.from('youtube_tokens').update({
