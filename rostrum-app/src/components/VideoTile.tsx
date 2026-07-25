@@ -23,7 +23,6 @@ export function VideoTile({ member, active, size = 'tile' }: {
   member: RoomMember; active?: boolean; size?: 'tile' | 'stage';
 }) {
   const vref = useRef<HTMLVideoElement>(null);
-  const aref = useRef<HTMLAudioElement>(null);
 
   // attach / detach the camera track. Must depend on camOn too: the <video>
   // element only exists while camOn is true, so if the camera turns on AFTER
@@ -35,12 +34,9 @@ export function VideoTile({ member, active, size = 'tile' }: {
     if (el && t) { t.attach(el); return () => { t.detach(el); }; }
   }, [member.videoTrack, member.camOn]);
 
-  // attach remote audio (skip our own to avoid echo)
-  useEffect(() => {
-    const el = aref.current;
-    const t = member.audioTrack;
-    if (el && t && !member.isLocal) { t.attach(el); return () => { t.detach(el); }; }
-  }, [member.audioTrack, member.isLocal]);
+  // Audio is intentionally NOT handled here — it lives in <RoomAudio>, mounted
+  // once at the screen root, so remote audio is independent of which video
+  // layout is active (Cinema renders no tiles, which used to kill all audio).
 
   const tone = SIDE[member.side ?? 'none'];
   const tag = ROLE_LABEL[member.role] || tone.label;
@@ -64,8 +60,6 @@ export function VideoTile({ member, active, size = 'tile' }: {
         ? <video ref={vref} autoPlay playsInline muted={member.isLocal}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 20%' }} />
         : <Avatar name={member.name} avatar={member.avatar} big={size === 'stage'} />}
-
-      <audio ref={aref} autoPlay />
 
       {tag && <span style={{ position: 'absolute', top: 5, left: 6, fontSize: 8.5, fontWeight: 700,
         letterSpacing: 1, color: tone.hi, background: 'rgba(0,0,0,0.5)', padding: '1px 5px', borderRadius: 3 }}>{tag}</span>}

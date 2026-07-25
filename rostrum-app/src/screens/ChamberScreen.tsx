@@ -25,6 +25,7 @@ import { getDebateReward, type DebateReward } from '../lib/rewards';
 import { DebateRewardCard } from '../components/DebateRewardCard';
 import { GiftModal } from '../components/GiftModal';
 import { VideoTile } from '../components/VideoTile';
+import { RoomAudio } from '../components/RoomAudio';
 import { SlideStage } from '../components/SlideStage';
 import { ScreenTile } from '../components/ScreenTile';
 import { SafePanel } from '../components/SafePanel';
@@ -1111,6 +1112,10 @@ function LiveHall({
           personBind={personBind}
           onModContextMenu={mod ? (e) => onContextMenu(e, mod) : undefined} />
       </div>
+
+      {/* Room audio: mounted once, outside the layout branches, so no layout
+          (Cinema included) and no breakpoint can ever silence the room. */}
+      <RoomAudio members={members} />
 
       {narrow ? (
         <div style={{ display:'flex', flexDirection:'column', gap:12, flexShrink:0 }}>
