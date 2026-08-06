@@ -52,11 +52,28 @@ export const handler: Handler = async (event) => {
     return json(400, { error: 'You already have Rostrum Pro.' });
   }
 
+  // Self-heal stale customer ids. Profiles can carry customer ids from a
+  // previous Stripe account (exactly like the stale creator_accounts rows
+  // we purged); passing one to sessions.create makes Stripe throw
+  // "No such customer" and the user sees an unexplained checkout failure.
+  // Verify the stored id exists on THIS account; if not, clear and go fresh.
+  let customerId: string | undefined = me?.stripe_customer_id || undefined;
+  if (customerId) {
+    try {
+      const c = await stripe.customers.retrieve(customerId);
+      if ((c as any).deleted) throw new Error('deleted');
+    } catch {
+      console.warn('stripe-pro-subscribe: clearing stale customer id', { userId: user.id, customerId });
+      await supabaseAdmin.from('profiles').update({ stripe_customer_id: null }).eq('id', user.id);
+      customerId = undefined;
+    }
+  }
+
   try {
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
-      customer: me?.stripe_customer_id || undefined,
-      customer_email: me?.stripe_customer_id ? undefined : (user.email ?? undefined),
+      customer: customerId,
+      customer_email: customerId ? undefined : (user.email ?? undefined),
       line_items: [{ price: plan.price_id, quantity: 1 }],
       // Metadata on the SUBSCRIPTION itself so lifecycle events (renew,
       // cancel) can always resolve back to the user.
@@ -73,6 +90,13 @@ export const handler: Handler = async (event) => {
     const detail = err?.raw?.message ?? err?.message ?? 'stripe checkout failed';
     const msg = 'Could not start checkout. Please try again.';
     console.error('stripe-pro-subscribe error:', detail, err?.raw ?? err);
+    // Founder-only diagnostics: surface the REAL Stripe error inline so
+    // debugging never again depends on logs nobody can reach. Normal
+    // users still get the generic message (raw errors have leaked key
+    // fragments before).
+    if (user.id === 'd4c1e7b0-1afc-4569-9c97-713a82100f27') {
+      return json(500, { error: msg + ' [admin: ' + detail + ']' });
+    }
     return json(500, { error: msg });
   }
 };

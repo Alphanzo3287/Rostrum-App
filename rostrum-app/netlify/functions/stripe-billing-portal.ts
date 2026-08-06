@@ -24,6 +24,19 @@ export const handler: Handler = async (event) => {
     return json(400, { error: "No billing account found — you don't have an active membership to manage." });
   }
 
+  // Same self-heal as stripe-pro-subscribe: a customer id carried over
+  // from a previous Stripe account makes billingPortal.sessions.create
+  // throw "No such customer". Verify first; if dead, clear it and tell
+  // the user the truth instead of "try again".
+  try {
+    const c = await stripe.customers.retrieve(me.stripe_customer_id);
+    if ((c as any).deleted) throw new Error('deleted');
+  } catch {
+    console.warn('stripe-billing-portal: clearing stale customer id', { userId: user.id, customerId: me.stripe_customer_id });
+    await supabaseAdmin.from('profiles').update({ stripe_customer_id: null }).eq('id', user.id);
+    return json(400, { error: 'Your billing account was reset. If you have Rostrum Pro, please subscribe again — contact support if this seems wrong.' });
+  }
+
   try {
     const session = await stripe.billingPortal.sessions.create({
       customer: me.stripe_customer_id,
