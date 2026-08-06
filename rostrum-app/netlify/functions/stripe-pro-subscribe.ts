@@ -17,7 +17,10 @@ import type { Handler } from '@netlify/functions';
 import Stripe from 'stripe';
 import { supabaseAdmin, userFromToken } from '../../src/server/supabaseAdmin';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+// Managed Payments (enabled on this account) requires API version
+// 2025-03-31.basil+; the SDK's pinned default (2025-02-24.acacia) is
+// rejected. Pin explicitly rather than upgrading the SDK.
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-03-31.basil' as any });
 const SITE = process.env.PUBLIC_SITE_URL || 'https://rostrums.site';
 
 // Plan id -> stored Stripe Price. Env vars win so the same code can run
