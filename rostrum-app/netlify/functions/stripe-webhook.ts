@@ -129,6 +129,9 @@ async function handleProCheckout(session: Stripe.Checkout.Session) {
 async function syncProSubscription(sub: Stripe.Subscription) {
   const userId = sub.metadata?.user_id;
   if (sub.metadata?.kind !== 'pro_subscription' || !userId) return;
+  // Founder account is permanently Pro; no subscription event may lower or
+  // clear its pro_until. (Set in the DB to 2099-12-31.)
+  if (userId === 'd4c1e7b0-1afc-4569-9c97-713a82100f27') return;
 
   const active = sub.status === 'active' || sub.status === 'trialing';
 
@@ -173,6 +176,8 @@ async function syncProSubscription(sub: Stripe.Subscription) {
 async function lapseProSubscription(sub: Stripe.Subscription) {
   const userId = sub.metadata?.user_id;
   if (!userId) return;
+  // Founder account never lapses.
+  if (userId === 'd4c1e7b0-1afc-4569-9c97-713a82100f27') return;
   await supabaseAdmin.from('profiles')
     .update({ pro_until: null, pro_subscription_id: null }).eq('id', userId);
 }
